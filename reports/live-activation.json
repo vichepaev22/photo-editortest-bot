@@ -1,0 +1,30 @@
+{
+  "date": "2026-10-07",
+  "workflow": "process-design-vibecoding",
+  "mode": "openai",
+  "model": "gpt-image-2.5-flare-2026-09-08",
+  "quality": "medium",
+  "size": "1024x1024",
+  "owner_reported_funding_usd": 10,
+  "read_only_model_access": [
+    "gpt-image-2.5-flare-2026-09-08",
+    "gpt-image-2.5-sunburst-2026-09-08"
+  ],
+  "model_lookup_verifies_prepaid_balance": false,
+  "pilot_users": 1,
+  "pilot_grant": 3,
+  "demo_media_copied": false,
+  "demo_balance_copied": false,
+  "anonymous_demo_http_status": 403,
+  "health": {
+    "ok": true,
+    "mode": "openai",
+    "local_demo": false
+  },
+  "bot_ready_verified": true,
+  "source_code_changes": false,
+  "image_generation_calls_by_agent": 0,
+  "first_image_result_pending_user_confirmation": true,
+  "live_payments_enabled": false,
+  "public_mini_app_mode": "preview"
+}

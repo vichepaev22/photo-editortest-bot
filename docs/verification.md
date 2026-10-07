@@ -50,3 +50,13 @@
 [GitHub Actions](https://github.com/vichepaev22/photo-editortest-bot/actions/runs/37637270293): success,69passed5.75s на Linux и Ruff. Pages HTML и3ресурса — HTTP200; публичный browser smoke и32layouts прошли, консоль без ошибок/предупреждений. Предпросмотр не вызывает `/api`/localhost, баланс «—», загруженное фото очищается локально. Native Telegram menu проверен read-only API: web_app «Студия» с опубликованным URL,11команд. Настоящее открытие Mini App на клиентском устройстве остаётся проверкой владельца.
 
 Для дальнейшего локального browser теста user0 после двух проверочных задач начислены3пилотные попытки отдельным audit event. Одноразовый demo grant не сбрасывался; история и баланс Telegram-пользователей сохранены. OpenAI Image-запросов в этом срезе0.
+
+## Активация OpenAI-пилота 2026-10-07
+
+Владелец сообщил о пополнении$10 и поручил начать. Настоящие read-only models.retrieve по его ключу вернули обе версии Flare/Sunburst; это проверка ключа и списка моделей, не prepaid balance или права конкретного Images edit.
+
+Бот штатно запущен Start-Bot.ps1 -Mode OpenAI. После завершения launcher проверены running:true,state:ready,mode:openai; `/api/health` вернул ok:true,mode:openai,local_demo:false. Настоящий POST localhost `/api/demo-session` отклонён403. Ни пользователь0, ни публичная выдача кредитов в live не создаются.
+
+В новой data/live-pilot один ранее согласившийся Telegram-тестировщик получил3пилотные попытки с audit event. Подтверждён остаток3/резерв0 и отсутствие задач перед пользовательским тестом. Перенесена только существующая политика согласия; демо-медиа/баланс и история сохранены отдельно. ENV changed provider/data/demo flag/billing flag; прочие значения, включая ключи, модель и quality, проверены на неизменность; rollback-копия локальная и исключена из git.
+
+Исходный код не менялся; новые unit tests не запускались для изменения конфигурации. Проверены настоящий запуск, сеть/model lookup, health и закрытый anonymous endpoint. Генераций Image агентом0; первой пользовательской правки и измеренного usage/качества ещё нет. Публичная Pages Mini App остаётся предпросмотром до VPS HTTPS API. Агрегированное доказательство: reports/live-activation.json; идентификаторы/секреты/медиа в него не включены.
