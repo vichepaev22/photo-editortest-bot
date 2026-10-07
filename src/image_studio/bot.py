@@ -41,7 +41,7 @@ def buttons(rows):
     return InlineKeyboardMarkup(
         inline_keyboard=[
             [
-                InlineKeyboardButton(text=b[0], callback_data=b[1], style=b[2] if len(b) > 2 else None)
+                InlineKeyboardButton(text=b[0], callback_data=b[1], style=b[2] if len(b) > 2 else "primary")
                 for b in row
             ]
             for row in rows
@@ -67,9 +67,17 @@ NAV = {
     "help": "❓ Как пользоваться",
     "support": "💬 Поддержка",
 }
+NAV_STYLES = {
+    "edit": "primary",
+    "merge": "primary",
+    "balance": "success",
+    "results": "success",
+    "help": "primary",
+    "support": "primary",
+}
 MAIN = ReplyKeyboardMarkup(
     keyboard=[
-        [KeyboardButton(text=NAV[key], style="primary" if key == "edit" else None) for key in pair]
+        [KeyboardButton(text=NAV[key], style=NAV_STYLES[key]) for key in pair]
         for pair in [("edit", "merge"), ("balance", "results"), ("help", "support")]
     ],
     resize_keyboard=True,
