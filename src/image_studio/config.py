@@ -23,6 +23,7 @@ class Settings:
     expected_bot_username: str = ""
     openai_key: str = ""
     demo_credits: bool = False
+    trial_access: bool = False
     support_contact: str = ""
     billing_enabled: bool = False
     shop_id: str = ""
@@ -41,6 +42,10 @@ class Settings:
             raise ValueError("invalid_image_parameters")
         if self.image_provider == "openai" and not self.openai_key:
             raise ValueError("missing_openai_key")
+        if self.trial_access and self.image_provider != "openai":
+            raise ValueError("trial_requires_openai")
+        if self.trial_access and self.billing_enabled:
+            raise ValueError("trial_requires_billing_disabled")
         if self.billing_enabled and (not self.shop_id or not self.shop_key or len(self.admin_token) < 32):
             raise ValueError("billing_credentials_required")
         if self.billing_enabled and not self.return_url.startswith("https://"):
@@ -67,6 +72,7 @@ class Settings:
             expected_bot_username=os.getenv("TELEGRAM_BOT_USERNAME", "").lstrip("@"),
             openai_key=os.getenv("OPENAI_API_KEY", ""),
             demo_credits=os.getenv("ENABLE_DEMO_CREDITS", "false").lower() == "true",
+            trial_access=os.getenv("ENABLE_TRIAL_ACCESS", "false").lower() == "true",
             support_contact=os.getenv("SUPPORT_CONTACT", ""),
             billing_enabled=os.getenv("BILLING_ENABLED", "false").lower() == "true",
             shop_id=os.getenv("YOOKASSA_SHOP_ID", ""),

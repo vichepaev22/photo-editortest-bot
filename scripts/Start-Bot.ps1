@@ -21,6 +21,7 @@ try {
         BILLING_ENABLED = 'false'
         PYTHONUTF8 = '1'
     }
+    if ($Mode -eq 'Demo') { $TaskValues['ENABLE_TRIAL_ACCESS'] = 'false' }
     try {
         foreach ($Name in $TaskValues.Keys) {
             $SavedEnvironment[$Name] = [Environment]::GetEnvironmentVariable($Name, 'Process')

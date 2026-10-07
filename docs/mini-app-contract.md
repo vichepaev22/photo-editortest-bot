@@ -10,14 +10,14 @@ All API JSON errors `{error: safe_code}`. No raw provider payloads/prompts/keys.
 
 Public:
 - GET `/api/health` -> `{ok:true, mode:'mock'|'openai', local_demo:bool}`; no identities/secrets.
-- GET `/api/catalog` -> `{presets:[{id,label,inputs,credits}], mode, local_demo, support_contact}`.
-- POST `/api/session` JSON `{init_data:string}` -> `{token, user:{id,first_name}, consent:bool}`. Verify Telegram initData with bot-token HMAC, all fields except hash included (signature included if present), auth_date age<=3600s, future skew<=30s, reject duplicate fields, no trust in initDataUnsafe. Telegram user id int>0 up to52bits, not bool. Do not grant credits automatically.
+- GET `/api/catalog` -> `{presets:[{id,label,inputs,credits}], mode, local_demo, support_contact, trial_access}`. In trial all preset costs are 1; commercial merge stays 2.
+- POST `/api/session` JSON `{init_data:string}` -> `{token, user:{id,first_name}, consent:bool}`. Verify Telegram initData with bot-token HMAC, all fields except hash included (signature included if present), auth_date age<=3600s, future skew<=30s, reject duplicate fields, no trust in initDataUnsafe. Telegram user id int>0 up to52bits, not bool. No financial credits are granted. Trial quota is claimed once only after consent; returning consented users may claim via Service.wallet.
 - POST `/api/demo-session` JSON `{consent:true}` -> same session shape for user0 only in mock+demo_credits, actual loopback peer+Host. Save consent and grant_demo(0,3) once. Never available in OpenAI. Local demo user0 is valid in Media and isolated from positive Telegram IDs. Bot delivery/notification skips user0; browser retrieves own results.
 
 Authenticated:
-- GET `/api/me` -> `{user:{id,first_name}, consent, available, reserved, mode}`.
+- GET `/api/me` -> `{user:{id,first_name}, consent, available, reserved, mode, trial_access}`; trial balance is separate from the financial wallet.
 - POST `/api/consent` JSON `{accepted:true}` -> `{ok:true}`.
-- POST `/api/demo-credits` -> `{granted:bool}`; same mock-only existing policy.
+- POST `/api/demo-credits` -> `{granted:bool}`; mock policy unchanged; signed consenting trial users claim their one-time quota, never financial credits.
 - POST `/api/photos` raw image bytes (content type application/octet-stream or image/*) -> `{id:string}`. Consent required.
 - GET `/api/photos/{id}` -> sanitized own JPEG, bearer required, UUID only; deleted/expired files404.
 - POST `/api/jobs` JSON `{request_key:UUIDstring,preset:string,photos:[photo_id],description:string,confirmed:true}` -> `{id,status}`. Consent required; server rechecks cost/input count/owner through Service.submit; description1..1500; duplicate same key no new call. Confirmation must be true. Never call provider inline.
@@ -39,3 +39,5 @@ No paid sales/decorative fake balances, no invisible generic prompts, no automat
 Official auth reference checked: https://core.telegram.org/bots/webapps#validating-data-received-via-the-mini-app . Public Telegram opening requires future HTTPS and configuration; present preview URL http://127.0.0.1:8089/ .
 
 GitHub Pages publication approved: frontend ./config.js defines window.OBRAZ_API_BASE, assets ./app.css and ./app.js relative. On *.github.io with no configured API, interface-only preview: no failed automatic /api calls, no fake balances/generated results, no automatic request to localhost. Locally use the running API. Pages supplies HTTPS UI entry; operational generation inside Telegram still needs a reachable authenticated HTTPS backend. Deployment uploads only web assets, never Python media/secrets.
+
+Trial delta 2026-10-08: ENABLE_TRIAL_ACCESS defaults false, valid only for openai + billing disabled. Store persists trial_granted/trial_used/trial_reserved and jobs.trial; at most three saved outputs, one per service use including merge. Same request_key cannot change trial flag or cost. Failure releases reservation; recovered running jobs remain review. Reentry/delete/reconsent cannot reset used quota. Public OBRAZ_PREVIEW_TRIAL is presentation only, never authenticates or grants quota; API catalog decides actual costs and mode.

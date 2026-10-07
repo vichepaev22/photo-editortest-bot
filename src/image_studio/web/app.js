@@ -10,7 +10,7 @@
   if (typeof configuredBase === 'string' && configuredBase.trim()) {
     try { const parsed = new URL(configuredBase,location.href); if (parsed.protocol === 'https:' || localHost && parsed.protocol === 'http:') apiBase = parsed.origin; } catch {}
   } else if (localHost) apiBase = location.origin;
-  const state = {preview:!apiBase,catalog: [], mode: 'mock', localDemo: false, token: '', me: null, tab: 'studio', preset: 'hair', photos: [], uploading: new Set(), jobs: [], job: null, pending: null, submitting: false, polling: null, resultURLs: new Map(), sourceURLs: new Map(), liveURLs: new Set()};
+  const state = {preview:!apiBase,trial:!apiBase && window.OBRAZ_PREVIEW_TRIAL===true,catalog: [], mode: 'mock', localDemo: false, token: '', me: null, tab: 'studio', preset: 'hair', photos: [], uploading: new Set(), jobs: [], job: null, pending: null, submitting: false, polling: null, resultURLs: new Map(), sourceURLs: new Map(), liveURLs: new Set()};
   const bridge = window.Telegram?.WebApp?.initData ? window.Telegram.WebApp : null;
   const supports = version => Boolean(bridge?.isVersionAtLeast?.(version));
   const hints = {
@@ -22,12 +22,13 @@
     merge: ['Два исходных фото — один общий кадр.', 'Например: объединить людей с обоих фото в одном кадре у моря']
   };
   const presetIcon = id => `<span class="preset-emoji" aria-hidden="true">${({hair:"✂",clothes:"♧",glasses:"◉",background:"▧",enhance:"✦",merge:"⊞"})[id] || "·"}</span>`;
-  const credits = number => `${number} ${number === 1 ? 'попытка' : number >= 2 && number <= 4 ? 'попытки' : 'попыток'}`;
+  const credits = number => state.trial ? `${number} ${number === 1 ? 'генерация' : number >= 2 && number <= 4 ? 'генерации' : 'генераций'}` : `${number} ${number === 1 ? 'попытка' : number >= 2 && number <= 4 ? 'попытки' : 'попыток'}`;
   const currentPreset = () => state.catalog.find(item => item.id === state.preset) || state.catalog[0];
   const activeStatuses = new Set(['queued', 'running']);
   const statusText = {queued:'Фото принято. Ожидаем своей очереди', running:'Создаём ваш образ', generated:'Образ готов', delivered:'Образ готов', failed:'Не удалось создать образ', review:'Задание требует проверки'};
   const errors = {insufficient_credits:'Недостаточно попыток. Посмотрите баланс в профиле.', invalid_image:'Не удалось прочитать фото. Выберите JPEG, PNG или WebP.', image_too_large:'Фото слишком большое. Максимум — 10 МБ.', upload_limit:'Достигнут лимит загруженных фото. Удалите данные или дождитесь очистки.', consent_required:'Сначала подтвердите согласие на обработку фото.', active_job:'Дождитесь завершения текущего задания.', job_active:'Дождитесь завершения текущего задания.', not_found:'Файл недоступен: срок хранения истёк или он был удалён.', unauthorized:'Вход в студию завершился. Войдите снова.', demo_unavailable:'Тестовый вход здесь недоступен. Откройте студию из Telegram.', invalid_description:'Добавьте описание от 1 до 1500 символов.', interrupted_provider:'Задание прервалось и требует проверки поддержки.'};
   Object.assign(errors,{body_too_large:errors.image_too_large,photo_limit:errors.upload_limit,already_active:errors.active_job,unsupported_media:errors.invalid_image,invalid_prompt:errors.invalid_description,invalid_inputs:'Проверьте количество фото и описание, затем подтвердите ещё раз.',request_mismatch:'Это подтверждение уже использовано для другого образа. Обновите результаты.',confirmation_required:'Перед созданием подтвердите стоимость.'});
+  Object.assign(errors,{trial_exhausted:'Все 3 бесплатные генерации использованы. Повторная выдача недоступна.',trial_not_granted:'Подтвердите согласие, чтобы получить 3 бесплатные реальные генерации.',invalid_trial_user:'Бесплатные реальные генерации доступны только после входа через Telegram.'});
   function notify(message, error = false) { $('notice').textContent = message; $('notice').classList.toggle('error', error); $('notice').hidden = false; }
   function storeToken(value) { state.token = value; try { value ? sessionStorage.setItem('obraz.session', value) : sessionStorage.removeItem('obraz.session'); } catch {} }
   function haptic(type = 'selectionChanged') { try { if(supports('6.1')) bridge?.HapticFeedback?.[type]?.(); } catch {} }
@@ -62,6 +63,7 @@
     if (state.preview) {
       $('entryHeading').textContent='Предпросмотр интерфейса';
       $('entryCopy').textContent='Можно выбрать образ, загрузить своё фото и проверить описание. Фото остаётся только в вашем браузере. Создание изображений и вход пока не подключены.';
+      if(state.trial) $('entryCopy').textContent='В рабочей студии после входа через Telegram и согласия — всего 3 бесплатные реальные генерации. Объединение и каждый новый вариант используют по 1 генерации. ' + $('entryCopy').textContent;
       $('entryConsent').closest('label').hidden=true;
       $('enterButton').textContent='Попробовать интерфейс';$('enterButton').disabled=false;
       return;
@@ -71,6 +73,7 @@
     $('entryHeading').textContent = state.me ? 'Разрешите обработку ваших фото' : telegram ? 'Добро пожаловать в вашу студию' : 'Посмотрите, как устроена студия';
     $('entryCopy').textContent = state.mode === 'mock' ? 'Это тестовый режим: результат — копия исходного фото, без ИИ-правки и передачи OpenAI. Фото и описания хранятся локально до 24 часов. Для людей на фото нужны права и их согласие.' : 'После подтверждения фото и описание передаются OpenAI для правки. Лицо может измениться. Локальные фото, описания и результаты хранятся до 24 часов. Для людей на фото нужны права и их согласие.';
     $('entryConsentText').textContent = state.mode === 'mock' ? 'Мне 18+, у меня есть права на фото и согласие всех изображённых людей. Согласен на локальную обработку фото и описания в тестовом режиме.' : 'Мне 18+, у меня есть права на фото и согласие всех изображённых людей. Согласен на обработку фото и описания и их передачу OpenAI.';
+    if(state.trial) $('entryCopy').textContent='После входа через Telegram и согласия — всего 3 бесплатные реальные генерации OpenAI. Любая функция, включая объединение, использует 1 генерацию. Каждый новый вариант — ещё 1. ' + $('entryCopy').textContent;
     $('enterButton').textContent = state.me ? 'Разрешить и продолжить' : telegram ? 'Войти через Telegram' : state.localDemo ? 'Открыть тестовую студию' : 'Откройте студию из Telegram';
     $('enterButton').disabled = true;
     $('entryConsent').disabled = !state.me && !telegram && !state.localDemo;
@@ -89,15 +92,21 @@
     } catch (error) { notify(error instanceof APIError ? error.message : 'Студия недоступна. Проверьте соединение и попробуйте войти снова.', true); }
     finally { $('enterButton').disabled = !$('entryConsent').checked; }
   }
-  async function loadMe() { state.me = await api('/api/me'); renderMe(); if (!state.me.consent) showEntry(); else $('entryPanel').hidden = true; updateAction(); }
+  async function loadMe() { state.me = await api('/api/me'); state.trial=state.me.trial_access===true; renderMe(); if (!state.me.consent) showEntry(); else $('entryPanel').hidden = true; updateAction(); }
   function renderMe() {
     const available = state.me?.available;
     $('headerBalance').textContent = available ?? '—'; $('profileBalance').textContent = available ?? '—';
     $('profileName').textContent = state.me ? `Здравствуйте, ${state.me.user.first_name || 'это ваша студия'}.` : 'Войдите, чтобы увидеть свои попытки.';
     $('reservedBalance').textContent = state.me ? `В обработке: ${state.me.reserved}. Новое изменение — от 1 попытки.` : 'Баланс появится после входа.';
     $('deleteButton').disabled = !state.me && !state.preview;
-    $('demoCreditsButton').hidden = !(state.me && state.mode === 'mock');
+    $('demoCreditsButton').hidden = !(state.me && (state.mode === 'mock' || state.trial && state.me.consent));
     $('providerInfo').textContent = state.mode === 'mock' ? 'Тестовый режим возвращает копию исходного фото без передачи OpenAI. Это проверка интерфейса, а не результат ИИ.' : 'Для создания образа ваши фото и описание передаются OpenAI. Лицо может измениться. Каждая новая правка требует подтверждения стоимости.';
+    if(state.trial){
+      $('reservedBalance').textContent=`Всего 3 бесплатные реальные генерации. В обработке: ${state.me?.reserved || 0}. Любая функция — 1 генерация.`;
+      $('providerInfo').textContent='Фото и описание передаются OpenAI. Лицо может измениться. Каждый новый вариант использует ещё одну бесплатную генерацию; при ошибке резерв возвращается. Удаление фото, повторное согласие и вход не возобновляют квоту.';
+      $('demoCreditsButton').textContent='Проверить бесплатные генерации';
+      document.querySelector('.balance-card > span:not(.ui-icon)').textContent='Осталось бесплатных генераций';
+    }
     if(state.preview){
       $('headerBalance').textContent='Локально';$('profileName').textContent='Предпросмотр без входа в аккаунт.';
       $('reservedBalance').textContent='Баланс доступен после подключения студии и входа.';
@@ -152,6 +161,7 @@
     $('descriptionCount').textContent = `${$('description').value.length} / 1500`;
     $('description').disabled = Boolean(state.pending);
     if(state.preview) $('createHint').textContent=ready ? 'Предпросмотр: создание изображений не подключено' : 'Добавьте фото и описание — они останутся в браузере';
+    else if(state.trial && state.me?.consent) $('createHint').textContent=!hasCredits ? 'Все 3 бесплатные генерации использованы' : running ? 'Сначала завершите текущее задание' : !ready ? 'Добавьте фото и описание' : 'Один результат — 1 из 3 бесплатных генераций';
     try {
       if (state.tab === 'studio' && !state.pending && ready && hasCredits && !running && !$('confirmDialog').open) {
         if(supports('6.0')) {bridge?.MainButton?.setParams({text:state.preview ? 'Предпросмотр · подтверждение' : `Создать · ${credits(preset.credits)}`,color: '#7349bb',text_color:'#ffffff',is_active:true}); bridge?.MainButton?.show();}
@@ -175,6 +185,7 @@
     $('confirmSummary').innerHTML = `<dt>Изменение</dt><dd>${escape(preset.label)}</dd><dt>Ваша идея</dt><dd>${escape(description)}</dd><dt>Стоимость</dt><dd>${credits(preset.credits)} · останется ${Math.max(0,(state.me?.available || 0) - preset.credits)}</dd>`;
     if(state.preview) $('confirmSummary').innerHTML = `<dt>Изменение</dt><dd>${escape(preset.label)}</dd><dt>Ваша идея</dt><dd>${escape(description)}</dd><dt>Стоимость после подключения</dt><dd>${credits(preset.credits)}</dd>`;
     $('confirmMode').textContent = state.mode === 'mock' ? 'Тестовый запуск вернёт копию исходного фото без ИИ-изменений и передачи OpenAI. Тестовые попытки спишутся после готовности.' : 'После подтверждения начнётся обработка фото и описания OpenAI. Лицо может измениться. Попытки спишутся после готовности результата.';
+    if(state.trial) $('confirmMode').textContent='Всего 3 бесплатные реальные генерации OpenAI. Этот результат использует 1 генерацию, включая объединение фото. Каждый новый вариант — ещё 1; при ошибке резерв возвращается.';
     $('submitError').hidden = !state.pending; if (state.pending) $('submitError').textContent = 'Ответ на прошлую отправку не получен. Повторим её с тем же ключом: второе задание не создастся.';
     $('confirmSubmit').textContent = state.pending ? 'Повторить с тем же ключом' : `Подтвердить · ${credits(preset.credits)}`;
     if(state.preview) {$('confirmMode').textContent='Это предпросмотр: фото и описание остаются в браузере. Создание изображений не подключено, попытки не списываются.';$('confirmSubmit').textContent='Понятно, вернуться в студию';}
@@ -297,7 +308,7 @@
     $('resultDetail').addEventListener('click',event => {const button=event.target.closest('[data-download]');if(button)download(button.dataset.download);});
     $('deleteButton').addEventListener('click',() => {$('deleteError').hidden=true;$('deleteDialog').showModal();}); $('cancelDelete').addEventListener('click',() => $('deleteDialog').close()); $('confirmDelete').addEventListener('click',deleteData);
     $('deleteDialog').addEventListener('cancel',event => {if($('confirmDelete').disabled)event.preventDefault();});
-    $('demoCreditsButton').addEventListener('click',async () => { $('demoCreditsButton').disabled=true;try{const result=await api('/api/demo-credits',{method:'POST'});await loadMe();notify(result.granted ? 'Тестовые попытки добавлены.' : 'Тестовые попытки уже выдавались. Повторная выдача недоступна.');}catch(error){notify(error instanceof APIError ? error.message : 'Не удалось проверить тестовые попытки.',true);}finally{$('demoCreditsButton').disabled=false;} });
+    $('demoCreditsButton').addEventListener('click',async () => { $('demoCreditsButton').disabled=true;try{const result=await api('/api/demo-credits',{method:'POST'});await loadMe();notify(state.trial ? `Всего 3 бесплатные реальные генерации. Доступно: ${state.me.available}. Повторная выдача не предусмотрена.` : result.granted ? 'Тестовые попытки добавлены.' : 'Тестовые попытки уже выдавались. Повторная выдача недоступна.');}catch(error){notify(error instanceof APIError ? error.message : 'Не удалось проверить тестовые попытки.',true);}finally{$('demoCreditsButton').disabled=false;} });
     window.addEventListener('pagehide',event => {
       clearTimeout(state.polling);
       if(!event.persisted) resetMedia();
@@ -322,7 +333,7 @@
   async function init() {
     bindEvents(); setupBridge(); renderPhotos(); renderResults();
     if(state.preview){
-      state.catalog=[{id:'hair',label:'Причёска',inputs:1,credits:1},{id:'clothes',label:'Одежда',inputs:1,credits:1},{id:'glasses',label:'Очки',inputs:1,credits:1},{id:'background',label:'Фон',inputs:1,credits:1},{id:'enhance',label:'Улучшение фото',inputs:1,credits:1},{id:'merge',label:'Объединить два фото',inputs:2,credits:2}];
+      state.catalog=[{id:'hair',label:'Причёска',inputs:1,credits:1},{id:'clothes',label:'Одежда',inputs:1,credits:1},{id:'glasses',label:'Очки',inputs:1,credits:1},{id:'background',label:'Фон',inputs:1,credits:1},{id:'enhance',label:'Улучшение фото',inputs:1,credits:1},{id:'merge',label:'Объединить два фото',inputs:2,credits:state.trial?1:2}];
       $('modeBadge').textContent='Предпросмотр';renderPresets();renderPhotos();renderMe();showEntry();
       document.querySelector('.privacy-note').innerHTML='<span class="privacy-dot"></span>Фото остаются только в вашей вкладке браузера.';
       $('resultsView').querySelector('.fine-print').textContent='Предпросмотр интерфейса: генерация и хранение результатов пока не подключены.';
@@ -330,9 +341,9 @@
       return;
     }
     try {
-      const catalog=await api('/api/catalog'); state.catalog=catalog.presets;state.mode=catalog.mode;state.localDemo=catalog.local_demo;
+      const catalog=await api('/api/catalog'); state.catalog=catalog.presets;state.mode=catalog.mode;state.localDemo=catalog.local_demo;state.trial=catalog.trial_access===true;
       if (!state.catalog.some(item=>item.id===state.preset)) state.preset=state.catalog[0]?.id;
-      $('modeBadge').textContent=state.mode==='mock'?'Тестовый режим':'Личная студия';
+      $('modeBadge').textContent=state.trial?'Бесплатный доступ':state.mode==='mock'?'Тестовый режим':'Личная студия';
       $('supportInfo').textContent=catalog.support_contact || 'Откройте раздел поддержки в боте.';
       renderPresets();renderPhotos();renderMe();
       if(bridge?.initData) {const session=await api('/api/session',{method:'POST',json:{init_data:bridge.initData}});storeToken(session.token);}

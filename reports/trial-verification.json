@@ -1,0 +1,59 @@
+{
+  "date": "2026-10-08",
+  "observed_at_utc": "2026-10-07T19:23:05.336319+00:00",
+  "feature": "three real free service uses per consenting Telegram user once",
+  "trial_limit": 3,
+  "all_preset_costs": 1,
+  "merge_inputs": 2,
+  "repeat_generation_cost": 1,
+  "quota_reset_on_delete_or_restart": false,
+  "financial_wallet_separate": true,
+  "verification": {
+    "full_offline_tests": 121,
+    "full_offline_duration_seconds": 58.41,
+    "ruff": "passed",
+    "node_syntax": "passed",
+    "powershell_launcher_syntax": "passed",
+    "migration_stress_author": {
+      "passed": 100,
+      "concurrent_initializers_per_case": 4
+    },
+    "independent_review": {
+      "initial_tests_passed": 80,
+      "initial_wal_race_failures": 1,
+      "wal_race_fixed": true,
+      "final_focused_tests_passed": 8,
+      "migration_repeats_passed": 20,
+      "frontend_branch_smokes": 3,
+      "open_material_findings": 0
+    }
+  },
+  "activation": {
+    "original_records_preserved": true,
+    "other_env_values_preserved": true,
+    "backup_created": true,
+    "trial_access": true,
+    "mode": "openai",
+    "billing_enabled": false,
+    "consenting_trial_users": 1,
+    "total_trial_remaining": 3,
+    "trial_reserved": 0,
+    "financial_totals": [
+      3,
+      0,
+      0
+    ],
+    "model": "gpt-image-2.5-flare-2026-09-08",
+    "quality": "medium",
+    "agent_image_calls": 0
+  },
+  "http_smoke": {
+    "openai_health": true,
+    "trial_access": true,
+    "preset_prices_all_one": true,
+    "anonymous_demo_session_status": 403
+  },
+  "pages": "static preview only until public HTTPS API",
+  "live_image_quality": "not measured in this change",
+  "secrets_or_user_ids_or_photos_in_report": false
+}

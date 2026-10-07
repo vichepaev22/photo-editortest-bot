@@ -153,3 +153,62 @@ async def test_navigation_labels_do_not_bypass_consent(ui):
         "услов" in getattr(m, "text", "").lower() or "согласи" in getattr(m, "text", "").lower() for m in sent
     )
     assert ui[2].jobs(2) == []
+
+
+@pytest.fixture
+def trial_ui(tmp_path):
+    store, media, provider = Store(tmp_path / "db.sqlite3"), Media(tmp_path), MockProvider()
+    service = Service(store, media, provider, trial_access=True)
+    bot = OfflineBot()
+    settings = Settings(image_provider="openai", trial_access=True)
+    return build_dispatcher(settings, store, media, service), bot, store, media, service, provider
+
+
+async def test_trial_native_auto_grant_after_consent_and_repeat_does_not_reset(trial_ui):
+    _, _, store, _, service, _ = trial_ui
+    await send(trial_ui, "/start")
+    await send(trial_ui, "/demo")
+    assert store.wallet(1, trial=True) == (0, 0)
+    sent = await send(trial_ui, callback="consent")
+    assert store.wallet(1, trial=True) == (3, 0)
+    assert any("3" in getattr(m, "text", "") and "реальн" in getattr(m, "text", "").lower() for m in sent)
+    for text in ["/start", "/demo", "/balance"]:
+        sent = await send(trial_ui, text)
+        assert not any("2 за объединение" in getattr(m, "text", "") for m in sent)
+    await send(trial_ui, callback="demo:grant")
+    await send(trial_ui, callback="consent")
+    assert service.wallet(1) == (3, 0) and store.wallet(1) == (0, 0)
+    await send(trial_ui, callback="consent", user_id=2)
+    assert service.wallet(2) == (3, 0)
+
+
+async def test_trial_native_merge_one_generation_fourth_blocked_and_delete_not_reset(trial_ui):
+    _, _, store, _, service, provider = trial_ui
+    await send(trial_ui, callback="consent")
+    for number in range(3):
+        await send(trial_ui, callback="preset:merge")
+        await send(trial_ui, photo=True)
+        await send(trial_ui, photo=True)
+        button = confirmation(await send(trial_ui, f"Вместе в парке {number}"))
+        assert button and "1" in button.text and "2" not in button.text
+        await send(trial_ui, callback=button.callback_data)
+        job = next(job for job in store.jobs(1) if job["status"] == "queued")
+        assert job["cost"] == 1 and service.wallet(1) == (3 - number, 1)
+        assert await service.process(job["id"])
+    assert provider.calls == 3 and service.wallet(1) == (0, 0)
+    await send(trial_ui, callback="preset:hair")
+    await send(trial_ui, photo=True)
+    button = confirmation(await send(trial_ui, "Новый вариант"))
+    await send(trial_ui, callback=button.callback_data)
+    assert len(store.jobs(1)) == 3 and provider.calls == 3
+    await send(trial_ui, "/delete")
+    await send(trial_ui, callback="consent")
+    await send(trial_ui, "/demo")
+    assert service.wallet(1) == (0, 0) and store.wallet(1) == (0, 0)
+
+
+def test_trial_dispatcher_rejects_mismatched_service_flag(tmp_path):
+    store, media = Store(tmp_path / "db.sqlite3"), Media(tmp_path)
+    with pytest.raises(ValueError, match="trial"):
+        build_dispatcher(Settings(image_provider="openai", trial_access=True), store, media,
+                         Service(store, media, MockProvider()))

@@ -14,14 +14,18 @@ class Store:
     def __init__(self, path: Path):
         self.path = path
         path.parent.mkdir(parents=True, exist_ok=True)
+        self._enable_wal()
         with self.tx() as c:
             c.executescript("""
-                PRAGMA journal_mode=WAL;
                 CREATE TABLE IF NOT EXISTS users (
                     id INTEGER PRIMARY KEY, balance INTEGER NOT NULL DEFAULT 0 CHECK(balance>=0),
                     reserved INTEGER NOT NULL DEFAULT 0 CHECK(reserved>=0 AND reserved<=balance),
                     consent INTEGER NOT NULL DEFAULT 0, demo_used INTEGER NOT NULL DEFAULT 0,
-                    spent INTEGER NOT NULL DEFAULT 0, refund_lock INTEGER NOT NULL DEFAULT 0);
+                    spent INTEGER NOT NULL DEFAULT 0, refund_lock INTEGER NOT NULL DEFAULT 0,
+                    trial_granted INTEGER NOT NULL DEFAULT 0 CHECK(trial_granted IN (0,1)),
+                    trial_used INTEGER NOT NULL DEFAULT 0 CHECK(trial_used>=0 AND trial_used<=3),
+                    trial_reserved INTEGER NOT NULL DEFAULT 0
+                        CHECK(trial_reserved>=0 AND trial_reserved<=3-trial_used));
                 CREATE TABLE IF NOT EXISTS invoices (
                     id TEXT PRIMARY KEY, user_id INTEGER NOT NULL, pack TEXT NOT NULL,
                     amount INTEGER NOT NULL CHECK(amount>0), credits INTEGER NOT NULL CHECK(credits>0),
@@ -36,13 +40,51 @@ class Store:
                     preset TEXT NOT NULL, cost INTEGER NOT NULL CHECK(cost>0),
                     status TEXT NOT NULL DEFAULT 'queued', created REAL NOT NULL,
                     result TEXT, usage TEXT, request_id TEXT, error TEXT,
+                    trial INTEGER NOT NULL DEFAULT 0 CHECK(trial IN (0,1)),
                     UNIQUE(user_id, request_key));
                 CREATE TABLE IF NOT EXISTS events (
                     id INTEGER PRIMARY KEY, created REAL NOT NULL, kind TEXT NOT NULL, ref TEXT NOT NULL);
             """)
+            # executescript commits the tx's initial BEGIN. Serialize all migration checks
+            # and additive ALTERs so concurrent process initialization is idempotent too.
+            c.execute("BEGIN IMMEDIATE")
             columns = {row["name"] for row in c.execute("PRAGMA table_info(invoices)")}
             if "refund_started" not in columns:
                 c.execute("ALTER TABLE invoices ADD COLUMN refund_started REAL")
+            user_columns = {row["name"] for row in c.execute("PRAGMA table_info(users)")}
+            trial_columns = {
+                "trial_granted": "INTEGER NOT NULL DEFAULT 0 CHECK(trial_granted IN (0,1))",
+                "trial_used": "INTEGER NOT NULL DEFAULT 0 CHECK(trial_used>=0 AND trial_used<=3)",
+                "trial_reserved": (
+                    "INTEGER NOT NULL DEFAULT 0 CHECK(trial_reserved>=0 AND trial_reserved<=3-trial_used)"
+                ),
+            }
+            for name, definition in trial_columns.items():
+                if name not in user_columns:
+                    c.execute(f"ALTER TABLE users ADD COLUMN {name} {definition}")
+            job_columns = {row["name"] for row in c.execute("PRAGMA table_info(jobs)")}
+            if "trial" not in job_columns:
+                c.execute("ALTER TABLE jobs ADD COLUMN trial INTEGER NOT NULL DEFAULT 0 CHECK(trial IN (0,1))")
+
+    def _enable_wal(self):
+        # Journal changes need an autocommit connection, outside BEGIN IMMEDIATE.
+        # SQLite can report BUSY immediately for lock upgrades despite busy_timeout.
+        # Five attempts with a 1s SQLite timeout + four 50ms pauses bound this step.
+        connection = sqlite3.connect(self.path, timeout=1)
+        try:
+            for attempt in range(5):
+                try:
+                    mode = connection.execute("PRAGMA journal_mode=WAL").fetchone()[0]
+                    if mode != "wal":
+                        raise sqlite3.OperationalError("wal_unavailable")
+                    return
+                except sqlite3.OperationalError as error:
+                    code = getattr(error, "sqlite_errorcode", 0) & 0xFF
+                    if code not in {sqlite3.SQLITE_BUSY, sqlite3.SQLITE_LOCKED} or attempt == 4:
+                        raise
+                    time.sleep(0.05)
+        finally:
+            connection.close()
 
     @contextmanager
     def tx(self):
@@ -76,10 +118,29 @@ class Store:
         with self.tx() as c:
             return bool(self._user(c, user)["consent"])
 
-    def wallet(self, user):
+    def wallet(self, user, *, trial=False):
         with self.tx() as c:
             u = self._user(c, user)
+            if trial:
+                return 3 - u["trial_used"] if u["trial_granted"] else 0, u["trial_reserved"]
             return u["balance"], u["reserved"]
+
+    @staticmethod
+    def _trial_user(user):
+        if type(user) is not int or not 0 < user < 2**52:
+            raise DomainError("invalid_trial_user")
+
+    def grant_trial(self, user):
+        self._trial_user(user)
+        with self.tx() as c:
+            u = self._user(c, user)
+            if not u["consent"]:
+                raise DomainError("consent_required")
+            if u["trial_granted"]:
+                return False
+            c.execute("UPDATE users SET trial_granted=1 WHERE id=?", (user,))
+            self._event(c, "trial_grant", str(user))
+            return True
 
     def grant_demo(self, user, amount=3):
         if not isinstance(amount, int) or not 1 <= amount <= 10:
@@ -188,14 +249,17 @@ class Store:
             self._event(c, "payment", order)
             return True
 
-    def reserve(self, user, key, preset, cost):
-        if not isinstance(cost, int) or cost <= 0 or not key:
+    def reserve(self, user, key, preset, cost, *, trial=False):
+        if (not isinstance(cost, int) or cost <= 0 or not key or type(trial) is not bool
+                or (trial and (type(cost) is not int or cost != 1))):
             raise DomainError("invalid_job")
+        if trial:
+            self._trial_user(user)
         with self.tx() as c:
             u = self._user(c, user)
             old = c.execute("SELECT * FROM jobs WHERE user_id=? AND request_key=?", (user, key)).fetchone()
             if old:
-                if old["preset"] != preset or old["cost"] != cost:
+                if old["preset"] != preset or old["cost"] != cost or bool(old["trial"]) != trial:
                     raise DomainError("request_mismatch")
                 return old["id"]
             if not u["consent"]:
@@ -207,13 +271,21 @@ class Store:
                 ).fetchone()
             ):
                 raise DomainError("already_active")
-            if u["balance"] - u["reserved"] < cost:
+            if trial:
+                if not u["trial_granted"]:
+                    raise DomainError("trial_not_granted")
+                if 3 - u["trial_used"] - u["trial_reserved"] < 1:
+                    raise DomainError("trial_exhausted")
+            elif u["balance"] - u["reserved"] < cost:
                 raise DomainError("insufficient_credits")
             job = uuid.uuid4().hex
-            c.execute("UPDATE users SET reserved=reserved+? WHERE id=?", (cost, user))
+            if trial:
+                c.execute("UPDATE users SET trial_reserved=trial_reserved+1 WHERE id=?", (user,))
+            else:
+                c.execute("UPDATE users SET reserved=reserved+? WHERE id=?", (cost, user))
             c.execute(
-                "INSERT INTO jobs(id,user_id,request_key,preset,cost,created) VALUES(?,?,?,?,?,?)",
-                (job, user, key, preset, cost, time.time()),
+                "INSERT INTO jobs(id,user_id,request_key,preset,cost,created,trial) VALUES(?,?,?,?,?,?,?)",
+                (job, user, key, preset, cost, time.time(), int(trial)),
             )
             self._event(c, "reserve", job)
             return job
@@ -249,10 +321,16 @@ class Store:
                 return
             if j["status"] != "running":
                 raise DomainError("invalid_job_state")
-            c.execute(
-                "UPDATE users SET balance=balance-?,reserved=reserved-?,spent=spent+? WHERE id=?",
-                (j["cost"], j["cost"], j["cost"], j["user_id"]),
-            )
+            if j["trial"]:
+                c.execute(
+                    "UPDATE users SET trial_reserved=trial_reserved-1,trial_used=trial_used+1 WHERE id=?",
+                    (j["user_id"],),
+                )
+            else:
+                c.execute(
+                    "UPDATE users SET balance=balance-?,reserved=reserved-?,spent=spent+? WHERE id=?",
+                    (j["cost"], j["cost"], j["cost"], j["user_id"]),
+                )
             c.execute(
                 "UPDATE jobs SET status='generated',result=?,usage=?,request_id=? WHERE id=?",
                 (result, json.dumps(usage), request_id, job),
@@ -264,7 +342,10 @@ class Store:
             j = c.execute("SELECT * FROM jobs WHERE id=?", (job,)).fetchone()
             if j is None or j["status"] not in {"queued", "running", "review"}:
                 return
-            c.execute("UPDATE users SET reserved=reserved-? WHERE id=?", (j["cost"], j["user_id"]))
+            if j["trial"]:
+                c.execute("UPDATE users SET trial_reserved=trial_reserved-1 WHERE id=?", (j["user_id"],))
+            else:
+                c.execute("UPDATE users SET reserved=reserved-? WHERE id=?", (j["cost"], j["user_id"]))
             c.execute("UPDATE jobs SET status='failed',error=? WHERE id=?", (reason[:60], job))
             self._event(c, "release", job)
 

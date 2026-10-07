@@ -107,11 +107,31 @@ class Draft:
 
 
 def build_dispatcher(settings, store, media, service):
+    trial = settings.trial_access
+    if trial != service.trial_access:
+        raise ValueError("trial_access_service_mismatch")
     router = Router()
     router.message.filter(F.chat.type == "private")
     router.callback_query.filter(F.message.chat.type == "private")
     dp = Dispatcher(events_isolation=SimpleEventIsolation())
     drafts = {}
+
+    def pricing():
+        if trial:
+            return "Любая функция, включая объединение — 1 бесплатная генерация. Всего 3 реальные генерации."
+        return f"Правка — {service.cost('hair')} попытка. Объединение двух фото — {service.cost('merge')}."
+
+    async def trial_balance(message, user):
+        if not store.has_consent(user):
+            await message.answer("Сначала подтвердите условия и согласие в /start.", reply_markup=CONSENT)
+            return
+        total, reserved = service.wallet(user)
+        await message.answer(
+            "Вам доступны всего 3 бесплатные реальные генерации OpenAI, включая объединение фото.\n"
+            f"Осталось: {total - reserved}. В обработке: {reserved}.\n"
+            "Каждый новый вариант использует 1 генерацию. Повторная выдача не предусмотрена.",
+            reply_markup=MAIN,
+        )
 
     def current(user):
         draft = drafts.get(user)
@@ -161,12 +181,12 @@ def build_dispatcher(settings, store, media, service):
                 await message.answer("Выберите действие на нижней панели.", reply_markup=MAIN)
             else:
                 await message.answer(
-                    "Что хотите изменить? Одна правка — 1 попытка, объединение — 2.", reply_markup=MENU
+                    "Что хотите изменить? " + pricing(), reply_markup=MENU
                 )
         elif action == "merge":
             await choose_preset(message, user, "merge")
         elif action == "balance":
-            total, reserved = store.wallet(user)
+            total, reserved = service.wallet(user)
             markup = (
                 buttons([[("🎁 Получить 3 тестовые попытки", "demo:grant")]])
                 if (settings.image_provider == "mock" and settings.demo_credits)
@@ -174,7 +194,7 @@ def build_dispatcher(settings, store, media, service):
             )
             await message.answer(
                 f"💎 Доступно попыток: {total - reserved}\nВ обработке: {reserved}\n"
-                "Правка — 1 попытка. Объединение двух фото — 2.\nПродажи пока закрыты.",
+                + pricing() + "\nПродажи пока закрыты.",
                 reply_markup=markup,
             )
         elif action == "results":
@@ -199,7 +219,7 @@ def build_dispatcher(settings, store, media, service):
                 "Как пользоваться\n1. Выберите функцию.\n2. Отправьте своё фото (для объединения — два).\n"
                 "3. Опишите желаемое изменение.\n4. Проверьте цену и нажмите «Создать».\n"
                 "5. Получите файл и сохраните его.\n\n"
-                "1 попытка за правку, 2 за объединение. Новый вариант — отдельная попытка.\n"
+                + pricing() + " Новый вариант — отдельная попытка.\n"
                 + (
                     "Сейчас демо: вы получите тестовую копию без ИИ-правки.\n"
                     if settings.image_provider == "mock"
@@ -232,10 +252,12 @@ def build_dispatcher(settings, store, media, service):
     @router.message(CommandStart())
     async def start(message: Message):
         drafts.pop(message.from_user.id, None)
+        service.wallet(message.from_user.id)
         mode = (
             "\nСейчас демо: результат — тестовая копия с отметкой DEMO."
             if settings.image_provider == "mock"
-            else ""
+            else "\nВсего 3 бесплатные реальные генерации OpenAI после согласия. Любая функция — 1 генерация."
+            if trial else ""
         )
         await message.answer(
             "Образ — примерка причёсок, одежды, очков и объединение фото.\n"
@@ -247,11 +269,14 @@ def build_dispatcher(settings, store, media, service):
     @router.callback_query(F.data == "consent")
     async def consent(callback: CallbackQuery):
         store.consent(callback.from_user.id)
+        total, reserved = service.wallet(callback.from_user.id)
         await callback.answer("Согласие сохранено")
         await callback.message.answer(
             "Выберите действие на нижней панели. "
             + (
-                "Тестовые попытки доступны в «Мои попытки»."
+                f"Всего 3 бесплатные реальные генерации OpenAI. Доступно: {total - reserved}. "
+                "Объединение и каждый новый вариант — 1 генерация."
+                if trial else "Тестовые попытки доступны в «Мои попытки»."
                 if settings.image_provider == "mock"
                 else "Для пилотного доступа сообщите владельцу свой /id."
             ),
@@ -260,7 +285,10 @@ def build_dispatcher(settings, store, media, service):
 
     @router.message(Command("id"))
     async def identity(message: Message):
-        await message.answer(f"Ваш ID для пилотного доступа: {message.from_user.id}")
+        await message.answer(
+            f"Ваш Telegram ID: {message.from_user.id}" if trial
+            else f"Ваш ID для пилотного доступа: {message.from_user.id}"
+        )
 
     @router.errors()
     async def handle_error(event: ErrorEvent):
@@ -276,6 +304,9 @@ def build_dispatcher(settings, store, media, service):
 
     @router.message(Command("demo"))
     async def demo(message: Message):
+        if trial:
+            await trial_balance(message, message.from_user.id)
+            return
         if settings.image_provider != "mock" or not settings.demo_credits:
             await message.answer("Бесплатные тестовые кредиты здесь недоступны.")
             return
@@ -286,6 +317,10 @@ def build_dispatcher(settings, store, media, service):
 
     @router.callback_query(F.data == "demo:grant")
     async def demo_callback(callback: CallbackQuery):
+        if trial:
+            await callback.answer()
+            await trial_balance(callback.message, callback.from_user.id)
+            return
         if settings.image_provider != "mock" or not settings.demo_credits:
             await callback.answer("Тестовые попытки недоступны", show_alert=True)
             return
@@ -308,7 +343,7 @@ def build_dispatcher(settings, store, media, service):
         await message.answer(
             "Условия пилота: 18+, права и согласие всех изображённых людей, "
             "полностью одетые образы. Не используйте результат для обмана. "
-            "1 кредит за правку, 2 за объединение; новая версия оплачивается отдельно. "
+            + pricing() + " Новый вариант использует ещё одну попытку. "
             "При ошибке обработки резерв возвращается. Качество и сходство не гарантированы. "
             "Оплаты в Telegram сейчас нет; условия продажи будут опубликованы перед запуском."
         )
@@ -424,13 +459,15 @@ def build_dispatcher(settings, store, media, service):
         draft.description = message.text.strip()
         draft.token = uuid.uuid4().hex
         choice = PRESETS[draft.preset]
+        cost = service.cost(draft.preset)
+        unit = "бесплатная генерация" if trial else "попытка(и)"
         await message.answer(
             f"Шаг 3 из 3 · {choice.label}\nИзменение: {draft.description}\n"
-            f"Стоимость: {choice.credits} попытка(и). Один результат.\n"
+            f"Стоимость: {cost} {unit}. Один результат.\n"
             "Каждый новый вариант — новая попытка.",
             reply_markup=buttons(
                 [
-                    [(f"Создать · {choice.credits} попытка(и)", "confirm:" + draft.token, "success")],
+                    [(f"Создать · {cost} {unit}", "confirm:" + draft.token, "success")],
                     [("🏠 Главное меню", "nav:home")],
                 ]
             ),
@@ -455,6 +492,8 @@ def build_dispatcher(settings, store, media, service):
             explanation = {
                 "insufficient_credits": "Недостаточно кредитов. Проверьте /balance.",
                 "already_active": "Уже есть задача в обработке. Проверьте /support.",
+                "trial_exhausted": "Все 3 бесплатные генерации использованы. Новые попытки не выдаются.",
+                "trial_not_granted": "Сначала подтвердите условия и согласие в /start.",
             }
             await callback.answer(explanation.get(str(exc), "Не удалось принять заявку"), show_alert=True)
 
@@ -512,12 +551,18 @@ async def run(settings):
                 await bot.send_message(
                     user,
                     explanations.get(reason, "Обработка не выполнена.")
-                    + f" Резерв кредитов возвращён. ID: {job}",
+                    + f" Резерв {'генерации' if settings.trial_access else 'кредитов'} возвращён. ID: {job}",
                 )
 
-            service = Service(store, media, provider, deliver, notify)
+            service = Service(store, media, provider, deliver, notify, trial_access=settings.trial_access)
             dp = build_dispatcher(settings, store, media, service)
-            await bot.set_my_commands(COMMANDS)
+            await bot.set_my_commands([
+                command.model_copy(update={"description": {
+                    "demo": "Мои бесплатные генерации", "id": "Мой Telegram ID",
+                }[command.command]})
+                if settings.trial_access and command.command in {"demo", "id"} else command
+                for command in COMMANDS
+            ])
             await bot.set_chat_menu_button(
                 menu_button=(
                     MenuButtonWebApp(text="Студия", web_app=WebAppInfo(url=settings.mini_app_url))

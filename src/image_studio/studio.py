@@ -38,6 +38,7 @@ DOMAIN_CODES = {
     "invalid_inputs": 400, "invalid_job": 400, "invalid_prompt": 400,
     "consent_required": 403, "request_mismatch": 409, "already_active": 409,
     "insufficient_credits": 409, "storage_error": 500,
+    "trial_exhausted": 409, "trial_not_granted": 403, "invalid_trial_user": 403,
 }
 
 
@@ -171,6 +172,8 @@ def create_studio_app(settings, store, media, service):
                 del sessions[token]
 
     def session_response(user):
+        if store.has_consent(user["id"]):
+            service.wallet(user["id"])
         purge_sessions()
         if len(sessions) >= SESSION_LIMIT:
             raise APIError("session_limit", 503)
@@ -286,10 +289,11 @@ def create_studio_app(settings, store, media, service):
     @app.get("/api/catalog")
     async def catalog():
         return {
-            "presets": [{"id": key, "label": preset.label, "inputs": preset.inputs, "credits": preset.credits}
+            "presets": [{"id": key, "label": preset.label, "inputs": preset.inputs, "credits": service.cost(key)}
                         for key, preset in PRESETS.items()],
             "mode": settings.image_provider, "local_demo": demo_enabled(),
             "support_contact": settings.support_contact,
+            "trial_access": service.trial_access,
         }
 
     @app.post("/api/session")
@@ -310,9 +314,10 @@ def create_studio_app(settings, store, media, service):
     @app.get("/api/me")
     async def me(request: Request):
         user = identity(request)
-        balance, reserved = store.wallet(user["id"])
+        balance, reserved = service.wallet(user["id"])
         return {"user": user, "consent": store.has_consent(user["id"]),
-                "available": balance - reserved, "reserved": reserved, "mode": settings.image_provider}
+                "available": balance - reserved, "reserved": reserved, "mode": settings.image_provider,
+                "trial_access": service.trial_access}
 
     @app.post("/api/consent")
     async def consent(request: Request):
@@ -322,11 +327,14 @@ def create_studio_app(settings, store, media, service):
         if data.get("accepted") is not True:
             raise APIError("consent_required")
         store.consent(user["id"])
+        service.wallet(user["id"])
         return {"ok": True}
 
     @app.post("/api/demo-credits")
     async def demo_credits(request: Request):
         user = identity(request, consent=True)
+        if service.trial_access:
+            return {"granted": store.grant_trial(user["id"])}
         if not demo_enabled():
             raise APIError("demo_unavailable", 403)
         return {"granted": store.grant_demo(user["id"], 3)}
@@ -379,7 +387,8 @@ def create_studio_app(settings, store, media, service):
         # Replays return the existing ledger job even after input TTL cleanup, without resubmission.
         for record in store.jobs(user):
             if record["request_key"] == key:
-                if record["preset"] != preset:
+                if (record["preset"] != preset or bool(record["trial"]) != service.trial_access
+                        or record["cost"] != service.cost(preset)):
                     raise APIError("request_mismatch", 409)
                 return {"id": record["id"], "status": record["status"]}
         inputs = [f"{user}/{photo}.jpg" for photo in ids]

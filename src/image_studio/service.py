@@ -11,9 +11,21 @@ log = logging.getLogger(__name__)
 
 
 class Service:
-    def __init__(self, store, media, provider, deliver=None, notify=None):
+    def __init__(self, store, media, provider, deliver=None, notify=None, *, trial_access=False):
         self.store, self.media, self.provider = store, media, provider
         self.deliver, self.notify = deliver, notify
+        self.trial_access = trial_access
+
+    def cost(self, preset):
+        choice = PRESETS.get(preset)
+        if choice is None:
+            raise DomainError("invalid_inputs")
+        return 1 if self.trial_access else choice.credits
+
+    def wallet(self, user):
+        if self.trial_access and self.store.has_consent(user):
+            self.store.grant_trial(user)
+        return self.store.wallet(user, trial=self.trial_access)
 
     def submit(self, user, key, preset, inputs, description):
         choice = PRESETS.get(preset)
@@ -24,7 +36,9 @@ class Service:
             if resolved.parent != self.media.path(str(user)) or not resolved.is_file():
                 raise DomainError("invalid_inputs")
         prompt = prompt_for(preset, description)
-        job = self.store.reserve(user, key, preset, choice.credits)
+        if self.trial_access:
+            self.store.grant_trial(user)
+        job = self.store.reserve(user, key, preset, self.cost(preset), trial=self.trial_access)
         payload_name = f"{job}.json"
         payload_path = self.media.path(f"{user}/{payload_name}")
         if not payload_path.exists() and self.store.job(job)["status"] == "queued":
