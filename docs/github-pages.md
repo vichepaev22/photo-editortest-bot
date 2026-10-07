@@ -1,6 +1,6 @@
 # GitHub Pages и обработчик фотографий
 
-Владелец разрешил публикацию на GitHub и Pages. Репозиторий: https://github.com/vichepaev22/photo-editortest-bot . Планируемый адрес: https://vichepaev22.github.io/photo-editortest-bot/ . Факт успешной публикации фиксируется после проверки workflow и HTTP.
+Владелец разрешил публикацию на GitHub и Pages. Репозиторий: https://github.com/vichepaev22/photo-editortest-bot . Опубликованный адрес: https://vichepaev22.github.io/photo-editortest-bot/ . Проверено2026-10-07: [workflow](https://github.com/vichepaev22/photo-editortest-bot/actions/runs/37637270293) завершён success; HTML/app.css/app.js/config.js возвращают HTTP200. В Chromium проверены вход в предпросмотр, локальный выбор файла, подтверждение будущей цены, очистка и32комбинации вкладок/ширин/тем; ошибок консоли и запросов к API/localhost нет.
 
 Pages размещает HTML/CSS/JavaScript, не запускает Python и не хранит серверные API-ключи. [Официальное описание](https://docs.github.com/en/pages/getting-started-with-github-pages/what-is-github-pages). Workflow загружает только src/image_studio/web; backend-код доступен в репозитории, но не работает на Pages.
 
@@ -11,3 +11,7 @@ Pages размещает HTML/CSS/JavaScript, не запускает Python и 
 Не подключаем публичный сайт к localhost пользователя и не публикуем открытый локальный mock endpoint. Локальное демо проверяется напрямую через http://127.0.0.1:8089/ . Статический Pages URL можно открыть из Telegram уже сейчас; генерация внутри него станет доступна после публичного HTTPS backend.
 
 Публикация через GitHub Actions: тесты offline + Ruff, затем загрузка и deploy статического интерфейса. Единственная ветка публикации — codex/ui-mini-app. Фотографии, .env, data, локальные логи, .smol и routing/runtime reports исключены. Изображения для оформления предоставляет владелец по design-assets-brief.md.
+
+Первая попытка workflow была отклонена защитой environment github-pages: автоматически разрешена только main. В новом репозитории добавлено точное разрешение codex/ui-mini-app; повторный запуск успешен. CI на Linux выполнил69тестов,5.75s, и Ruff. Это доказательство offline-контрактов, не качества Image и не доступности будущего VPS.
+
+В локальном `.env` сохранён только новый публичный MINI_APP_URL; остальные значения проверены на неизменность. Telegram API подтвердил menu_type=web_app, текст «Студия», опубликованный Pages URL и11команд. Ключи и локальная rollback-копия находятся только в исключённой папке.

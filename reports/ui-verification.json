@@ -1,0 +1,82 @@
+{
+  "date": "2026-10-07",
+  "scope": "native_ui_local_studio_static_pages",
+  "workflow": [
+    "process-design-vibecoding",
+    "astra-ai-project-engineer",
+    "frontend-ui-engineering"
+  ],
+  "offline_tests": {
+    "local": 69,
+    "linux_ci": 69,
+    "ruff": "pass",
+    "javascript_syntax": "pass"
+  },
+  "independent_review": {
+    "model": "gpt-6.1-sol",
+    "focused_tests": 34,
+    "p2_found": 2,
+    "p2_fixed_and_reaccepted": 2
+  },
+  "local_browser": {
+    "mode": "mock",
+    "isolated_user": true,
+    "flows": [
+      "consent",
+      "upload",
+      "hair_1_credit",
+      "merge_2_credits",
+      "explicit_confirmation",
+      "download",
+      "comparison_slider",
+      "bfcache_restore"
+    ],
+    "layouts_checked": 32,
+    "overflow_failures": 0,
+    "console_errors": 0,
+    "console_warnings": 0,
+    "pilot_credits_left_for_owner_testing": 3
+  },
+  "publication": {
+    "repository": "https://github.com/vichepaev22/photo-editortest-bot",
+    "pages": "https://vichepaev22.github.io/photo-editortest-bot/",
+    "source_commit": "e2010acbc74f304da86cc5b7b77c58f6c12353eb",
+    "ci_run": "https://github.com/vichepaev22/photo-editortest-bot/actions/runs/37637270293",
+    "ci_conclusion": "success",
+    "http_assets": [
+      {
+        "path": "/",
+        "status": 200
+      },
+      {
+        "path": "app.css",
+        "status": 200
+      },
+      {
+        "path": "app.js",
+        "status": 200
+      },
+      {
+        "path": "config.js",
+        "status": 200
+      }
+    ],
+    "preview_api_or_localhost_requests": 0,
+    "public_layouts_checked": 32,
+    "console_errors": 0,
+    "console_warnings": 0
+  },
+  "telegram_menu": {
+    "verified_by": "get_chat_menu_button",
+    "type": "web_app",
+    "text": "Студия",
+    "url": "https://vichepaev22.github.io/photo-editortest-bot/",
+    "commands": 11
+  },
+  "external_image_calls": 0,
+  "live_image_quality_verified": false,
+  "live_payments_verified": false,
+  "vps_deployed": false,
+  "real_telegram_client_render_verified": false,
+  "artwork_generated": false
+}
