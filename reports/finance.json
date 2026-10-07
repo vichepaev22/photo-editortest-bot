@@ -1,0 +1,452 @@
+[
+  {
+    "evidence": "hypothetical_not_measured",
+    "fx_rub_per_usd": 80,
+    "api_usd": 0.02,
+    "api_rub": 1.6,
+    "loaded_cost_rub": 2.84,
+    "api_only_calls_for_10_usd": 500,
+    "api_calls_with_10_percent_budget_reserve": 450,
+    "packs": [
+      {
+        "pack": "small",
+        "credits": 5,
+        "price_rub": 149.0,
+        "price_per_credit": 29.8,
+        "net_receipts_rub": 133.6977,
+        "fulfillment_rub": 14.2,
+        "contribution_rub": 119.4977,
+        "margin_of_gross": 0.8019979865771811,
+        "after_cac_rub": 19.497699999999995,
+        "break_even_orders_no_cac": 42,
+        "break_even_orders_with_cac": 257
+      },
+      {
+        "pack": "medium",
+        "credits": 10,
+        "price_rub": 249.0,
+        "price_per_credit": 24.9,
+        "net_receipts_rub": 223.4277,
+        "fulfillment_rub": 28.4,
+        "contribution_rub": 195.02769999999998,
+        "margin_of_gross": 0.7832437751004016,
+        "after_cac_rub": 95.02769999999998,
+        "break_even_orders_no_cac": 26,
+        "break_even_orders_with_cac": 53
+      },
+      {
+        "pack": "large",
+        "credits": 25,
+        "price_rub": 549.0,
+        "price_per_credit": 21.96,
+        "net_receipts_rub": 492.6177,
+        "fulfillment_rub": 71.0,
+        "contribution_rub": 421.6177,
+        "margin_of_gross": 0.7679739526411657,
+        "after_cac_rub": 321.6177,
+        "break_even_orders_no_cac": 12,
+        "break_even_orders_with_cac": 16
+      }
+    ]
+  },
+  {
+    "evidence": "hypothetical_not_measured",
+    "fx_rub_per_usd": 80,
+    "api_usd": 0.06,
+    "api_rub": 4.8,
+    "loaded_cost_rub": 6.52,
+    "api_only_calls_for_10_usd": 166,
+    "api_calls_with_10_percent_budget_reserve": 150,
+    "packs": [
+      {
+        "pack": "small",
+        "credits": 5,
+        "price_rub": 149.0,
+        "price_per_credit": 29.8,
+        "net_receipts_rub": 133.6977,
+        "fulfillment_rub": 32.599999999999994,
+        "contribution_rub": 101.0977,
+        "margin_of_gross": 0.6785080536912752,
+        "after_cac_rub": 1.0977000000000032,
+        "break_even_orders_no_cac": 50,
+        "break_even_orders_with_cac": 4555
+      },
+      {
+        "pack": "medium",
+        "credits": 10,
+        "price_rub": 249.0,
+        "price_per_credit": 24.9,
+        "net_receipts_rub": 223.4277,
+        "fulfillment_rub": 65.19999999999999,
+        "contribution_rub": 158.2277,
+        "margin_of_gross": 0.635452610441767,
+        "after_cac_rub": 58.2277,
+        "break_even_orders_no_cac": 32,
+        "break_even_orders_with_cac": 86
+      },
+      {
+        "pack": "large",
+        "credits": 25,
+        "price_rub": 549.0,
+        "price_per_credit": 21.96,
+        "net_receipts_rub": 492.6177,
+        "fulfillment_rub": 163.0,
+        "contribution_rub": 329.6177,
+        "margin_of_gross": 0.600396539162113,
+        "after_cac_rub": 229.6177,
+        "break_even_orders_no_cac": 16,
+        "break_even_orders_with_cac": 22
+      }
+    ]
+  },
+  {
+    "evidence": "hypothetical_not_measured",
+    "fx_rub_per_usd": 80,
+    "api_usd": 0.15,
+    "api_rub": 12.0,
+    "loaded_cost_rub": 14.799999999999999,
+    "api_only_calls_for_10_usd": 66,
+    "api_calls_with_10_percent_budget_reserve": 60,
+    "packs": [
+      {
+        "pack": "small",
+        "credits": 5,
+        "price_rub": 149.0,
+        "price_per_credit": 29.8,
+        "net_receipts_rub": 133.6977,
+        "fulfillment_rub": 74.0,
+        "contribution_rub": 59.6977,
+        "margin_of_gross": 0.40065570469798656,
+        "after_cac_rub": -40.3023,
+        "break_even_orders_no_cac": 84,
+        "break_even_orders_with_cac": null
+      },
+      {
+        "pack": "medium",
+        "credits": 10,
+        "price_rub": 249.0,
+        "price_per_credit": 24.9,
+        "net_receipts_rub": 223.4277,
+        "fulfillment_rub": 148.0,
+        "contribution_rub": 75.42769999999999,
+        "margin_of_gross": 0.3029224899598393,
+        "after_cac_rub": -24.572300000000013,
+        "break_even_orders_no_cac": 67,
+        "break_even_orders_with_cac": null
+      },
+      {
+        "pack": "large",
+        "credits": 25,
+        "price_rub": 549.0,
+        "price_per_credit": 21.96,
+        "net_receipts_rub": 492.6177,
+        "fulfillment_rub": 370.0,
+        "contribution_rub": 122.61770000000001,
+        "margin_of_gross": 0.22334735883424411,
+        "after_cac_rub": 22.617700000000013,
+        "break_even_orders_no_cac": 41,
+        "break_even_orders_with_cac": 222
+      }
+    ]
+  },
+  {
+    "evidence": "hypothetical_not_measured",
+    "fx_rub_per_usd": 90,
+    "api_usd": 0.02,
+    "api_rub": 1.8,
+    "loaded_cost_rub": 3.07,
+    "api_only_calls_for_10_usd": 500,
+    "api_calls_with_10_percent_budget_reserve": 450,
+    "packs": [
+      {
+        "pack": "small",
+        "credits": 5,
+        "price_rub": 149.0,
+        "price_per_credit": 29.8,
+        "net_receipts_rub": 133.6977,
+        "fulfillment_rub": 15.35,
+        "contribution_rub": 118.3477,
+        "margin_of_gross": 0.7942798657718121,
+        "after_cac_rub": 18.347700000000003,
+        "break_even_orders_no_cac": 43,
+        "break_even_orders_with_cac": 273
+      },
+      {
+        "pack": "medium",
+        "credits": 10,
+        "price_rub": 249.0,
+        "price_per_credit": 24.9,
+        "net_receipts_rub": 223.4277,
+        "fulfillment_rub": 30.7,
+        "contribution_rub": 192.7277,
+        "margin_of_gross": 0.774006827309237,
+        "after_cac_rub": 92.7277,
+        "break_even_orders_no_cac": 26,
+        "break_even_orders_with_cac": 54
+      },
+      {
+        "pack": "large",
+        "credits": 25,
+        "price_rub": 549.0,
+        "price_per_credit": 21.96,
+        "net_receipts_rub": 492.6177,
+        "fulfillment_rub": 76.75,
+        "contribution_rub": 415.8677,
+        "margin_of_gross": 0.757500364298725,
+        "after_cac_rub": 315.8677,
+        "break_even_orders_no_cac": 13,
+        "break_even_orders_with_cac": 16
+      }
+    ]
+  },
+  {
+    "evidence": "hypothetical_not_measured",
+    "fx_rub_per_usd": 90,
+    "api_usd": 0.06,
+    "api_rub": 5.3999999999999995,
+    "loaded_cost_rub": 7.209999999999999,
+    "api_only_calls_for_10_usd": 166,
+    "api_calls_with_10_percent_budget_reserve": 150,
+    "packs": [
+      {
+        "pack": "small",
+        "credits": 5,
+        "price_rub": 149.0,
+        "price_per_credit": 29.8,
+        "net_receipts_rub": 133.6977,
+        "fulfillment_rub": 36.05,
+        "contribution_rub": 97.6477,
+        "margin_of_gross": 0.6553536912751677,
+        "after_cac_rub": -2.3522999999999996,
+        "break_even_orders_no_cac": 52,
+        "break_even_orders_with_cac": null
+      },
+      {
+        "pack": "medium",
+        "credits": 10,
+        "price_rub": 249.0,
+        "price_per_credit": 24.9,
+        "net_receipts_rub": 223.4277,
+        "fulfillment_rub": 72.1,
+        "contribution_rub": 151.3277,
+        "margin_of_gross": 0.6077417670682731,
+        "after_cac_rub": 51.32769999999999,
+        "break_even_orders_no_cac": 34,
+        "break_even_orders_with_cac": 98
+      },
+      {
+        "pack": "large",
+        "credits": 25,
+        "price_rub": 549.0,
+        "price_per_credit": 21.96,
+        "net_receipts_rub": 492.6177,
+        "fulfillment_rub": 180.24999999999997,
+        "contribution_rub": 312.3677,
+        "margin_of_gross": 0.5689757741347905,
+        "after_cac_rub": 212.3677,
+        "break_even_orders_no_cac": 17,
+        "break_even_orders_with_cac": 24
+      }
+    ]
+  },
+  {
+    "evidence": "hypothetical_not_measured",
+    "fx_rub_per_usd": 90,
+    "api_usd": 0.15,
+    "api_rub": 13.5,
+    "loaded_cost_rub": 16.525,
+    "api_only_calls_for_10_usd": 66,
+    "api_calls_with_10_percent_budget_reserve": 60,
+    "packs": [
+      {
+        "pack": "small",
+        "credits": 5,
+        "price_rub": 149.0,
+        "price_per_credit": 29.8,
+        "net_receipts_rub": 133.6977,
+        "fulfillment_rub": 82.625,
+        "contribution_rub": 51.0727,
+        "margin_of_gross": 0.3427697986577181,
+        "after_cac_rub": -48.9273,
+        "break_even_orders_no_cac": 98,
+        "break_even_orders_with_cac": null
+      },
+      {
+        "pack": "medium",
+        "credits": 10,
+        "price_rub": 249.0,
+        "price_per_credit": 24.9,
+        "net_receipts_rub": 223.4277,
+        "fulfillment_rub": 165.25,
+        "contribution_rub": 58.17769999999999,
+        "margin_of_gross": 0.23364538152610437,
+        "after_cac_rub": -41.82230000000001,
+        "break_even_orders_no_cac": 86,
+        "break_even_orders_with_cac": null
+      },
+      {
+        "pack": "large",
+        "credits": 25,
+        "price_rub": 549.0,
+        "price_per_credit": 21.96,
+        "net_receipts_rub": 492.6177,
+        "fulfillment_rub": 413.12499999999994,
+        "contribution_rub": 79.49270000000007,
+        "margin_of_gross": 0.1447954462659382,
+        "after_cac_rub": -20.50729999999993,
+        "break_even_orders_no_cac": 63,
+        "break_even_orders_with_cac": null
+      }
+    ]
+  },
+  {
+    "evidence": "hypothetical_not_measured",
+    "fx_rub_per_usd": 110,
+    "api_usd": 0.02,
+    "api_rub": 2.2,
+    "loaded_cost_rub": 3.53,
+    "api_only_calls_for_10_usd": 500,
+    "api_calls_with_10_percent_budget_reserve": 450,
+    "packs": [
+      {
+        "pack": "small",
+        "credits": 5,
+        "price_rub": 149.0,
+        "price_per_credit": 29.8,
+        "net_receipts_rub": 133.6977,
+        "fulfillment_rub": 17.65,
+        "contribution_rub": 116.04769999999999,
+        "margin_of_gross": 0.7788436241610738,
+        "after_cac_rub": 16.047699999999992,
+        "break_even_orders_no_cac": 44,
+        "break_even_orders_with_cac": 312
+      },
+      {
+        "pack": "medium",
+        "credits": 10,
+        "price_rub": 249.0,
+        "price_per_credit": 24.9,
+        "net_receipts_rub": 223.4277,
+        "fulfillment_rub": 35.3,
+        "contribution_rub": 188.1277,
+        "margin_of_gross": 0.7555329317269076,
+        "after_cac_rub": 88.1277,
+        "break_even_orders_no_cac": 27,
+        "break_even_orders_with_cac": 57
+      },
+      {
+        "pack": "large",
+        "credits": 25,
+        "price_rub": 549.0,
+        "price_per_credit": 21.96,
+        "net_receipts_rub": 492.6177,
+        "fulfillment_rub": 88.25,
+        "contribution_rub": 404.3677,
+        "margin_of_gross": 0.7365531876138434,
+        "after_cac_rub": 304.3677,
+        "break_even_orders_no_cac": 13,
+        "break_even_orders_with_cac": 17
+      }
+    ]
+  },
+  {
+    "evidence": "hypothetical_not_measured",
+    "fx_rub_per_usd": 110,
+    "api_usd": 0.06,
+    "api_rub": 6.6,
+    "loaded_cost_rub": 8.59,
+    "api_only_calls_for_10_usd": 166,
+    "api_calls_with_10_percent_budget_reserve": 150,
+    "packs": [
+      {
+        "pack": "small",
+        "credits": 5,
+        "price_rub": 149.0,
+        "price_per_credit": 29.8,
+        "net_receipts_rub": 133.6977,
+        "fulfillment_rub": 42.95,
+        "contribution_rub": 90.7477,
+        "margin_of_gross": 0.609044966442953,
+        "after_cac_rub": -9.252300000000005,
+        "break_even_orders_no_cac": 56,
+        "break_even_orders_with_cac": null
+      },
+      {
+        "pack": "medium",
+        "credits": 10,
+        "price_rub": 249.0,
+        "price_per_credit": 24.9,
+        "net_receipts_rub": 223.4277,
+        "fulfillment_rub": 85.9,
+        "contribution_rub": 137.52769999999998,
+        "margin_of_gross": 0.5523200803212851,
+        "after_cac_rub": 37.52769999999998,
+        "break_even_orders_no_cac": 37,
+        "break_even_orders_with_cac": 134
+      },
+      {
+        "pack": "large",
+        "credits": 25,
+        "price_rub": 549.0,
+        "price_per_credit": 21.96,
+        "net_receipts_rub": 492.6177,
+        "fulfillment_rub": 214.75,
+        "contribution_rub": 277.8677,
+        "margin_of_gross": 0.5061342440801457,
+        "after_cac_rub": 177.8677,
+        "break_even_orders_no_cac": 18,
+        "break_even_orders_with_cac": 29
+      }
+    ]
+  },
+  {
+    "evidence": "hypothetical_not_measured",
+    "fx_rub_per_usd": 110,
+    "api_usd": 0.15,
+    "api_rub": 16.5,
+    "loaded_cost_rub": 19.974999999999998,
+    "api_only_calls_for_10_usd": 66,
+    "api_calls_with_10_percent_budget_reserve": 60,
+    "packs": [
+      {
+        "pack": "small",
+        "credits": 5,
+        "price_rub": 149.0,
+        "price_per_credit": 29.8,
+        "net_receipts_rub": 133.6977,
+        "fulfillment_rub": 99.87499999999999,
+        "contribution_rub": 33.82270000000001,
+        "margin_of_gross": 0.2269979865771813,
+        "after_cac_rub": -66.17729999999999,
+        "break_even_orders_no_cac": 148,
+        "break_even_orders_with_cac": null
+      },
+      {
+        "pack": "medium",
+        "credits": 10,
+        "price_rub": 249.0,
+        "price_per_credit": 24.9,
+        "net_receipts_rub": 223.4277,
+        "fulfillment_rub": 199.74999999999997,
+        "contribution_rub": 23.677700000000016,
+        "margin_of_gross": 0.0950911646586346,
+        "after_cac_rub": -76.32229999999998,
+        "break_even_orders_no_cac": 212,
+        "break_even_orders_with_cac": null
+      },
+      {
+        "pack": "large",
+        "credits": 25,
+        "price_rub": 549.0,
+        "price_per_credit": 21.96,
+        "net_receipts_rub": 492.6177,
+        "fulfillment_rub": 499.37499999999994,
+        "contribution_rub": -6.75729999999993,
+        "margin_of_gross": -0.012308378870673825,
+        "after_cac_rub": -106.75729999999993,
+        "break_even_orders_no_cac": null,
+        "break_even_orders_with_cac": null
+      }
+    ]
+  }
+]

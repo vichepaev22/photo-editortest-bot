@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="color-scheme" content="light dark">
+  <meta name="theme-color" content="#f6f5f3">
+  <link rel="icon" href="data:,">
+  <title>Образ — ваша фотостудия</title>
+  <link rel="stylesheet" href="./app.css">
+  <script src="https://telegram.org/js/telegram-web-app.js" defer></script>
+  <script src="./config.js" defer></script>
+  <script src="./app.js" defer></script>
+</head>
+<body>
+  <div class="app-shell">
+    <header class="app-header">
+      <a class="wordmark" href="#studio" aria-label="Образ — главная">образ<span class="brand-dot"></span></a>
+      <div class="header-tools"><span id="modeBadge" class="mode-badge">Студия</span><button id="balanceButton" class="balance-pill" type="button" aria-label="Открыть профиль и баланс"><span class="ui-icon" aria-hidden="true">✦</span><span id="headerBalance">—</span></button></div>
+    </header>
+    <main id="main">
+      <div id="notice" class="notice" role="status" aria-live="polite" hidden></div>
+      <section id="entryPanel" class="entry-panel" aria-labelledby="entryHeading" hidden>
+        <div><span class="eyebrow">Личная фотостудия</span><h2 id="entryHeading">Начнём с вашего согласия</h2><p id="entryCopy">Загрузите только свои фото или фото с разрешением изображённых людей. Фото и описания хранятся локально до 24 часов.</p></div>
+        <div class="entry-actions"><label class="check-label"><input id="entryConsent" type="checkbox"><span id="entryConsentText">Мне 18+, у меня есть права на фото и согласие всех изображённых людей. Согласен на обработку фото и описания.</span></label><button id="enterButton" class="primary-button" type="button" disabled>Войти в студию</button></div>
+      </section>
+      <section id="studioView" class="view" aria-labelledby="studioHeading">
+        <div class="section-heading"><div><span class="eyebrow">Ваша личная фотостудия</span><h1 id="studioHeading">Примерьте новый образ</h1><p>Ваше фото. Ваша идея. Немного магии.</p></div><span class="section-number" aria-hidden="true">01 / 03</span></div>
+        <div class="studio-layout">
+          <section class="photo-workspace" aria-labelledby="photoHeading">
+            <div class="workspace-top"><h2 id="photoHeading">Исходное фото</h2><span id="photoCount">0 / 1</span></div>
+            <div id="photoSlots" class="photo-slots"></div>
+            <p class="photo-hint"><span aria-hidden="true">✓</span>Лицо хорошо видно · JPEG, PNG, WebP · до 10 МБ</p>
+            <div class="privacy-note"><span class="privacy-dot"></span>Фото доступны только вам. Хранение — 24 часа.</div>
+          </section>
+          <div class="editor-controls">
+            <section class="preset-section" aria-labelledby="presetHeading"><div class="step-heading"><h2 id="presetHeading"><span>02</span>Что изменим?</h2><button id="allPresetsButton" class="text-button" type="button">Все образы <span aria-hidden="true">↗</span></button></div><div id="presetGrid" class="preset-grid" aria-label="Выберите изменение"><div class="skeleton" aria-label="Загрузка вариантов"></div></div></section>
+            <section class="description-section" aria-labelledby="descriptionHeading"><div class="step-heading"><h2 id="descriptionHeading"><span>03</span>Добавьте свою идею</h2></div><label class="sr-only" for="description">Описание изменения</label><textarea id="description" rows="4" maxlength="1500" placeholder="Например: каре до плеч, мягкие волны и натуральный каштановый цвет"></textarea><div class="description-foot"><span>Чем точнее идея, тем ближе результат</span><span id="descriptionCount">0 / 1500</span></div></section>
+            <div class="create-block"><button id="reviewButton" class="primary-button create-button" type="button" disabled><span class="ui-icon" aria-hidden="true">✦</span><span id="createText">Создать образ · 1 попытка</span><span class="end-icon" aria-hidden="true">→</span></button><p id="createHint">Сначала добавьте фото и описание</p></div>
+          </div>
+        </div>
+        <aside class="studio-footnote"><span class="ui-icon" aria-hidden="true">▧</span><div><strong>Сохраните себя. Измените детали.</strong><p>Причёска, одежда, очки или новое место — выберите, с чего начать.</p></div></aside>
+      </section>
+      <section id="looksView" class="view" aria-labelledby="looksHeading" hidden><div class="section-heading"><div><span class="eyebrow">Идеи для следующего кадра</span><h1 id="looksHeading">Маленькое изменение.<br>Новый взгляд на себя.</h1><p>Выберите направление и добавьте свою идею в студии.</p></div></div><div id="looksGrid" class="looks-grid"></div><p class="fine-print">Примеры появятся здесь, когда владелец студии добавит свои изображения.</p></section>
+      <section id="resultsView" class="view" aria-labelledby="resultsHeading" hidden><div class="section-heading"><div><span class="eyebrow">Ваша коллекция</span><h1 id="resultsHeading">Мои результаты</h1><p>Вернитесь к любимому образу и сохраните его.</p></div><button id="refreshResults" class="secondary-button" type="button">Обновить</button></div><div id="activeJob" class="job-status" aria-live="polite" hidden></div><div id="resultDetail" hidden></div><div id="resultsList"></div><p class="fine-print">Фото и результаты доступны 24 часа. Скачивание готового файла не тратит попытки.</p></section>
+      <section id="profileView" class="view" aria-labelledby="profileHeading" hidden><div class="section-heading"><div><span class="eyebrow">Всё под вашим контролем</span><h1 id="profileHeading">Профиль</h1><p id="profileName">Войдите, чтобы увидеть свои попытки.</p></div></div><div class="profile-grid"><section class="balance-card"><span class="ui-icon" aria-hidden="true">✦</span><span>Доступно попыток</span><strong id="profileBalance">—</strong><p id="reservedBalance">Баланс появится после входа.</p><button id="demoCreditsButton" class="secondary-button" type="button" hidden>Получить тестовые попытки</button></section><section class="profile-info"><h2>Ваши фото — ваши правила</h2><p id="privacyInfo">Загружайте фото с разрешением изображённых людей. Фото, описания и результаты хранятся локально до 24 часов.</p><p id="providerInfo"></p><h3>Нужна помощь?</h3><p id="supportInfo">Контакт поддержки загружается.</p><div class="delete-block"><h3>Удалить мои данные</h3><p id="deleteCopy">Удалит локальные фото, описания и результаты. Финансовые записи сохраняются. При активном задании удаление недоступно.</p><button id="deleteButton" class="danger-button" type="button" disabled>Удалить мои фото и описания</button></div></section></div></section>
+    </main>
+    <nav class="bottom-nav" aria-label="Основная навигация"><button class="nav-item active" data-tab="studio" aria-current="page" type="button"><span class="ui-icon" aria-hidden="true">✦</span><span>Студия</span></button><button class="nav-item" data-tab="looks" type="button"><span class="ui-icon" aria-hidden="true">⊞</span><span>Образы</span></button><button class="nav-item" data-tab="results" type="button"><span class="ui-icon" aria-hidden="true">▧</span><span>Результаты</span><span id="resultDot" class="nav-dot" hidden></span></button><button class="nav-item" data-tab="profile" type="button"><span class="ui-icon" aria-hidden="true">○</span><span>Профиль</span></button></nav>
+  </div>
+  <dialog id="confirmDialog" aria-labelledby="confirmHeading"><div class="dialog-content"><div class="dialog-top"><span class="eyebrow">Последний штрих</span><button class="icon-button" id="closeConfirm" type="button" aria-label="Закрыть подтверждение"><span class="ui-icon" aria-hidden="true">×</span></button></div><h2 id="confirmHeading">Всё готово к созданию?</h2><dl id="confirmSummary"></dl><p id="confirmMode" class="dialog-note"></p><p id="submitError" role="alert" hidden></p><button id="confirmSubmit" class="primary-button" type="button">Подтвердить и создать</button><button id="editDraft" class="text-button" type="button">Вернуться к редактированию</button></div></dialog>
+  <dialog id="deleteDialog" aria-labelledby="deleteHeading"><div class="dialog-content"><span class="eyebrow">Удаление данных</span><h2 id="deleteHeading">Удалить ваши фото?</h2><p>Фото, описания и результаты будут удалены, вход в студию завершится. Это действие нельзя отменить.</p><p id="deleteError" role="alert" hidden></p><button id="confirmDelete" class="danger-button" type="button">Да, удалить мои данные</button><button id="cancelDelete" class="secondary-button" type="button">Сохранить и вернуться</button></div></dialog>
+</body>
+</html>

@@ -1,0 +1,14 @@
+{
+  "status": "pass",
+  "evidence": "offline_mock_workflow_only",
+  "provider_calls": 2,
+  "results_delivered": 2,
+  "balance": [
+    0,
+    0
+  ],
+  "external_image_api_calls": 0,
+  "visual_quality_verified": false,
+  "telegram_network_verified": false,
+  "live_payments_verified": false
+}

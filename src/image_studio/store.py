@@ -1,0 +1,340 @@
+import json
+import sqlite3
+import time
+import uuid
+from contextlib import contextmanager
+from pathlib import Path
+
+
+class DomainError(Exception):
+    pass
+
+
+class Store:
+    def __init__(self, path: Path):
+        self.path = path
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with self.tx() as c:
+            c.executescript("""
+                PRAGMA journal_mode=WAL;
+                CREATE TABLE IF NOT EXISTS users (
+                    id INTEGER PRIMARY KEY, balance INTEGER NOT NULL DEFAULT 0 CHECK(balance>=0),
+                    reserved INTEGER NOT NULL DEFAULT 0 CHECK(reserved>=0 AND reserved<=balance),
+                    consent INTEGER NOT NULL DEFAULT 0, demo_used INTEGER NOT NULL DEFAULT 0,
+                    spent INTEGER NOT NULL DEFAULT 0, refund_lock INTEGER NOT NULL DEFAULT 0);
+                CREATE TABLE IF NOT EXISTS invoices (
+                    id TEXT PRIMARY KEY, user_id INTEGER NOT NULL, pack TEXT NOT NULL,
+                    amount INTEGER NOT NULL CHECK(amount>0), credits INTEGER NOT NULL CHECK(credits>0),
+                    created REAL NOT NULL, status TEXT NOT NULL DEFAULT 'new',
+                    spent_baseline INTEGER NOT NULL, provider_id TEXT UNIQUE, confirmation_url TEXT,
+                    billing_body TEXT, refund_id TEXT, refund_started REAL);
+                CREATE TABLE IF NOT EXISTS payments (
+                    charge_id TEXT PRIMARY KEY, order_id TEXT UNIQUE NOT NULL,
+                    user_id INTEGER NOT NULL, amount INTEGER NOT NULL);
+                CREATE TABLE IF NOT EXISTS jobs (
+                    id TEXT PRIMARY KEY, user_id INTEGER NOT NULL, request_key TEXT NOT NULL,
+                    preset TEXT NOT NULL, cost INTEGER NOT NULL CHECK(cost>0),
+                    status TEXT NOT NULL DEFAULT 'queued', created REAL NOT NULL,
+                    result TEXT, usage TEXT, request_id TEXT, error TEXT,
+                    UNIQUE(user_id, request_key));
+                CREATE TABLE IF NOT EXISTS events (
+                    id INTEGER PRIMARY KEY, created REAL NOT NULL, kind TEXT NOT NULL, ref TEXT NOT NULL);
+            """)
+            columns = {row["name"] for row in c.execute("PRAGMA table_info(invoices)")}
+            if "refund_started" not in columns:
+                c.execute("ALTER TABLE invoices ADD COLUMN refund_started REAL")
+
+    @contextmanager
+    def tx(self):
+        c = sqlite3.connect(self.path, timeout=20)
+        c.row_factory = sqlite3.Row
+        try:
+            c.execute("BEGIN IMMEDIATE")
+            yield c
+            c.commit()
+        except Exception:
+            c.rollback()
+            raise
+        finally:
+            c.close()
+
+    @staticmethod
+    def _user(c, user):
+        c.execute("INSERT OR IGNORE INTO users(id) VALUES(?)", (user,))
+        return c.execute("SELECT * FROM users WHERE id=?", (user,)).fetchone()
+
+    @staticmethod
+    def _event(c, kind, ref):
+        c.execute("INSERT INTO events(created,kind,ref) VALUES(?,?,?)", (time.time(), kind, ref))
+
+    def consent(self, user):
+        with self.tx() as c:
+            self._user(c, user)
+            c.execute("UPDATE users SET consent=1 WHERE id=?", (user,))
+
+    def has_consent(self, user):
+        with self.tx() as c:
+            return bool(self._user(c, user)["consent"])
+
+    def wallet(self, user):
+        with self.tx() as c:
+            u = self._user(c, user)
+            return u["balance"], u["reserved"]
+
+    def grant_demo(self, user, amount=3):
+        if not isinstance(amount, int) or not 1 <= amount <= 10:
+            raise DomainError("invalid_demo")
+        with self.tx() as c:
+            u = self._user(c, user)
+            if u["demo_used"] or not u["consent"]:
+                return False
+            c.execute("UPDATE users SET demo_used=1,balance=balance+? WHERE id=?", (amount, user))
+            self._event(c, "demo", str(user))
+            return True
+
+    def invoice(self, user, pack, amount, credits):
+        if amount <= 0 or credits <= 0:
+            raise DomainError("invalid_invoice")
+        with self.tx() as c:
+            u = self._user(c, user)
+            if not u["consent"]:
+                raise DomainError("consent_required")
+            order = uuid.uuid4().hex
+            c.execute(
+                "INSERT INTO invoices(id,user_id,pack,amount,credits,created,spent_baseline) "
+                "VALUES(?,?,?,?,?,?,?)",
+                (order, user, pack, amount, credits, time.time(), u["spent"]),
+            )
+            return order
+
+    def grant_pilot(self, user, amount):
+        if not isinstance(amount, int) or not 1 <= amount <= 10:
+            raise DomainError("invalid_pilot_amount")
+        with self.tx() as c:
+            u = self._user(c, user)
+            if not u["consent"]:
+                raise DomainError("consent_required")
+            c.execute("UPDATE users SET balance=balance+? WHERE id=?", (amount, user))
+            self._event(c, "pilot_grant", f"{user}:{amount}")
+
+    def get_invoice(self, order):
+        with self.tx() as c:
+            row = c.execute("SELECT * FROM invoices WHERE id=?", (order,)).fetchone()
+            if row is None:
+                raise DomainError("unknown_order")
+            return dict(row)
+
+    def precheck(self, user, order, currency, amount):
+        try:
+            o = self.get_invoice(order)
+            return (
+                o["user_id"] == user
+                and currency == "RUB"
+                and o["amount"] == amount
+                and o["status"] == "new"
+                and time.time() - o["created"] < 1800
+                and self.has_consent(user)
+            )
+        except DomainError:
+            return False
+
+    def billing_body(self, order, body):
+        with self.tx() as c:
+            row = c.execute("SELECT billing_body FROM invoices WHERE id=?", (order,)).fetchone()
+            if row is None:
+                raise DomainError("unknown_order")
+            if not row["billing_body"]:
+                c.execute("UPDATE invoices SET billing_body=? WHERE id=?", (json.dumps(body), order))
+            else:
+                body = json.loads(row["billing_body"])
+            return body
+
+    def bind_payment(self, order, provider_id, url=None):
+        with self.tx() as c:
+            row = c.execute("SELECT provider_id FROM invoices WHERE id=?", (order,)).fetchone()
+            if row is None or (row["provider_id"] and row["provider_id"] != provider_id):
+                raise DomainError("payment_identity_mismatch")
+            c.execute(
+                "UPDATE invoices SET provider_id=?,confirmation_url=COALESCE(?,confirmation_url) WHERE id=?",
+                (provider_id, url, order),
+            )
+
+    def payment(self, user, order, currency, amount, charge):
+        with self.tx() as c:
+            o = c.execute("SELECT * FROM invoices WHERE id=?", (order,)).fetchone()
+            if (
+                o is None
+                or o["user_id"] != user
+                or currency != "RUB"
+                or o["amount"] != amount
+                or not isinstance(charge, str)
+                or not charge
+            ):
+                raise DomainError("invalid_payment")
+            previous = c.execute("SELECT * FROM payments WHERE charge_id=?", (charge,)).fetchone()
+            if previous:
+                if previous["order_id"] != order or previous["user_id"] != user:
+                    raise DomainError("payment_identity_mismatch")
+                return False
+            if o["status"] != "new" or (o["provider_id"] and o["provider_id"] != charge):
+                raise DomainError("order_already_paid")
+            c.execute("INSERT INTO payments VALUES(?,?,?,?)", (charge, order, user, amount))
+            u = self._user(c, user)
+            c.execute(
+                "UPDATE invoices SET status='paid',provider_id=?,spent_baseline=? WHERE id=?",
+                (charge, u["spent"], order),
+            )
+            c.execute("UPDATE users SET balance=balance+? WHERE id=?", (o["credits"], user))
+            self._event(c, "payment", order)
+            return True
+
+    def reserve(self, user, key, preset, cost):
+        if not isinstance(cost, int) or cost <= 0 or not key:
+            raise DomainError("invalid_job")
+        with self.tx() as c:
+            u = self._user(c, user)
+            old = c.execute("SELECT * FROM jobs WHERE user_id=? AND request_key=?", (user, key)).fetchone()
+            if old:
+                if old["preset"] != preset or old["cost"] != cost:
+                    raise DomainError("request_mismatch")
+                return old["id"]
+            if not u["consent"]:
+                raise DomainError("consent_required")
+            if (
+                u["refund_lock"]
+                or c.execute(
+                    "SELECT 1 FROM jobs WHERE user_id=? AND status IN ('queued','running','review')", (user,)
+                ).fetchone()
+            ):
+                raise DomainError("already_active")
+            if u["balance"] - u["reserved"] < cost:
+                raise DomainError("insufficient_credits")
+            job = uuid.uuid4().hex
+            c.execute("UPDATE users SET reserved=reserved+? WHERE id=?", (cost, user))
+            c.execute(
+                "INSERT INTO jobs(id,user_id,request_key,preset,cost,created) VALUES(?,?,?,?,?,?)",
+                (job, user, key, preset, cost, time.time()),
+            )
+            self._event(c, "reserve", job)
+            return job
+
+    def job(self, job):
+        with self.tx() as c:
+            row = c.execute("SELECT * FROM jobs WHERE id=?", (job,)).fetchone()
+            if row is None:
+                raise DomainError("unknown_job")
+            return dict(row)
+
+    def jobs(self, user=None):
+        with self.tx() as c:
+            rows = c.execute(
+                "SELECT * FROM jobs" + (" WHERE user_id=?" if user is not None else ""),
+                (user,) if user is not None else (),
+            ).fetchall()
+            return [dict(row) for row in rows]
+
+    def claim(self, job):
+        with self.tx() as c:
+            return (
+                c.execute("UPDATE jobs SET status='running' WHERE id=? AND status='queued'", (job,)).rowcount
+                == 1
+            )
+
+    def finish(self, job, result, usage, request_id):
+        with self.tx() as c:
+            j = c.execute("SELECT * FROM jobs WHERE id=?", (job,)).fetchone()
+            if j is None:
+                raise DomainError("unknown_job")
+            if j["status"] in {"generated", "delivered"}:
+                return
+            if j["status"] != "running":
+                raise DomainError("invalid_job_state")
+            c.execute(
+                "UPDATE users SET balance=balance-?,reserved=reserved-?,spent=spent+? WHERE id=?",
+                (j["cost"], j["cost"], j["cost"], j["user_id"]),
+            )
+            c.execute(
+                "UPDATE jobs SET status='generated',result=?,usage=?,request_id=? WHERE id=?",
+                (result, json.dumps(usage), request_id, job),
+            )
+            self._event(c, "finish", job)
+
+    def fail(self, job, reason):
+        with self.tx() as c:
+            j = c.execute("SELECT * FROM jobs WHERE id=?", (job,)).fetchone()
+            if j is None or j["status"] not in {"queued", "running", "review"}:
+                return
+            c.execute("UPDATE users SET reserved=reserved-? WHERE id=?", (j["cost"], j["user_id"]))
+            c.execute("UPDATE jobs SET status='failed',error=? WHERE id=?", (reason[:60], job))
+            self._event(c, "release", job)
+
+    def delivered(self, job):
+        with self.tx() as c:
+            c.execute("UPDATE jobs SET status='delivered' WHERE id=? AND status='generated'", (job,))
+
+    def result(self, user, job):
+        j = self.job(job)
+        if j["user_id"] != user or j["status"] not in {"generated", "delivered"}:
+            raise DomainError("result_unavailable")
+        return j
+
+    def recover(self):
+        with self.tx() as c:
+            c.execute("UPDATE jobs SET status='review',error='interrupted_provider' WHERE status='running'")
+
+    def revoke_consent(self, user):
+        with self.tx() as c:
+            if c.execute(
+                "SELECT 1 FROM jobs WHERE user_id=? AND status IN ('queued','running','review')", (user,)
+            ).fetchone():
+                raise DomainError("already_active")
+            c.execute("UPDATE users SET consent=0 WHERE id=?", (user,))
+
+    def begin_refund(self, order):
+        with self.tx() as c:
+            o = c.execute("SELECT * FROM invoices WHERE id=?", (order,)).fetchone()
+            if o is None:
+                raise DomainError("unknown_order")
+            u = self._user(c, o["user_id"])
+            if o["status"] == "refunding":
+                return dict(o) | {"charge_id": o["provider_id"]}
+            if (
+                o["status"] != "paid"
+                or u["spent"] != o["spent_baseline"]
+                or u["reserved"]
+                or u["refund_lock"]
+                or u["balance"] < o["credits"]
+            ):
+                raise DomainError("refund_needs_support")
+            c.execute("UPDATE users SET refund_lock=1 WHERE id=?", (u["id"],))
+            started = time.time()
+            c.execute("UPDATE invoices SET status='refunding',refund_started=? WHERE id=?", (started, order))
+            self._event(c, "refund_pending", order)
+            return dict(o) | {"charge_id": o["provider_id"], "refund_started": started}
+
+    def bind_refund(self, order, refund_id):
+        with self.tx() as c:
+            o = c.execute("SELECT * FROM invoices WHERE id=?", (order,)).fetchone()
+            if o is None or o["status"] != "refunding" or (o["refund_id"] and o["refund_id"] != refund_id):
+                raise DomainError("invalid_refund_identity")
+            c.execute("UPDATE invoices SET refund_id=? WHERE id=? AND status='refunding'", (refund_id, order))
+
+    def cancel_refund(self, order):
+        with self.tx() as c:
+            o = c.execute("SELECT * FROM invoices WHERE id=?", (order,)).fetchone()
+            if o is None or o["status"] != "refunding":
+                raise DomainError("invalid_refund_state")
+            c.execute("UPDATE users SET refund_lock=0 WHERE id=?", (o["user_id"],))
+            c.execute("UPDATE invoices SET status='refund_canceled' WHERE id=?", (order,))
+            self._event(c, "refund_canceled", order)
+
+    def finish_refund(self, order):
+        with self.tx() as c:
+            o = c.execute("SELECT * FROM invoices WHERE id=?", (order,)).fetchone()
+            if o is None or o["status"] != "refunding":
+                raise DomainError("invalid_refund_state")
+            c.execute(
+                "UPDATE users SET balance=balance-?,refund_lock=0 WHERE id=?", (o["credits"], o["user_id"])
+            )
+            c.execute("UPDATE invoices SET status='refunded' WHERE id=?", (order,))
+            self._event(c, "refund", order)

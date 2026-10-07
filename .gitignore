@@ -1,0 +1,13 @@
+.env
+.venv/
+data/
+__pycache__/
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+reports/live-poc/
+.smol/
+reports/jev-routing.json
+reports/local-launch.json
+docs/jev-routing-request.json
+.playwright-mcp/
