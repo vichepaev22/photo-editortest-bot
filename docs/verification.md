@@ -112,3 +112,20 @@ Backend-автор проверил48целевых тестов. Независ
 - Независимое статическое ревью нашло P2: invalid/instruction reply был до claim. В тот же smoke добавлен oversized replay: RED `rejected != duplicate`; claim перенесён до любых API-вызовов, terminal instruction/rejected statuses сохраняются, uncertain send→review. GREEN: delivered1 / duplicates2 / oversize once / foreign ignored / network0. Статическое re-review изменённых core/handler: PASS. Повторный полный локальный Python-suite не запускался.
 - Probe не содержит OpenAI key/вызова, генерационного ledger, реальных фото или переноса рабочих данных. CLI login/push/migrate/run/webhook sync не выполнялись. Pricing/free quota, защищённые secrets, long-running execution и транзакции ledger не подтверждены.
 - При read-only проверке local status прежний процесс оказался остановлен. Восстановлен существующий OpenAI режим; после завершения launcher runtime running/ready и `/api/health` ok, local_demo=false. Хэши users/jobs/.env совпали с private snapshot перед запуском; активных задач перед запуском0. Это readiness и сохранение состояния, не новая пользовательская/платная генерация.
+
+
+## VPS и HTTPS — 2026-10-08
+
+По process-design-vibecoding и Astra выполнен перенос на существующий VPS владельца. Работа разделена: worker подготовил export helper, второй worker HTTPS installer, отдельный агент прочитал Play2go wiki, независимый reviewer проверил пакеты; установку, сверку и переключение выполнил lead. Модели субагентов отдельно не подтверждались runtime, поэтому не заявляются.
+
+Ubuntu26.04/x86_64/2CPU/около4GB RAM/60GBdisk подтверждены SSH. Python приложения3.12.15 установлен uv0.12.23 под/opt. Опубликованный backend13c9e9c установлен с requirements.lock; модельFlare snapshot/medium сохранена. Telegram getMe/getWebhookInfo200, ожидаемое имя совпало, webhook пуст; OpenAI models.retrieve для выбранного snapshot успешен, Image-вызовов0.
+
+Локальный poller штатно остановлен при active0. Экспортёр создал SQLite backup + media, нормализовал только копию jobs.result/inputs и сохранил mtime. На VPS SHA256 archive/DB, все строки таблиц и время изменения файлов совпали; целостность SQLite подтверждена. Квота, согласия и история сохранены. Фото/снимки/ключи находятся в ignored private runtime и защищённых серверных каталогах, не опубликованы.
+
+Focused helper на Windows:13passed/3skipped из-за запрета создания symlink. На целевом Linux запущены только эти3synthetic symlink cases:3passed/0.05s. Ruff для helper/tests PASS. Два независимых статических ревью первоначальных export/install/HTTPS — PASS. Runtime выявил exit1 у systemctl query без совпадений; исправлен guard. В интеграции обнаружен backend Host allowlist: proxy теперь передаёт внутренний Host127.0.0.1:8089, внешний сохраняет в X-Forwarded-Host. После правок shellsyntax PASS; фактический HTTPS API подтверждён. Полный локальный suite не повторялся.
+
+systemd service active/running/enabled, User=image-studio, NRestarts0 при запуске; health openai/local_demofalse,8089 только127.0.0.1. Локальный status runningfalse. Сертификат Let’s Encrypt на публичный IPv4 выпущен и проверен OpenSSL; Nginx обслуживает API через443, HTTPтолькоACME. Certbot5.8.0renewal timer enabled; один dry-run с deployhooks success, штатная renewal service Resultsuccess/ExecMainStatus0.
+
+Через публичный доверенный TLS проверены health200, exactPagesCORS, anonymousme401, forgedinitData401, публичныйdemo404. Smoke использует синтетически подписанное initData существующего согласившегося пользователя: me сохранилremaining2/reserved0, готовый перенесённый JPEG доступен. Это API-интеграция, не пользовательский webviewTelegram и не новая Image-генерация. Полноценный пользовательский тест Mini App и качества остаётся владельцу; агент не потратил trial-попытку или OpenAIImage бюджет.
+
+Публикация frontend config и deployment документов проходит стандартную CI/Pages в рабочей ветке. Проверка провайдерской панели не дала доступного browserDOM; конфигурация и доступ установлены SSH, wikiVDS исследована отдельно. Backup провайдера не подтверждён; приватный локальный снимок является backup на момент миграции.
