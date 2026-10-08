@@ -85,7 +85,11 @@ def _telegram_user(init_data, token):
         first_name = user.get("first_name", "")
         if not isinstance(first_name, str) or len(first_name) > 128:
             raise ValueError
-        return {"id": user["id"], "first_name": first_name}
+        identity = {"id": user["id"], "first_name": first_name}
+        username = user.get("username")
+        if isinstance(username, str) and re.fullmatch(r"[A-Za-z0-9_]{1,32}", username):
+            identity["username"] = username
+        return identity
     except (ValueError, KeyError, TypeError, UnicodeError, RecursionError):
         raise APIError("invalid_init_data", 401) from None
 
@@ -290,7 +294,7 @@ def create_studio_app(settings, store, media, service):
     async def catalog():
         return {
             "presets": [{"id": key, "label": preset.label, "inputs": preset.inputs, "credits": service.cost(key)}
-                        for key, preset in PRESETS.items()],
+                        for key, preset in PRESETS.items() if key != "document_original"],
             "mode": settings.image_provider, "local_demo": demo_enabled(),
             "support_contact": settings.support_contact,
             "trial_access": service.trial_access,
@@ -299,7 +303,10 @@ def create_studio_app(settings, store, media, service):
     @app.post("/api/session")
     async def session(request: Request):
         data = await _json_body(request)
-        return session_response(_telegram_user(data.get("init_data"), settings.bot_token))
+        user = _telegram_user(data.get("init_data"), settings.bot_token)
+        response = session_response(user)
+        store.record_visit(user["id"], user.get("username"))
+        return response
 
     @app.post("/api/demo-session")
     async def demo_session(request: Request):
@@ -414,7 +421,10 @@ def create_studio_app(settings, store, media, service):
         if record["status"] not in {"generated", "delivered"} or not record["result"]:
             raise APIError("not_found", 404)
         path = own_file(user, record["result"])
-        return FileResponse(path, media_type="image/jpeg", filename="obraz-" + record["id"] + ".jpg")
+        png = record["preset"] in {"document", "document_original"}
+        extension = ".png" if png else ".jpg"
+        return FileResponse(path, media_type="image/png" if png else "image/jpeg",
+                            filename="obraz-" + record["id"] + extension)
 
     @app.post("/api/delete")
     async def delete(request: Request):

@@ -4,6 +4,7 @@ import logging
 import time
 
 from .catalog import PRESETS, prompt_for
+from .document_photo import DOCUMENT_PRESETS, prepare_document_sheet
 from .media import MAX_BYTES, normalize
 from .provider import ProviderError
 from .store import DomainError
@@ -157,10 +158,21 @@ class Service:
         try:
             payload = json.loads(self.media.path(f"{j['user_id']}/{job}.json").read_text(encoding="utf-8"))
             inputs = [self.media.path(path) for path in payload["inputs"]]
-            result = await self.provider.edit(inputs, payload["prompt"])
-            output = normalize(result.data)
-            relative = self.media.save(j["user_id"], output, f"{job}.jpg")
-            self.store.finish(job, relative, result.usage, result.request_id)
+            if j["preset"] == "document_original":
+                with inputs[0].open("rb") as source:
+                    data = source.read(MAX_BYTES + 1)
+                usage, request_id = {}, None
+            else:
+                result = await self.provider.edit(inputs, payload["prompt"])
+                data, usage, request_id = result.data, result.usage, result.request_id
+            if j["preset"] in DOCUMENT_PRESETS:
+                output = prepare_document_sheet(data)
+                extension = "png"
+            else:
+                output = normalize(data)
+                extension = "jpg"
+            relative = self.media.save(j["user_id"], output, f"{job}.{extension}")
+            self.store.finish(job, relative, usage, request_id)
         except asyncio.CancelledError:
             # Running remains reserved. Recovery marks review; no second paid call.
             raise

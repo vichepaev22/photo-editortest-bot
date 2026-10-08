@@ -10,7 +10,7 @@
   if (typeof configuredBase === 'string' && configuredBase.trim()) {
     try { const parsed = new URL(configuredBase,location.href); if (parsed.protocol === 'https:' || localHost && parsed.protocol === 'http:') apiBase = parsed.origin; } catch {}
   } else if (localHost) apiBase = location.origin;
-  const state = {preview:!apiBase,trial:!apiBase && window.OBRAZ_PREVIEW_TRIAL===true,connection:'loading',connecting:false,entering:false,pickerOpen:false,catalog: [], mode: 'mock', localDemo: false, token: '', me: null, tab: 'studio', preset: 'hair', photos: [], uploading: new Set(), jobs: [], job: null, pending: null, submitting: false, polling: null, resultURLs: new Map(), sourceURLs: new Map(), liveURLs: new Set()};
+  const state = {preview:!apiBase,trial:!apiBase && window.OBRAZ_PREVIEW_TRIAL===true,connection:'loading',connecting:false,entering:false,pickerOpen:false,catalog: [], mode: 'mock', localDemo: false, token: '', me: null, tab: 'studio', preset: 'hair', documentMode:'keep', photos: [], uploading: new Set(), jobs: [], job: null, pending: null, submitting: false, polling: null, resultURLs: new Map(), sourceURLs: new Map(), liveURLs: new Set()};
   const bridge = window.Telegram?.WebApp?.initData ? window.Telegram.WebApp : null;
   const supports = version => Boolean(bridge?.isVersionAtLeast?.(version));
   const hints = {
@@ -19,9 +19,21 @@
     glasses: ['Укажите форму, цвет и материал оправы.', 'Например: тонкая круглая оправа тёмного металла с прозрачными линзами', 'Один портрет без очков и с оправой'],
     background: ['Опишите место, свет и настроение кадра.', 'Например: заменить фон на светлую студию с тёплым дневным светом; сохранить человека', 'Один портрет с исходным и новым фоном'],
     enhance: ['Укажите, что улучшить без изменения внешности.', 'Например: убрать шум, мягко улучшить свет, сохранить черты лица и естественную кожу', 'Фото до и после улучшения света и чёткости'],
-    merge: ['Загрузите два фото и опишите общий кадр.', 'Например: люди с обоих фото рядом у моря, общий дневной свет; сохранить лица', 'Два исходных портрета и один общий кадр']
+    merge: ['Загрузите два фото и опишите общий кадр.', 'Например: люди с обоих фото рядом у моря, общий дневной свет; сохранить лица', 'Два исходных портрета и один общий кадр'],
+    document_original: ['4 фото 35×45 мм без ИИ. Нужен исходный снимок анфас на белом фоне; фон и одежду сохраняем.', 'Подготовить 4 одинаковых снимка 35×45 мм без ИИ; лицо и плечи по центру', 'Один PNG с четырьмя копиями для печати'],
+    document: ['Фото на документы: 4 одинаковых снимка 35×45 мм. Выберите вариант одежды или подготовку исходника без ИИ.', 'Белый фон, светлая рубашка или деловой костюм; сохранить лицо. Фото на документы', 'Четыре одинаковых портрета для анкеты']
   };
-  const presetIcon = id => `<span class="preset-emoji" aria-hidden="true">${({hair:"✂",clothes:"♧",glasses:"◉",background:"▧",enhance:"✦",merge:"⊞"})[id] || "·"}</span>`;
+  const presetIcon = id => `<span class="preset-emoji" aria-hidden="true">${({hair:"✂",clothes:"♧",glasses:"◉",background:"▧",enhance:"✦",merge:"⊞",document_original:"▤",document:"♧"})[id] || "·"}</span>`;
+  const documentPreset = id => ['document','document_original'].includes(id);
+  const documentDescriptions = {keep:'Белый фон, сохранить одежду и лицо. Четыре фото 35×45 мм',suit:'Белый фон, тёмный деловой костюм и светлая рубашка; сохранить лицо',shirt:'Белый фон, светлая рубашка; сохранить лицо',original:'Подготовить исходное фото: четыре снимка 35×45 мм без ИИ'};
+  const selectedPresetId = () => state.preset === 'document' && state.documentMode === 'original' ? 'document_original' : currentPreset()?.id;
+  function renderDocumentOptions() {
+    const visible=state.preset === 'document'; $('documentOptions').hidden=!visible;
+    if (!visible) return;
+    $('documentMode').value=state.documentMode; $('documentMode').disabled=Boolean(state.pending || state.submitting);
+    $('documentNote').textContent=state.documentMode === 'original' ? 'Без ИИ: фон и одежда сохранятся. Нужен снимок анфас на белом фоне, голова и плечи по центру. Проверьте требования документа.' : 'Белый фон и выбранная одежда. ИИ-результат не подходит для паспорта РФ. Готовый лист: 4 фото 35×45 мм, PNG, 300 DPI.';
+  }
+
   const credits = number => state.trial ? `${number} ${number === 1 ? 'генерация' : number >= 2 && number <= 4 ? 'генерации' : 'генераций'}` : `${number} ${number === 1 ? 'попытка' : number >= 2 && number <= 4 ? 'попытки' : 'попыток'}`;
   const currentPreset = () => state.catalog.find(item => item.id === state.preset) || state.catalog[0];
   const activeStatuses = new Set(['queued', 'running']);
@@ -130,11 +142,11 @@
     $('presetGrid').innerHTML = state.catalog.map(item => `<button type="button" class="preset-card ${item.id === state.preset ? 'selected' : ''}" data-preset="${escape(item.id)}" aria-pressed="${item.id === state.preset}">${presetIcon(item.id)}<span class="preset-label">${escape(item.label.replace('Объединить два фото','Объединить').replace('Улучшение фото','Улучшение'))}</span><span class="preset-cost">${credits(item.credits)}</span>${item.id === state.preset ? '<span class="selection-mark" aria-hidden="true">✓</span>' : ''}</button>`).join('');
     $('looksGrid').innerHTML = state.catalog.map(item => `<button type="button" class="look-card" data-look="${escape(item.id)}"><div class="look-art-wrap"><span class="asset-slot-label"><strong>${escape(item.label)}</strong><span>${escape(hints[item.id]?.[2] || 'Пример этого изменения')}</span><small>Здесь будет пример владельца студии</small></span></div><div class="look-copy"><strong>${escape(item.label)}</strong><p>${escape(hints[item.id]?.[0] || 'Опишите свою идею в студии.')}</p><span>Попробовать · ${credits(item.credits)} ${icon('arrow')}</span></div></button>`).join('');
     $('description').placeholder = hints[state.preset]?.[1] || 'Опишите, что вы хотите изменить на фото';
-    updateAction();
+    renderDocumentOptions(); updateAction();
   }
   function selectPreset(id) {
     if (state.uploading.size || state.pending) { notify('Завершите загрузку или отправку текущего задания перед сменой образа.'); return; }
-    state.preset = id; renderPresets(); renderPhotos(); flushPhotos(); haptic();
+    state.preset = id; if(id === 'document') {$('description').value=documentDescriptions[state.documentMode];} renderPresets(); renderPhotos(); flushPhotos(); haptic();
   }
   function renderPhotos() {
     const required = currentPreset()?.inputs || 1;
@@ -211,6 +223,7 @@
     finally { state.uploading.delete(index); renderPhotos(); }
   }
   function updateAction() {
+    renderDocumentOptions();
     const preset = currentPreset(); const description = $('description').value.trim();
     const ready = Boolean((state.preview || state.me?.consent) && preset && !state.uploading.size && state.photos.slice(0,preset.inputs).filter(photo => photo?.id).length === preset.inputs && description && !state.submitting);
     const hasCredits = !state.me || (state.me.available >= (preset?.credits || 1));
@@ -247,6 +260,7 @@
     if(state.preview) $('confirmSummary').innerHTML = `<dt>Изменение</dt><dd>${escape(preset.label)}</dd><dt>Ваша идея</dt><dd>${escape(description)}</dd><dt>Стоимость после подключения</dt><dd>${credits(preset.credits)}</dd>`;
     $('confirmMode').textContent = state.mode === 'mock' ? 'Тестовый запуск вернёт копию исходного фото без ИИ-изменений и передачи OpenAI. Тестовые попытки спишутся после готовности.' : 'После подтверждения начнётся обработка фото и описания OpenAI. Лицо может измениться. Попытки спишутся после готовности результата.';
     if(state.trial) $('confirmMode').textContent='Всего 3 бесплатные реальные генерации OpenAI. Этот результат использует 1 генерацию, включая объединение фото. Каждый новый вариант — ещё 1; при ошибке резерв возвращается.';
+    if(state.preset === 'document') $('confirmMode').textContent=(selectedPresetId() === 'document_original' ? 'Подготовка исходника без ИИ. Фон и одежда не меняются.' : 'Обработка ИИ с белым фоном. Результат не подходит для паспорта РФ.') + ' Один лист с четырьмя копиями использует 1 попытку.';
     $('submitError').hidden = !state.pending; if (state.pending) $('submitError').textContent = 'Ответ на прошлую отправку не получен. Повторим её с тем же ключом: второе задание не создастся.';
     $('confirmSubmit').textContent = state.pending ? 'Повторить с тем же ключом' : `Подтвердить · ${credits(preset.credits)}`;
     if(state.preview) {$('confirmMode').textContent='Это предпросмотр: фото и описание остаются в браузере. Создание изображений не подключено, попытки не списываются.';$('confirmSubmit').textContent='Понятно, вернуться в студию';}
@@ -257,7 +271,7 @@
     if (state.submitting || !state.token) return;
     if (!state.pending) {
       const preset = currentPreset();
-      state.pending = {payload:{request_key:crypto.randomUUID(),preset:preset.id,photos:state.photos.slice(0,preset.inputs).map(photo => photo.id),description:$('description').value.trim(),confirmed:true},source:state.photos[0].url};
+      state.pending = {payload:{request_key:crypto.randomUUID(),preset:selectedPresetId(),photos:state.photos.slice(0,preset.inputs).map(photo => photo.id),description:$('description').value.trim(),confirmed:true},source:state.photos[0].url};
     }
     const pending = state.pending;
     state.submitting = true; $('confirmSubmit').disabled = true; $('closeConfirm').disabled = true; $('editDraft').disabled = true; $('confirmSubmit').textContent = 'Отправляем…'; updateAction();
@@ -318,12 +332,13 @@
       let url = state.resultURLs.get(id);
       if (!url) { url = trackURL(await api(`/api/jobs/${encodeURIComponent(id)}/result`,{blob:true})); state.resultURLs.set(id,url); }
       const job = state.jobs.find(item => item.id === id) || state.job;
-      const before = state.sourceURLs.get(id);
-      $('resultDetail').innerHTML = `<section class="result-viewer"><div class="viewer-title"><h2>${escape(job?.label || 'Ваш образ')}</h2>${state.mode === 'mock' ? '<span class="mode-badge">Тестовая копия · без ИИ</span>' : ''}</div><div class="compare-frame"><img src="${escape(url)}" alt="${state.mode === 'mock' ? 'Тестовая копия исходного фото, без ИИ-правки' : 'Готовый результат'}">${before ? `<img class="compare-before" src="${escape(before)}" alt="Исходное фото"><div class="compare-divider"></div><input class="compare-range" type="range" min="0" max="100" value="50" aria-label="Сравнение исходного фото и результата" aria-valuetext="50 процентов исходного фото">` : ''}</div><div class="compare-labels"><span>${before ? 'Исходное фото' : 'Готовый файл'}</span><span>${state.mode === 'mock' ? 'Тестовая копия' : before ? 'Новый образ' : ''}</span></div><div class="viewer-actions"><p>${state.mode === 'mock' ? 'В тестовом режиме фото не меняется. Здесь можно проверить сравнение и скачивание.' : before ? 'Двигайте разделитель, чтобы сравнить. Скачайте готовый JPEG в исходном качестве.' : 'Сравнение доступно для фото, загруженного в этой сессии. Готовый JPEG можно скачать.'}</p><button class="primary-button" type="button" data-download="${escape(id)}">${icon('download')}Скачать фото</button></div></section>`;
+      const documents = documentPreset(job?.preset);
+      const before = documents ? null : state.sourceURLs.get(id);
+      $('resultDetail').innerHTML = `<section class="result-viewer"><div class="viewer-title"><h2>${escape(job?.label || 'Ваш образ')}</h2>${state.mode === 'mock' ? '<span class="mode-badge">Тестовая копия · без ИИ</span>' : ''}</div><div class="compare-frame${documents ? ' document-sheet' : ''}"><img src="${escape(url)}" alt="${state.mode === 'mock' ? 'Тестовая копия исходного фото, без ИИ-правки' : 'Готовый результат'}">${before ? `<img class="compare-before" src="${escape(before)}" alt="Исходное фото"><div class="compare-divider"></div><input class="compare-range" type="range" min="0" max="100" value="50" aria-label="Сравнение исходного фото и результата" aria-valuetext="50 процентов исходного фото">` : ''}</div><div class="compare-labels"><span>${before ? 'Исходное фото' : 'Готовый файл'}</span><span>${state.mode === 'mock' ? 'Тестовая копия' : before ? 'Новый образ' : ''}</span></div><div class="viewer-actions"><p>${documents ? (job?.preset === 'document' ? 'Портрет создан ИИ и не подходит для паспорта РФ. ' : 'Исходное фото подготовлено без ИИ; фон и одежда сохранены. ') + '4 фото 35×45 мм · PNG · 300 DPI. Печатайте 100%, без подгонки; проверьте размер после печати.' : state.mode === 'mock' ? 'В тестовом режиме фото не меняется. Здесь можно проверить сравнение и скачивание.' : before ? 'Двигайте разделитель, чтобы сравнить. Скачайте готовый JPEG в исходном качестве.' : 'Сравнение доступно для фото, загруженного в этой сессии. Готовый JPEG можно скачать.'}</p><button class="primary-button" type="button" data-download="${escape(id)}">${icon('download')}Скачать фото</button></div></section>`;
       $('resultDot').hidden = true;
     } catch (error) { $('resultDetail').innerHTML = `<div class="notice error" role="alert">${escape(error instanceof APIError ? error.message : 'Не удалось загрузить результат. Попробуйте открыть его снова.')}</div>`; }
   }
-  function download(id) { const url = state.resultURLs.get(id); if (!url) return; const link = document.createElement('a'); link.href = url; link.download = `obraz-${id}.jpg`; document.body.append(link); link.click(); link.remove(); }
+  function download(id) { const url = state.resultURLs.get(id); if (!url) return; const link = document.createElement('a'); link.href = url; link.download = `obraz-${id}.${documentPreset((state.jobs.find(item => item.id === id) || state.job)?.preset) ? 'png' : 'jpg'}`; document.body.append(link); link.click(); link.remove(); }
   async function deleteData() {
     if(state.preview){resetMedia();$('description').value='';$('deleteDialog').close();renderPhotos();showTab('studio');notify('Фото и описание убраны из предпросмотра.');return;}
     $('confirmDelete').disabled = true; $('cancelDelete').disabled = true;
@@ -373,6 +388,7 @@
       const button=event.target.closest('[data-remove]');if (!button || state.pending || state.uploading.size) return;
       const index=Number(button.dataset.remove);const photo=state.photos[index];if(photo && ![...state.sourceURLs.values()].includes(photo.url)) releaseURL(photo.url);state.photos[index]=null;renderPhotos();
     });
+    $('documentMode').addEventListener('change',() => {if(state.pending || state.submitting) return; state.documentMode=$('documentMode').value; $('description').value=documentDescriptions[state.documentMode]; updateAction();});
     $('description').addEventListener('input',updateAction); $('reviewButton').addEventListener('click',openReview); $('confirmSubmit').addEventListener('click',submitJob);
     for (const id of ['closeConfirm','editDraft']) $(id).addEventListener('click',() => {if(!state.submitting) {$('confirmDialog').close();updateAction();}});
     $('confirmDialog').addEventListener('cancel',event => {if(state.submitting) event.preventDefault();}); $('confirmDialog').addEventListener('close',updateAction);
@@ -408,7 +424,7 @@
     bindEvents(); setupBridge(); renderPhotos(); renderResults();
     if(state.preview){
       state.connection='ready';
-      state.catalog=[{id:'hair',label:'Причёска',inputs:1,credits:1},{id:'clothes',label:'Одежда',inputs:1,credits:1},{id:'glasses',label:'Очки',inputs:1,credits:1},{id:'background',label:'Фон',inputs:1,credits:1},{id:'enhance',label:'Улучшение фото',inputs:1,credits:1},{id:'merge',label:'Объединить два фото',inputs:2,credits:state.trial?1:2}];
+      state.catalog=[{id:'hair',label:'Причёска',inputs:1,credits:1},{id:'clothes',label:'Одежда',inputs:1,credits:1},{id:'glasses',label:'Очки',inputs:1,credits:1},{id:'background',label:'Фон',inputs:1,credits:1},{id:'enhance',label:'Улучшение фото',inputs:1,credits:1},{id:'merge',label:'Объединить два фото',inputs:2,credits:state.trial?1:2},{id:'document',label:'Фото на документы',inputs:1,credits:1}];
       $('modeBadge').textContent='Предпросмотр';renderPresets();renderPhotos();renderMe();showEntry();
       document.querySelector('.privacy-note').innerHTML='<span class="privacy-dot"></span>Фото остаются только в вашей вкладке браузера.';
       $('resultsView').querySelector('.fine-print').textContent='Предпросмотр интерфейса: генерация и хранение результатов пока не подключены.';

@@ -451,3 +451,33 @@ async def test_trial_api_failure_restores_free_quota_without_financial_changes(t
     assert not await service.process(accepted.json()["id"])
     me = (await client.get("/api/me", headers=headers)).json()
     assert me["available"] == 3 and me["reserved"] == 0 and store.wallet(1) == (0, 0)
+
+
+async def test_authenticated_miniapp_visit_persists_only_verified_public_username(studio):
+    client, _, store, *_ = studio
+    user = {"id": 42, "first_name": "Do not persist this name", "username": "studio_visitor"}
+    accepted = await client.post("/api/session", json={"init_data": signed(user_data=user)})
+    assert accepted.status_code == 200
+    rows = store.admin_stats()["users"]
+    assert next(row for row in rows if row["id"] == 42)["username"] == "studio_visitor"
+    forged = signed(user_data={"id": 43, "first_name": "Other", "username": "forged_handle"})
+    forged = forged.replace("forged_handle", "hacked_handle")
+    assert (await client.post("/api/session", json={"init_data": forged})).status_code == 401
+    assert all(row["id"] != 43 for row in store.admin_stats()["users"])
+
+
+async def test_original_document_result_download_is_png_without_provider_call(studio):
+    client, _, store, _, provider, service, _ = studio
+    headers, photo = await prepare(studio)
+    request = body(photo, "document_original") | {"description": "Подготовить четыре фото 35×45 мм"}
+    accepted = await client.post("/api/jobs", json=request, headers=headers)
+    assert accepted.status_code == 200
+    job = accepted.json()["id"]
+    assert await service.process(job) and provider.calls == 0
+    for _ in range(2):
+        result = await client.get(f"/api/jobs/{job}/result", headers=headers)
+        assert result.status_code == 200 and result.headers["content-type"] == "image/png"
+        assert ".png" in result.headers["content-disposition"]
+        with Image.open(io.BytesIO(result.content)) as sheet:
+            assert sheet.size == (826, 1062)
+    assert store.admin_stats()["generated_count"] == 1

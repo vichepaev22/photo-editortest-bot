@@ -5,6 +5,7 @@ from datetime import datetime, timezone
 
 import pytest
 from aiogram.types import CallbackQuery, Chat, Document, Message, PhotoSize, Update, User
+from PIL import Image
 from test_bot_ui import OfflineBot, confirmation
 
 import image_studio.bot as module
@@ -52,14 +53,15 @@ class TrackedBot(OfflineBot):
         return response
 
 
-def build_ui(tmp_path, *, trial=True):
+def build_ui(tmp_path, *, trial=True, admin_user_id=0):
     store, media, provider = Store(tmp_path / "db.sqlite3"), Media(tmp_path), MockProvider()
     store.consent(1)
     if not trial:
         store.grant_demo(1)
     service = Service(store, media, provider, trial_access=trial)
     service.wallet(1)
-    settings = Settings(image_provider="openai" if trial else "mock", trial_access=trial)
+    settings = Settings(image_provider="openai" if trial else "mock", trial_access=trial,
+                        admin_user_id=admin_user_id)
     return build_dispatcher(settings, store, media, service), TrackedBot(), store, media, service, provider
 
 
@@ -372,3 +374,41 @@ async def test_processing_activity_terminal_filter_failures_and_cancellation():
     task.cancel()
     with pytest.raises(asyncio.CancelledError):
         await task
+
+
+async def test_admin_command_is_registered_in_actual_bot_dispatcher(tmp_path):
+    ui = build_ui(tmp_path, admin_user_id=1)
+    ui[2].record_visit(99, "private_stats_handle")
+    sent = await feed(ui, "/admin")
+    assert "private_stats_handle" in texts(sent)
+    assert "Неизвестная команда" not in texts(sent)
+    denied = await feed(ui, "/admin", user=2)
+    assert "private_stats_handle" not in texts(denied)
+
+
+@pytest.mark.parametrize("preset,provider_calls,option", [
+    ("document_original", 0, "original"), ("document", 1, "suit"), ("document", 0, "original"),
+])
+async def test_document_options_create_one_png_sheet_and_stale_button_cannot_reuse_trial(
+    flow, preset, provider_calls, option,
+):
+    _, _, store, media, service, provider = flow
+    await feed(flow, callback="preset:" + preset)
+    uploaded = await feed(flow, photo=True)
+    callback = button_data(uploaded, "docopt:")
+    assert callback is not None and provider.calls == 0 and not store.jobs(1)
+    callback = callback.rsplit(":", 1)[0] + ":" + option
+    sent = await feed(flow, callback=callback)
+    assert "Шаг 3" in texts(sent) and len(store.jobs(1)) == 1
+    job = store.jobs(1)[0]
+    assert await service.process(job["id"])
+    assert provider.calls == provider_calls and service.wallet(1) == (2, 0)
+    with Image.open(media.path(store.job(job["id"])["result"])) as sheet:
+        assert sheet.format == "PNG" and sheet.size == (826, 1062)
+    downloaded = await feed(flow, "/result " + job["id"])
+    documents = [method for method in downloaded if method.__api_method__ == "sendDocument"]
+    assert documents and documents[0].document.filename.endswith(".png")
+    assert "35×45" in texts(downloaded)
+    await feed(flow, callback=callback)
+    assert len(store.jobs(1)) == 1 and service.wallet(1) == (2, 0)
+    assert store.admin_stats()["generated_count"] == 1

@@ -113,7 +113,7 @@ class YooKassaClient:
         invoice = store.get_invoice(order)
         self.validate_identity(invoice, payment)
         if payment.get("status") == "succeeded" and payment.get("paid") is True:
-            return store.payment(invoice["user_id"], order, "RUB", invoice["amount"], payment["id"])
+            return store.payment(invoice["user_id"], order, "RUB", invoice["amount"], payment["id"], is_test=True)
         return False
 
     async def reconcile(self, store, order):

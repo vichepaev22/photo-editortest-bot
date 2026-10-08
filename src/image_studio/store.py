@@ -1,4 +1,5 @@
 import json
+import re
 import sqlite3
 import time
 import uuid
@@ -8,6 +9,12 @@ from pathlib import Path
 
 class DomainError(Exception):
     pass
+
+
+def validated_username(username):
+    if isinstance(username, str) and re.fullmatch(r"[A-Za-z0-9_]{1,32}", username, re.ASCII):
+        return username
+    return None
 
 
 class Store:
@@ -25,7 +32,8 @@ class Store:
                     trial_granted INTEGER NOT NULL DEFAULT 0 CHECK(trial_granted IN (0,1)),
                     trial_used INTEGER NOT NULL DEFAULT 0 CHECK(trial_used>=0 AND trial_used<=3),
                     trial_reserved INTEGER NOT NULL DEFAULT 0
-                        CHECK(trial_reserved>=0 AND trial_reserved<=3-trial_used));
+                        CHECK(trial_reserved>=0 AND trial_reserved<=3-trial_used),
+                    username TEXT, first_seen REAL, last_seen REAL);
                 CREATE TABLE IF NOT EXISTS invoices (
                     id TEXT PRIMARY KEY, user_id INTEGER NOT NULL, pack TEXT NOT NULL,
                     amount INTEGER NOT NULL CHECK(amount>0), credits INTEGER NOT NULL CHECK(credits>0),
@@ -34,7 +42,8 @@ class Store:
                     billing_body TEXT, refund_id TEXT, refund_started REAL);
                 CREATE TABLE IF NOT EXISTS payments (
                     charge_id TEXT PRIMARY KEY, order_id TEXT UNIQUE NOT NULL,
-                    user_id INTEGER NOT NULL, amount INTEGER NOT NULL);
+                    user_id INTEGER NOT NULL, amount INTEGER NOT NULL,
+                    is_test INTEGER NOT NULL DEFAULT 1 CHECK(is_test IN (0,1)));
                 CREATE TABLE IF NOT EXISTS jobs (
                     id TEXT PRIMARY KEY, user_id INTEGER NOT NULL, request_key TEXT NOT NULL,
                     preset TEXT NOT NULL, cost INTEGER NOT NULL CHECK(cost>0),
@@ -62,6 +71,15 @@ class Store:
             for name, definition in trial_columns.items():
                 if name not in user_columns:
                     c.execute(f"ALTER TABLE users ADD COLUMN {name} {definition}")
+            for name, definition in {"username": "TEXT", "first_seen": "REAL", "last_seen": "REAL"}.items():
+                if name not in user_columns:
+                    c.execute(f"ALTER TABLE users ADD COLUMN {name} {definition}")
+            payment_columns = {row["name"] for row in c.execute("PRAGMA table_info(payments)")}
+            if "is_test" not in payment_columns:
+                c.execute(
+                    "ALTER TABLE payments ADD COLUMN is_test INTEGER NOT NULL DEFAULT 1 "
+                    "CHECK(is_test IN (0,1))"
+                )
             job_columns = {row["name"] for row in c.execute("PRAGMA table_info(jobs)")}
             if "trial" not in job_columns:
                 c.execute("ALTER TABLE jobs ADD COLUMN trial INTEGER NOT NULL DEFAULT 0 CHECK(trial IN (0,1))")
@@ -108,6 +126,49 @@ class Store:
     @staticmethod
     def _event(c, kind, ref):
         c.execute("INSERT INTO events(created,kind,ref) VALUES(?,?,?)", (time.time(), kind, ref))
+
+    def record_visit(self, user, username=None):
+        if type(user) is not int or not 0 < user < 2**52:
+            return False
+        now = time.time()
+        with self.tx() as c:
+            self._user(c, user)
+            c.execute(
+                "UPDATE users SET username=?,first_seen=COALESCE(first_seen,?),last_seen=? WHERE id=?",
+                (validated_username(username), now, now, user),
+            )
+        return True
+
+    def admin_stats(self, page=0, page_size=10):
+        if type(page) is not int or page < 0 or type(page_size) is not int or not 1 <= page_size <= 100:
+            raise DomainError("invalid_admin_page")
+        with self.tx() as c:
+            totals = c.execute("""
+                SELECT
+                    (SELECT COUNT(*) FROM users WHERE id>0 AND id<4503599627370496) AS total_users,
+                    (SELECT COUNT(DISTINCT user_id) FROM payments WHERE is_test=0 AND user_id IN
+                        (SELECT id FROM users WHERE id>0 AND id<4503599627370496)) AS paying_users,
+                    (SELECT COUNT(*) FROM jobs WHERE status IN ('generated','delivered') AND user_id IN
+                        (SELECT id FROM users WHERE id>0 AND id<4503599627370496)) AS generated_count
+            """).fetchone()
+            pages = max(1, (totals["total_users"] + page_size - 1) // page_size)
+            page = min(page, pages - 1)
+            rows = c.execute("""
+                WITH generated AS (
+                    SELECT user_id,COUNT(*) AS generated_count FROM jobs
+                    WHERE status IN ('generated','delivered') GROUP BY user_id
+                ), purchased AS (
+                    SELECT user_id,COUNT(*) AS purchase_count FROM payments
+                    WHERE is_test=0 GROUP BY user_id
+                )
+                SELECT users.id,users.username,COALESCE(generated.generated_count,0) AS generated_count,
+                    COALESCE(purchased.purchase_count,0) AS purchase_count
+                FROM users LEFT JOIN generated ON generated.user_id=users.id
+                    LEFT JOIN purchased ON purchased.user_id=users.id
+                WHERE users.id>0 AND users.id<4503599627370496
+                ORDER BY users.id LIMIT ? OFFSET ?
+            """, (page_size, page * page_size)).fetchall()
+            return dict(totals) | {"page": page, "pages": pages, "users": [dict(row) for row in rows]}
 
     def consent(self, user):
         with self.tx() as c:
@@ -220,7 +281,7 @@ class Store:
                 (provider_id, url, order),
             )
 
-    def payment(self, user, order, currency, amount, charge):
+    def payment(self, user, order, currency, amount, charge, *, is_test=True):
         with self.tx() as c:
             o = c.execute("SELECT * FROM invoices WHERE id=?", (order,)).fetchone()
             if (
@@ -230,6 +291,7 @@ class Store:
                 or o["amount"] != amount
                 or not isinstance(charge, str)
                 or not charge
+                or type(is_test) is not bool
             ):
                 raise DomainError("invalid_payment")
             previous = c.execute("SELECT * FROM payments WHERE charge_id=?", (charge,)).fetchone()
@@ -239,7 +301,10 @@ class Store:
                 return False
             if o["status"] != "new" or (o["provider_id"] and o["provider_id"] != charge):
                 raise DomainError("order_already_paid")
-            c.execute("INSERT INTO payments VALUES(?,?,?,?)", (charge, order, user, amount))
+            c.execute(
+                "INSERT INTO payments(charge_id,order_id,user_id,amount,is_test) VALUES(?,?,?,?,?)",
+                (charge, order, user, amount, int(is_test)),
+            )
             u = self._user(c, user)
             c.execute(
                 "UPDATE invoices SET status='paid',provider_id=?,spent_baseline=? WHERE id=?",

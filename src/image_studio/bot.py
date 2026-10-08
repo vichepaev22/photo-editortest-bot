@@ -31,6 +31,7 @@ from aiogram.types import (
     WebAppInfo,
 )
 
+from .admin import register_admin
 from .catalog import PRESETS
 from .media import MAX_BYTES, Media, normalize
 from .provider import MockProvider, OpenAIProvider
@@ -60,7 +61,8 @@ def make_telegram_session():
     return AiohttpSession(proxy=proxy, timeout=20)
 
 
-ICONS = {"hair": "💇", "clothes": "👕", "glasses": "👓", "background": "🌄", "enhance": "✨", "merge": "🧩"}
+ICONS = {"hair": "💇", "clothes": "👕", "glasses": "👓", "background": "🌄", "enhance": "✨", "merge": "🧩",
+         "document": "👔", "document_original": "📄"}
 EXAMPLES = {
     "hair": "Каре до плеч с мягкими волнами",
     "clothes": "Бежевый тренч поверх белой футболки",
@@ -68,9 +70,35 @@ EXAMPLES = {
     "background": "Парк с мягким вечерним светом",
     "enhance": "Чётче детали и естественные цвета, без ретуши лица",
     "merge": "Мы вместе в парке, сохрани лица и пропорции",
+    "document": "Белый фон, светлая рубашка; сохранить лицо. Фото на документы, 4 фото 35×45 мм",
+    "document_original": "Подготовить исходное фото: 4 одинаковых снимка 35×45 мм без ИИ",
+}
+DOCUMENT_OPTIONS = {
+    "original": EXAMPLES["document_original"],
+    "keep": "Белый фон, сохранить исходную одежду и лицо. Фото на документы, 4 фото 35×45 мм",
+    "suit": "Белый фон, тёмный деловой костюм и светлая рубашка; сохранить лицо. Фото на документы",
+    "shirt": EXAMPLES["document"],
 }
 RESULT_FILENAME = "Образ · результат.jpg"
-_choices = [(ICONS[key] + " " + p.label, "preset:" + key) for key, p in PRESETS.items()]
+
+
+def result_presentation(record):
+    if record["preset"] == "document_original":
+        return "Образ · 4 фото 35x45 мм.png", (
+            "Образ · 4 фото для печати 📄\n\n35×45 мм · PNG · 300 DPI.\n"
+            "Печатайте в масштабе 100%, без подгонки.\n"
+            "Проверьте размер после печати и требования вашего документа."
+        )
+    if record["preset"] == "document":
+        return "Образ · фото на документы.png", (
+            "Образ · фото на документы 📄\n\n4 фото 35×45 мм · PNG · 300 DPI.\n"
+            "Это ИИ-портрет: для паспорта РФ не подходит.\nПечатайте в масштабе 100%, без подгонки."
+        )
+    return RESULT_FILENAME, "Образ · готово ✨\n\nСохраните фото и проверьте сходство."
+
+
+_choices = [(ICONS[key] + " " + p.label, "preset:" + key)
+            for key, p in PRESETS.items() if key != "document_original"]
 MENU = buttons([_choices[i : i + 2] for i in range(0, len(_choices), 2)])
 NAV = {
     "edit": "📸 Изменить фото",
@@ -214,12 +242,12 @@ class StepMessages:
 async def deliver_result(bot, store, steps, user, job, path, *, demo=False):
     if user == 0:  # Local browser demo has no Telegram destination.
         return
-    caption = "Образ · готово ✨\n\nСохраните фото и проверьте сходство."
+    filename, caption = result_presentation(store.job(job))
     if demo:
         caption = "DEMO: тестовая копия, ИИ-правка не выполнялась.\n\n" + caption
     await bot.send_document(
         user,
-        FSInputFile(path, filename=RESULT_FILENAME),
+        FSInputFile(path, filename=filename),
         caption=caption,
         reply_markup=buttons([[("📸 Новая правка", "nav:edit"), ("🖼 Мои результаты", "nav:results")]]),
     )
@@ -256,6 +284,7 @@ def build_dispatcher(settings, store, media, service, *, step_messages=None, pur
     router = Router()
     router.message.filter(F.chat.type == "private")
     router.callback_query.filter(F.message.chat.type == "private")
+    register_admin(router, store, settings.admin_user_id)
     dp = Dispatcher(events_isolation=SimpleEventIsolation())
     drafts = {}
     steps = step_messages if step_messages is not None else StepMessages(store)
@@ -317,7 +346,12 @@ def build_dispatcher(settings, store, media, service, *, step_messages=None, pur
             "Для лучшего качества отправьте фото файлом. JPEG/PNG/WebP до 10 MB.\n"
             "Или сфотографируйте себя сейчас — желательно на нейтральном фоне, например у стены."
             + ("\n\nОтправка описания — 1 бесплатная генерация."
-               if trial else ""),
+               if trial else "")
+            + ("\n\nДля документов: анфас, глаза открыты, рот закрыт, вся голова в кадре. "
+               "Исходное фото — на ровном белом фоне, в подходящей одежде; фон и одежда не меняются."
+               if key == "document_original" else
+               "\n\nИИ-фото на документы или пропуска. Для паспорта РФ не подходит."
+               if key == "document" else ""),
             reply_markup=markup,
         )
 
@@ -327,6 +361,26 @@ def build_dispatcher(settings, store, media, service, *, step_messages=None, pur
                               "📷 Шаг 1 из 3\n\nПервое фото принято. Отправьте второе с согласия человека.")
             return
         example = EXAMPLES[draft.preset]
+        if draft.preset in {"document", "document_original"}:
+            options = [("📄 Подготовить 4 фото без ИИ", "original")] if draft.preset == "document_original" else [
+                ("Сохранить одежду", "keep"), ("Деловой костюм", "suit"), ("Светлая рубашка", "shirt"),
+                ("Подготовить исходник без ИИ", "original"),
+            ]
+            await step_answer(
+                message, message.chat.id, draft,
+                "📄 Шаг 2 из 3 · 4 фото 35×45 мм\n\n"
+                + ("Исходный снимок: только кадрирование и подготовка листа, без ИИ. "
+                   "Фон и одежда сохранятся. Проверьте, что голова и плечи по центру кадра."
+                   if draft.preset == "document_original" else
+                   "Выберите одежду или напишите пожелание. Белый фон, лицо сохраняем. "
+                   "ИИ-портрет не подходит для паспорта РФ.")
+                + f"\n\n{'Выбор варианта расходует' if trial else 'После выбора подтвердите'} "
+                "1 попытку · один лист с четырьмя копиями.",
+                reply_markup=buttons([
+                    [(label, f"docopt:{draft.token}:{option}")] for label, option in options
+                ] + [[("🏠 Главное меню", "nav:home")]]),
+            )
+            return
         await step_answer(
             message, message.chat.id, draft,
             f"✍️ Шаг 2 из 3 · Опишите изменение\n\nНапример: «{example}»."
@@ -358,8 +412,9 @@ def build_dispatcher(settings, store, media, service, *, step_messages=None, pur
         steps.bind(user, draft.steps_token, job)
         await step_answer(
             message, user, draft,
-            "✨ Создаём ваш образ\n\nОбычно до 2 минут.\n"
-            "Результат появится здесь и в «Мои результаты».",
+            ("📄 Подготавливаем лист с четырьмя фото\n\nБез ИИ. Обычно несколько секунд.\n"
+             if draft.preset == "document_original" else "✨ Создаём ваш образ\n\nОбычно до 2 минут.\n")
+            + "Результат появится здесь и в «Мои результаты».",
             reply_markup=MAIN,
         )
 
@@ -371,9 +426,10 @@ def build_dispatcher(settings, store, media, service, *, step_messages=None, pur
         mode = (
             "DEMO: тестовая копия, ИИ-правка не выполнялась.\n" if settings.image_provider == "mock" else ""
         )
+        filename, caption = result_presentation(record)
         await message.answer_document(
-            FSInputFile(path, filename=RESULT_FILENAME),
-            caption=mode + "Образ · ваш результат\n\nХранение — 24 часа.",
+            FSInputFile(path, filename=filename),
+            caption=mode + caption + "\n\nХранение — 24 часа.",
             reply_markup=buttons([[("📸 Новая правка", "nav:edit"), ("🖼 Результаты", "nav:results")]]),
         )
         store.delivered(job)
@@ -571,7 +627,9 @@ def build_dispatcher(settings, store, media, service, *, step_messages=None, pur
         await message.answer(
             "Фото и описание хранятся локально до 24 часов после обработки; зависшие задачи "
             "хранятся до разбора поддержкой. В рабочем режиме фото передаются OpenAI. "
-            "Храним Telegram ID и записи баланса для учёта. /delete удаляет локальные фото "
+            "Для учёта постоянно храним Telegram ID, публичный username при наличии, даты посещений, "
+            "количество готовых обработок и подтверждённые покупки. Статистика доступна только владельцу. "
+            "Имена, телефоны и адреса в статистику не записываем. /delete удаляет локальные фото "
             "и сбрасывает согласие; это не удаляет сообщения Telegram и данные у провайдера."
         )
 
@@ -748,7 +806,10 @@ def build_dispatcher(settings, store, media, service, *, step_messages=None, pur
         if not 1 <= len(message.text.strip()) <= 1500:
             await message.answer("Описание должно быть от 1 до 1500 символов.")
             return
-        draft.description = message.text.strip()
+        await describe_and_submit(message, user, draft, message.text.strip(), request_key)
+
+    async def describe_and_submit(message, user, draft, description, request_key):
+        draft.description = description
         if not trial:
             draft.token = uuid.uuid4().hex
         choice = PRESETS[draft.preset]
@@ -767,6 +828,26 @@ def build_dispatcher(settings, store, media, service, *, step_messages=None, pur
         )
         if trial:
             await submit_draft(message, user, draft, request_key)
+
+    @router.callback_query(F.data.startswith("docopt:"))
+    async def document_option(callback: CallbackQuery):
+        user = callback.from_user.id
+        if not callback.message or callback.message.chat.id != user or not store.has_consent(user):
+            await callback.answer("Сначала откройте /start в личном чате.", show_alert=True)
+            return
+        parts = callback.data.split(":")
+        draft = current(user)
+        if (len(parts) != 3 or draft is None or draft.token != parts[1]
+                or len(draft.photos) != 1 or draft.preset not in {"document", "document_original"}
+                or parts[2] not in DOCUMENT_OPTIONS
+                or (draft.preset == "document_original" and parts[2] != "original")):
+            await callback.answer("Выбор устарел. Откройте функцию заново.", show_alert=True)
+            return
+        await callback.answer()
+        if parts[2] == "original":
+            draft.preset = "document_original"
+        await describe_and_submit(callback.message, user, draft, DOCUMENT_OPTIONS[parts[2]],
+                                  "telegram-document:" + parts[1] + ":" + parts[2])
 
     @router.callback_query(F.data.startswith("confirm:"))
     async def confirm(callback: CallbackQuery):
