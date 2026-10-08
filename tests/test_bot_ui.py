@@ -95,7 +95,8 @@ async def test_bottom_navigation_after_start_and_consent(ui):
     ]
     assert len(keyboards) == 1
     keyboard = keyboards[0]
-    assert keyboard.resize_keyboard and keyboard.is_persistent
+    assert keyboard.resize_keyboard
+    assert keyboard.is_persistent is False and keyboard.one_time_keyboard is False
     assert len(keyboard.keyboard) == 4
     assert {b.text for row in keyboard.keyboard for b in row} == {
         "📸 Изменить фото",

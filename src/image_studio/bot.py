@@ -87,7 +87,8 @@ MAIN = ReplyKeyboardMarkup(
         for row in [("edit", "merge"), ("balance", "results"), ("help", "support"), ("buy",)]
     ],
     resize_keyboard=True,
-    is_persistent=True,
+    is_persistent=False,
+    one_time_keyboard=False,
     input_field_placeholder="Выберите действие ниже",
 )
 BACK = buttons([[("🏠 Главное меню", "nav:home")]])
