@@ -96,7 +96,7 @@ async def test_bottom_navigation_after_start_and_consent(ui):
     assert len(keyboards) == 1
     keyboard = keyboards[0]
     assert keyboard.resize_keyboard and keyboard.is_persistent
-    assert len(keyboard.keyboard) == 3
+    assert len(keyboard.keyboard) == 4
     assert {b.text for row in keyboard.keyboard for b in row} == {
         "📸 Изменить фото",
         "🧩 Объединить фото",
@@ -104,7 +104,15 @@ async def test_bottom_navigation_after_start_and_consent(ui):
         "🖼 Мои результаты",
         "❓ Как пользоваться",
         "💬 Поддержка",
+        "🛍 Купить / продлить доступ",
     }
+    assert [button.text for button in keyboard.keyboard[-1]] == ["🛍 Купить / продлить доступ"]
+    for row in keyboard.model_dump(exclude_none=True)["keyboard"]:
+        for button in row:
+            if button["text"] == "💬 Поддержка":
+                assert button["style"] == "success"
+            else:
+                assert "style" not in button
     sent = await send(ui, callback="consent", user_id=2)
     assert any(isinstance(getattr(m, "reply_markup", None), ReplyKeyboardMarkup) for m in sent)
 

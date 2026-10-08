@@ -34,6 +34,8 @@ from aiogram.types import (
 from .catalog import PRESETS
 from .media import MAX_BYTES, Media, normalize
 from .provider import MockProvider, OpenAIProvider
+from .purchase_demo import PREFIX as PURCHASE_PREFIX
+from .purchase_demo import PurchaseDemo
 from .runtime import RUNTIME_DIR, BotRuntime
 from .service import Service
 from .store import DomainError, Store
@@ -77,19 +79,12 @@ NAV = {
     "results": "🖼 Мои результаты",
     "help": "❓ Как пользоваться",
     "support": "💬 Поддержка",
-}
-NAV_STYLES = {
-    "edit": "primary",
-    "merge": None,
-    "balance": "success",
-    "results": "success",
-    "help": None,
-    "support": None,
+    "buy": "🛍 Купить / продлить доступ",
 }
 MAIN = ReplyKeyboardMarkup(
     keyboard=[
-        [KeyboardButton(text=NAV[key], style=NAV_STYLES[key]) for key in pair]
-        for pair in [("edit", "merge"), ("balance", "results"), ("help", "support")]
+        [KeyboardButton(text=NAV[key], **({"style": "success"} if key == "support" else {})) for key in row]
+        for row in [("edit", "merge"), ("balance", "results"), ("help", "support"), ("buy",)]
     ],
     resize_keyboard=True,
     is_persistent=True,
@@ -111,6 +106,7 @@ COMMANDS = [
         ("terms", "Условия тестирования"),
         ("privacy", "Обработка фотографий"),
         ("support", "Поддержка"),
+        ("buy", "DEMO покупки доступа"),
     ]
 ]
 
@@ -252,7 +248,7 @@ async def processing_activity(bot, store, interval=4):
         await asyncio.sleep(interval)
 
 
-def build_dispatcher(settings, store, media, service, *, step_messages=None):
+def build_dispatcher(settings, store, media, service, *, step_messages=None, purchase_demo=None):
     trial = settings.trial_access
     if trial != service.trial_access:
         raise ValueError("trial_access_service_mismatch")
@@ -263,6 +259,8 @@ def build_dispatcher(settings, store, media, service, *, step_messages=None):
     drafts = {}
     steps = step_messages if step_messages is not None else StepMessages(store)
     dp["step_messages"] = steps
+    purchases = purchase_demo if purchase_demo is not None else PurchaseDemo()
+    dp["purchase_demo"] = purchases
 
     async def step_answer(message, user, draft, text, *, reply_markup=BACK):
         sent = await message.answer(text, reply_markup=reply_markup)
@@ -444,11 +442,14 @@ def build_dispatcher(settings, store, media, service, *, step_messages=None):
             )
         elif action == "support":
             await message.answer(
-                "Поддержка: "
-                + (settings.support_contact or "контакт владельца ещё не настроен.")
-                + "\nОпишите, что произошло. Ключи и банковские данные не присылайте.",
-                reply_markup=BACK,
+                "Нужна помощь? Напишите в поддержку и опишите, что произошло.",
+                reply_markup=InlineKeyboardMarkup(inline_keyboard=[[
+                    InlineKeyboardButton(text="💬 Написать в поддержку", url="https://t.me/nedelsky",
+                                         style="success"),
+                ]]),
             )
+        elif action == "buy":
+            await purchases.open(message, user)
 
     @router.message(F.text.in_(list(NAV.values())))
     async def navigation(message: Message):
@@ -458,6 +459,9 @@ def build_dispatcher(settings, store, media, service, *, step_messages=None):
     @router.callback_query(F.data.startswith("nav:"))
     async def navigation_callback(callback: CallbackQuery):
         action = callback.data.split(":", 1)[1]
+        if action == "buy":
+            await purchases.open_callback(callback)
+            return
         await callback.answer()
         if action in {*NAV, "home"}:
             await navigate(callback.message, callback.from_user.id, action)
@@ -576,7 +580,11 @@ def build_dispatcher(settings, store, media, service, *, step_messages=None):
 
     @router.message(Command("buy"))
     async def buy(message: Message):
-        await message.answer("Покупки в боте пока закрыты. Сейчас проверяем качество и сценарии MVP.")
+        await purchases.open(message, message.from_user.id)
+
+    @router.callback_query(F.data.startswith(PURCHASE_PREFIX))
+    async def purchase_callback(callback: CallbackQuery):
+        await purchases.handle(callback)
 
     @router.message(Command("cancel"))
     async def cancel(message: Message):
