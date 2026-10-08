@@ -7,6 +7,7 @@ on:
 
 permissions:
   contents: read
+  actions: read
   pages: write
   id-token: write
 
@@ -34,9 +35,28 @@ jobs:
           python -m pytest -q
           python -m ruff check src tests
       - name: Upload static interface only
+        id: pages_artifact
         uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
         with:
+          name: github-pages-${{ github.run_attempt }}
           path: src/image_studio/web
+      - name: Wait for artifact metadata
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PAGE_ARTIFACT_ID: ${{ steps.pages_artifact.outputs.artifact_id }}
+          PAGE_ARTIFACT_NAME: github-pages-${{ github.run_attempt }}
+        run: |
+          for attempt in {1..10}; do
+            matches=$(gh api -H 'Cache-Control: no-cache' "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/artifacts" |
+              jq --arg name "$PAGE_ARTIFACT_NAME" --arg id "$PAGE_ARTIFACT_ID" \
+                '[.artifacts[] | select(.name == $name and (.id | tostring) == $id and .expired == false)] | length') || matches=0
+            if [ "$matches" = 1 ]; then exit 0; fi
+            sleep 5
+          done
+          echo 'Uploaded Pages artifact is not yet visible in the API.'
+          exit 1
       - name: Publish
         id: deployment
         uses: actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346 # v5.0.1
+        with:
+          artifact_name: github-pages-${{ github.run_attempt }}
