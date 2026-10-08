@@ -133,8 +133,8 @@ class Service:
         if choice is None or len(inputs) != choice.inputs:
             raise DomainError("invalid_inputs")
         for path in inputs:
-            resolved = self.media.path(path)
-            if resolved.parent != self.media.path(str(user)) or not resolved.is_file():
+            # Selection may precede expiry; revalidate before reserving a new use.
+            if self._owned_recent_file(user, path, MAX_BYTES) is None:
                 raise DomainError("invalid_inputs")
         prompt = prompt_for(preset, description)
         if self.trial_access:

@@ -67,6 +67,28 @@ def test_merge_remembers_exact_group_not_one_person_or_unrelated_old_sources(wor
     assert reopen(workflow).reusable_inputs(1, 2) == [first, second]
 
 
+def test_submit_rechecks_expired_reused_photo_before_reserving_trial(workflow):
+    store, media, provider, _ = workflow
+    service = Service(store, media, provider, trial_access=True)
+    store.grant_trial(1)
+    original = media.save(1, image())
+    timestamp = time.time() - 86340
+    os.utime(media.path(original), (timestamp, timestamp))
+    service.remember_inputs(1, [original])
+    selected = service.reusable_inputs(1, 1)
+    assert selected == [original]
+    before = store.wallet(1, trial=True)
+
+    # Selection succeeded, but the user describes the next edit after expiry.
+    # The file can still exist while cleanup is delayed by other work.
+    expire(media.path(original))
+    with pytest.raises(DomainError, match="^invalid_inputs$"):
+        service.submit(1, "expired-selection", "glasses", selected, "Круглая оправа")
+
+    assert store.wallet(1, trial=True) == before
+    assert store.wallet(1) == (3, 0) and store.jobs(1) == [] and provider.calls == 0
+
+
 async def test_existing_job_payload_restores_original_and_never_output(workflow):
     store, media, provider, service = workflow
     original = media.save(1, image())
