@@ -1,0 +1,6 @@
+{
+  "name": "telegram-serverless-photo-probe",
+  "private": true,
+  "type": "module",
+  "scripts": { "check": "node check.mjs" }
+}

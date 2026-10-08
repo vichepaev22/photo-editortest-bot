@@ -11,3 +11,5 @@ reports/jev-routing.json
 reports/local-launch.json
 docs/jev-routing-request.json
 .playwright-mcp/
+.tgcloud/
+node_modules/
