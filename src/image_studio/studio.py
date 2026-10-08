@@ -324,7 +324,7 @@ def create_studio_app(settings, store, media, service):
         balance, reserved = service.wallet(user["id"])
         return {"user": user, "consent": store.has_consent(user["id"]),
                 "available": balance - reserved, "reserved": reserved, "mode": settings.image_provider,
-                "trial_access": service.trial_access}
+                "trial_access": service.trial_access, "unlimited": service.is_unlimited(user["id"])}
 
     @app.post("/api/consent")
     async def consent(request: Request):

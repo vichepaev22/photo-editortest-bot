@@ -125,7 +125,7 @@
   async function loadMe() { state.me = await api('/api/me'); state.trial=state.me.trial_access===true; renderMe(); if (!state.me.consent) showEntry(); else $('entryPanel').hidden = true; updateAction(); flushPhotos(); }
   function renderMe() {
     const available = state.me?.available;
-    $('headerBalance').textContent = available ?? '—'; $('profileBalance').textContent = available ?? '—';
+    $('headerBalance').textContent = state.me?.unlimited ? '∞' : available ?? '—'; $('profileBalance').textContent = state.me?.unlimited ? '∞' : available ?? '—';
     $('profileName').textContent = state.me ? `Здравствуйте, ${state.me.user.first_name || 'это ваша студия'}.` : 'Войдите, чтобы увидеть свои попытки.';
     $('reservedBalance').textContent = state.me ? `В обработке: ${state.me.reserved}. Новое изменение — от 1 попытки.` : 'Баланс появится после входа.';
     $('deleteButton').disabled = !state.me && !state.preview;
@@ -145,6 +145,12 @@
       $('deleteCopy').textContent='Уберите выбранные фото и описание из текущего предпросмотра.';
       $('deleteButton').textContent='Очистить предпросмотр';
       $('supportInfo').textContent='Для подключения и примеров обратитесь к владельцу студии.';
+    }
+    else if(state.me?.unlimited){
+      $('reservedBalance').textContent='Безлимитное тестирование для вашего аккаунта.';
+      $('demoCreditsButton').hidden=true;
+      document.querySelector('.balance-card > span:not(.ui-icon)').textContent='Генерации без ограничения';
+      if(state.mode !== 'mock') $('providerInfo').textContent='Фото и описание передаются OpenAI. Лицо может измениться. Лимит генераций бота для вашего аккаунта снят.';
     }
   }
   function renderPresets() {
@@ -182,7 +188,7 @@
     else if (state.connection==='error') message='Нет связи со студией. Выбранное фото остаётся в этой вкладке; подключитесь снова.';
     else if (!state.me?.consent) message=waiting ? 'Фото выбрано и остаётся в этой вкладке. Для загрузки подтвердите согласие выше.' : 'Можно выбрать фото сейчас. Для загрузки на сервер подтвердите согласие выше.';
     else if (waiting) message='Фото выбрано. Готовим загрузку…';
-    else if (state.me.available < (currentPreset()?.credits || 1)) message=state.trial ? 'Бесплатные генерации закончились. Выбор и загрузка фото остаются доступны.' : 'Не хватает попыток для создания. Выбор и загрузка фото остаются доступны.';
+    else if (!state.me.unlimited && state.me.available < (currentPreset()?.credits || 1)) message=state.trial ? 'Бесплатные генерации закончились. Выбор и загрузка фото остаются доступны.' : 'Не хватает попыток для создания. Выбор и загрузка фото остаются доступны.';
     $('photoStatus').textContent=message;
     $('photoStatus').classList.toggle('error',Boolean(failed) || state.connection==='error');
     $('photoStatus').classList.toggle('loading',Boolean(state.uploading.size) || state.connection==='loading' || state.entering);
@@ -236,19 +242,20 @@
     renderDocumentOptions();
     const preset = currentPreset(); const description = $('description').value.trim();
     const ready = Boolean((state.preview || state.me?.consent) && preset && !state.uploading.size && state.photos.slice(0,preset.inputs).filter(photo => photo?.id).length === preset.inputs && description && !state.submitting);
-    const hasCredits = !state.me || (state.me.available >= (preset?.credits || 1));
+    const hasCredits = !state.me || state.me.unlimited === true || (state.me.available >= (preset?.credits || 1));
     const running = state.jobs.some(job => activeStatuses.has(job.status) || job.status === 'review');
     $('reviewButton').disabled = state.pending ? state.submitting || !state.token : !ready || !hasCredits || running;
-    $('createText').textContent = state.pending ? 'Проверить отправку задания' : state.preview ? 'Посмотреть подтверждение' : `Создать образ · ${credits(preset?.credits || 1)}`;
+    $('createText').textContent = state.pending ? 'Проверить отправку задания' : state.preview ? 'Посмотреть подтверждение' : state.me?.unlimited ? 'Создать образ · безлимит' : `Создать образ · ${credits(preset?.credits || 1)}`;
     $('createHint').textContent = state.pending ? 'Повтор отправки использует прежний ключ и не создаёт второй запрос' : running ? 'Сначала завершите текущее задание' : !state.me?.consent ? 'Войдите и разрешите обработку фото' : !hasCredits ? 'Недостаточно попыток — посмотрите профиль' : !ready ? 'Сначала добавьте фото и описание' : 'Стоимость подтвердите на следующем шаге';
     $('descriptionCount').textContent = `${$('description').value.length} / 1500`;
     $('description').disabled = Boolean(state.pending);
     if(state.preview) $('createHint').textContent=ready ? 'Предпросмотр: создание изображений не подключено' : 'Добавьте фото и описание — они останутся в браузере';
     else if(state.trial && state.me?.consent) $('createHint').textContent=!hasCredits ? 'Все 3 бесплатные генерации использованы' : running ? 'Сначала завершите текущее задание' : !ready ? 'Добавьте фото и описание' : 'Один результат — 1 из 3 бесплатных генераций';
+    if(!state.preview && state.me?.unlimited && state.me.consent) $('createHint').textContent=state.pending ? 'Повтор отправки не создаёт второе задание' : running ? 'Сначала завершите текущее задание' : !ready ? 'Добавьте фото и описание' : 'Безлимитное тестирование';
     updatePhotoStatus();
     try {
       if (state.tab === 'studio' && !state.pending && ready && hasCredits && !running && !$('confirmDialog').open) {
-        if(supports('6.0')) {const colors=getComputedStyle(document.documentElement);bridge?.MainButton?.setParams({text:state.preview ? 'Предпросмотр · подтверждение' : `Создать · ${credits(preset.credits)}`,color:colors.getPropertyValue('--accent').trim(),text_color:colors.getPropertyValue('--accent-ink').trim(),is_active:true}); bridge?.MainButton?.show();}
+        if(supports('6.0')) {const colors=getComputedStyle(document.documentElement);bridge?.MainButton?.setParams({text:state.preview ? 'Предпросмотр · подтверждение' : state.me?.unlimited ? 'Создать · безлимит' : `Создать · ${credits(preset.credits)}`,color:colors.getPropertyValue('--accent').trim(),text_color:colors.getPropertyValue('--accent-ink').trim(),is_active:true}); bridge?.MainButton?.show();}
       } else if(supports('6.0')) bridge?.MainButton?.hide();
     } catch {}
   }
@@ -271,8 +278,12 @@
     $('confirmMode').textContent = state.mode === 'mock' ? 'Тестовый запуск вернёт копию исходного фото без ИИ-изменений и передачи OpenAI. Тестовые попытки спишутся после готовности.' : 'После подтверждения начнётся обработка фото и описания OpenAI. Лицо может измениться. Попытки спишутся после готовности результата.';
     if(state.trial) $('confirmMode').textContent='Всего 3 бесплатные реальные генерации OpenAI. Этот результат использует 1 генерацию, включая объединение фото. Каждый новый вариант — ещё 1; при ошибке резерв возвращается.';
     if(state.preset === 'document') $('confirmMode').textContent=(selectedPresetId() === 'document_original' ? 'Подготовка исходника без ИИ. Фон и одежда не меняются.' : 'Обработка ИИ с белым фоном. Результат не подходит для паспорта РФ.') + ' Один лист с четырьмя копиями использует 1 попытку.';
+    if(!state.preview && state.me?.unlimited){
+      $('confirmSummary').innerHTML=`<dt>Изменение</dt><dd>${escape(preset.label)}</dd><dt>Ваша идея</dt><dd>${escape(description)}</dd><dt>Доступ</dt><dd>Безлимитное тестирование</dd>`;
+      $('confirmMode').textContent=state.preset === 'document' ? (selectedPresetId() === 'document_original' ? 'Без ИИ; фон и одежда сохранятся.' : 'Обработка ИИ; для паспорта РФ не подходит.') + ' Четыре копии на одном листе. Лимит генераций не расходуется.' : state.mode === 'mock' ? 'Тестовая копия без ИИ. Лимит генераций не расходуется.' : 'Фото и описание передаются OpenAI. Лицо может измениться. Лимит генераций не расходуется.';
+    }
     $('submitError').hidden = !state.pending; if (state.pending) $('submitError').textContent = 'Ответ на прошлую отправку не получен. Повторим её с тем же ключом: второе задание не создастся.';
-    $('confirmSubmit').textContent = state.pending ? 'Повторить с тем же ключом' : `Подтвердить · ${credits(preset.credits)}`;
+    $('confirmSubmit').textContent = state.pending ? 'Повторить с тем же ключом' : state.me?.unlimited ? 'Подтвердить · безлимит' : `Подтвердить · ${credits(preset.credits)}`;
     if(state.preview) {$('confirmMode').textContent='Это предпросмотр: фото и описание остаются в браузере. Создание изображений не подключено, попытки не списываются.';$('confirmSubmit').textContent='Понятно, вернуться в студию';}
     $('editDraft').disabled = Boolean(state.pending); $('confirmDialog').showModal(); updateAction();
   }

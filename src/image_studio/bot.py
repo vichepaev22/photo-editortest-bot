@@ -304,7 +304,9 @@ def build_dispatcher(settings, store, media, service, *, step_messages=None, pur
         sent = await message.answer(text, reply_markup=reply_markup)
         await steps.sent(message.bot, user, draft.steps_token, sent)
 
-    def pricing():
+    def pricing(user=None):
+        if service.is_unlimited(user):
+            return "Для вашего аккаунта включено безлимитное тестирование."
         if trial:
             return "Любая функция, включая объединение — 1 бесплатная генерация. Всего 3 реальные генерации."
         return f"Правка — {service.cost('hair')} попытка. Объединение двух фото — {service.cost('merge')}."
@@ -312,6 +314,10 @@ def build_dispatcher(settings, store, media, service, *, step_messages=None, pur
     async def trial_balance(message, user):
         if not store.has_consent(user):
             await message.answer("Сначала подтвердите условия и согласие в /start.", reply_markup=CONSENT)
+            return
+        if service.is_unlimited(user):
+            await message.answer("♾ Безлимитное тестирование\n\nКоличество генераций для вашего аккаунта не ограничено.",
+                                 reply_markup=MAIN)
             return
         total, reserved = service.wallet(user)
         await message.answer(
@@ -353,7 +359,8 @@ def build_dispatcher(settings, store, media, service, *, step_messages=None, pur
             f"{ICONS[key]} Шаг 1 из 3 · {choice.label}\n\nЗагрузите {choice.inputs} фото.\n"
             "Для лучшего качества отправьте фото файлом. JPEG/PNG/WebP до 10 MB.\n"
             "Или сфотографируйте себя сейчас — желательно на нейтральном фоне, например у стены."
-            + ("\n\nОтправка описания — 1 бесплатная генерация."
+            + ("\n\n♾ Безлимитное тестирование." if service.is_unlimited(user) else
+               "\n\nОтправка описания — 1 бесплатная генерация."
                if trial else "")
             + ("\n\nДля документов: анфас, глаза открыты, рот закрыт, вся голова в кадре. "
                "Исходное фото — на ровном белом фоне, в подходящей одежде; фон и одежда не меняются."
@@ -382,8 +389,10 @@ def build_dispatcher(settings, store, media, service, *, step_messages=None, pur
                    if draft.preset == "document_original" else
                    "Выберите одежду или напишите пожелание. Белый фон, лицо сохраняем. "
                    "ИИ-портрет не подходит для паспорта РФ.")
-                + f"\n\n{'Выбор варианта расходует' if trial else 'После выбора подтвердите'} "
-                "1 попытку · один лист с четырьмя копиями.",
+                + ("\n\n♾ Безлимитное тестирование · один лист с четырьмя копиями."
+                   if service.is_unlimited(message.chat.id) else
+                   f"\n\n{'Выбор варианта расходует' if trial else 'После выбора подтвердите'} "
+                   "1 попытку · один лист с четырьмя копиями."),
                 reply_markup=buttons([
                     [(label, f"docopt:{draft.token}:{option}")] for label, option in options
                 ] + [[("🏠 Главное меню", "nav:home")]]),
@@ -403,7 +412,8 @@ def build_dispatcher(settings, store, media, service, *, step_messages=None, pur
             message, message.chat.id, draft,
             f"✍️ Шаг 2 из 3 · Опишите изменение\n\nНапример: «{example}»."
             + hair_hint
-            + ("\n\nОтправка описания — 1 бесплатная генерация." if trial else ""),
+            + ("\n\n♾ Безлимитное тестирование." if service.is_unlimited(message.chat.id) else
+               "\n\nОтправка описания — 1 бесплатная генерация." if trial else ""),
             reply_markup=InlineKeyboardMarkup(inline_keyboard=[
                 [InlineKeyboardButton(text="📋 Скопировать пример", copy_text=CopyTextButton(text=example))],
                 *collage_buttons,
@@ -465,11 +475,14 @@ def build_dispatcher(settings, store, media, service, *, step_messages=None, pur
                 await message.answer("Выберите действие на нижней панели.", reply_markup=MAIN)
             else:
                 await message.answer(
-                    "Что хотите изменить? " + pricing(), reply_markup=MENU
+                    "Что хотите изменить? " + pricing(user), reply_markup=MENU
                 )
         elif action == "merge":
             await choose_preset(message, user, "merge")
         elif action == "balance":
+            if service.is_unlimited(user):
+                await trial_balance(message, user)
+                return
             total, reserved = service.wallet(user)
             markup = (
                 buttons([[("🎁 Получить 3 тестовые попытки", "demo:grant")]])
@@ -478,7 +491,7 @@ def build_dispatcher(settings, store, media, service, *, step_messages=None, pur
             )
             await message.answer(
                 f"💎 Доступно попыток: {total - reserved}\nВ обработке: {reserved}\n"
-                + pricing() + "\nПродажи пока закрыты.",
+                + pricing(user) + "\nПродажи пока закрыты.",
                 reply_markup=markup,
             )
         elif action == "results":
@@ -507,7 +520,7 @@ def build_dispatcher(settings, store, media, service, *, step_messages=None, pur
                    "4. Проверьте цену и нажмите «Создать».\n")
                 +
                 "5. Получите файл и сохраните его.\n\n"
-                + pricing() + " Новый вариант — отдельная попытка.\n"
+                + pricing(user) + " Новый вариант — отдельное задание.\n"
                 + (
                     "Сейчас демо: вы получите тестовую копию без ИИ-правки.\n"
                     if settings.image_provider == "mock"
@@ -550,6 +563,8 @@ def build_dispatcher(settings, store, media, service, *, step_messages=None, pur
         mode = (
             "\nСейчас демо: результат — тестовая копия с отметкой DEMO."
             if settings.image_provider == "mock"
+            else "\n♾ Для вашего аккаунта включено безлимитное тестирование."
+            if service.is_unlimited(message.from_user.id)
             else "\nВсего 3 бесплатные реальные генерации OpenAI после согласия. Любая функция — 1 генерация."
             if trial else ""
         )
@@ -568,6 +583,9 @@ def build_dispatcher(settings, store, media, service, *, step_messages=None, pur
         await callback.message.answer(
             "Выберите действие на нижней панели. "
             + (
+                "♾ Для вашего аккаунта включено безлимитное тестирование."
+                if service.is_unlimited(callback.from_user.id)
+                else
                 f"Всего 3 бесплатные реальные генерации OpenAI. Доступно: {total - reserved}. "
                 "Объединение и каждый новый вариант — 1 генерация."
                 if trial else "Тестовые попытки доступны в «Мои попытки»."
@@ -637,7 +655,7 @@ def build_dispatcher(settings, store, media, service, *, step_messages=None, pur
         await message.answer(
             "Условия пилота: сервис для совершеннолетних, права и согласие всех изображённых людей, "
             "полностью одетые образы. Не используйте результат для обмана. "
-            + pricing() + " Новый вариант использует ещё одну попытку. "
+            + pricing(message.from_user.id) + " Новый вариант — отдельное задание. "
             "При ошибке обработки резерв возвращается. Качество и сходство не гарантированы. "
             "Оплаты в Telegram сейчас нет; условия продажи будут опубликованы перед запуском."
         )
@@ -835,13 +853,14 @@ def build_dispatcher(settings, store, media, service, *, step_messages=None, pur
         choice = PRESETS[draft.preset]
         cost = service.cost(draft.preset)
         unit = "бесплатная генерация" if trial else "попытка(и)"
+        spend = "♾ Безлимитное тестирование · один результат." if service.is_unlimited(user) else f"{cost} {unit} · один результат."
         await step_answer(
             message, user, draft,
             f"✨ Шаг 3 из 3 · {choice.label}\n\n{draft.description}\n\n"
-            f"{cost} {unit} · один результат.",
+            + spend,
             reply_markup=BACK if trial else buttons(
                 [
-                    [(f"Создать · {cost} {unit}", "confirm:" + draft.token, "success")],
+                    [("Создать · безлимит" if service.is_unlimited(user) else f"Создать · {cost} {unit}", "confirm:" + draft.token, "success")],
                     [("🏠 Главное меню", "nav:home")],
                 ]
             ),
@@ -929,7 +948,8 @@ async def run(settings):
                     + f" Резерв {'генерации' if settings.trial_access else 'кредитов'} возвращён.",
                 )
 
-            service = Service(store, media, provider, deliver, notify, trial_access=settings.trial_access)
+            service = Service(store, media, provider, deliver, notify, trial_access=settings.trial_access,
+                              unlimited_user_id=settings.admin_user_id if settings.owner_unlimited_testing else 0)
             dp = build_dispatcher(settings, store, media, service, step_messages=steps)
             await bot.set_my_commands([
                 command.model_copy(update={"description": {

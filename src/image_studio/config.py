@@ -24,6 +24,7 @@ class Settings:
     openai_key: str = ""
     demo_credits: bool = False
     trial_access: bool = False
+    owner_unlimited_testing: bool = False
     support_contact: str = ""
     billing_enabled: bool = False
     shop_id: str = ""
@@ -39,6 +40,10 @@ class Settings:
     def validate(self):
         if type(self.admin_user_id) is not int or not 0 <= self.admin_user_id < 2**52:
             raise ValueError("invalid_admin_user_id")
+        if type(self.owner_unlimited_testing) is not bool:
+            raise ValueError("invalid_owner_unlimited_testing")
+        if self.owner_unlimited_testing and self.admin_user_id == 0:
+            raise ValueError("owner_unlimited_requires_admin")
         if self.image_provider not in {"mock", "openai"}:
             raise ValueError("invalid_provider")
         if self.image_model not in MODELS or self.quality not in {"low", "medium", "high", "xhigh", "max"}:
@@ -76,6 +81,7 @@ class Settings:
             openai_key=os.getenv("OPENAI_API_KEY", ""),
             demo_credits=os.getenv("ENABLE_DEMO_CREDITS", "false").lower() == "true",
             trial_access=os.getenv("ENABLE_TRIAL_ACCESS", "false").lower() == "true",
+            owner_unlimited_testing=os.getenv("ENABLE_OWNER_UNLIMITED_TESTING", "false").lower() == "true",
             support_contact=os.getenv("SUPPORT_CONTACT", ""),
             billing_enabled=os.getenv("BILLING_ENABLED", "false").lower() == "true",
             shop_id=os.getenv("YOOKASSA_SHOP_ID", ""),

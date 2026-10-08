@@ -53,15 +53,16 @@ class TrackedBot(OfflineBot):
         return response
 
 
-def build_ui(tmp_path, *, trial=True, admin_user_id=0):
+def build_ui(tmp_path, *, trial=True, admin_user_id=0, owner_unlimited_testing=False):
     store, media, provider = Store(tmp_path / "db.sqlite3"), Media(tmp_path), MockProvider()
     store.consent(1)
     if not trial:
         store.grant_demo(1)
-    service = Service(store, media, provider, trial_access=trial)
+    service = Service(store, media, provider, trial_access=trial,
+                      unlimited_user_id=admin_user_id if owner_unlimited_testing else 0)
     service.wallet(1)
     settings = Settings(image_provider="openai" if trial else "mock", trial_access=trial,
-                        admin_user_id=admin_user_id)
+                        admin_user_id=admin_user_id, owner_unlimited_testing=owner_unlimited_testing)
     return build_dispatcher(settings, store, media, service), TrackedBot(), store, media, service, provider
 
 
@@ -98,6 +99,26 @@ async def feed(ui, text=None, *, callback=None, photo=False, reply=None, message
 def texts(sent):
     return "\n".join((getattr(method, "text", "") or getattr(method, "caption", "") or "")
                      for method in sent)
+
+
+async def test_owner_unlimited_native_balance_and_submission_only_for_owner(tmp_path):
+    ui = build_ui(tmp_path, admin_user_id=1, owner_unlimited_testing=True)
+    assert "безлимитное" in texts(await feed(ui, "/start")).lower()
+    assert "Безлимитное" in texts(await feed(ui, callback="nav:balance"))
+    await feed(ui, callback="preset:hair")
+    assert "Безлимитное" in texts(await feed(ui, photo=True))
+    for index in range(4):
+        if index:
+            await feed(ui, callback="preset:hair")
+            await feed(ui, photo=True)
+        sent = await feed(ui, "Каре", message_id=300+index)
+        assert "Безлимитное тестирование" in texts(sent)
+        job = ui[2].jobs(1)[-1]
+        assert job["quota_exempt"] == 1 and await ui[4].process(job["id"])
+    ui[2].consent(2)
+    non_owner = texts(await feed(ui, callback="nav:balance", user=2))
+    assert "безлимит" not in non_owner.lower() and "3" in non_owner
+    assert ui[2].wallet(1, trial=True) == (0, 0) and ui[5].calls == 4
 
 
 def button_data(sent, prefix):

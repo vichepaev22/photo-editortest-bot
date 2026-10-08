@@ -16,10 +16,21 @@ INPUT_RECORD_LIMIT = 16384
 
 
 class Service:
-    def __init__(self, store, media, provider, deliver=None, notify=None, *, trial_access=False):
+    def __init__(
+        self, store, media, provider, deliver=None, notify=None, *, trial_access=False, unlimited_user_id=0,
+    ):
         self.store, self.media, self.provider = store, media, provider
         self.deliver, self.notify = deliver, notify
         self.trial_access = trial_access
+        self.unlimited_user_id = unlimited_user_id
+
+    def is_unlimited(self, user):
+        return (
+            type(self.unlimited_user_id) is int
+            and type(user) is int
+            and 0 < user < 2**52
+            and user == self.unlimited_user_id
+        )
 
     def cost(self, preset):
         choice = PRESETS.get(preset)
@@ -28,7 +39,7 @@ class Service:
         return 1 if self.trial_access else choice.credits
 
     def wallet(self, user):
-        if self.trial_access and self.store.has_consent(user):
+        if self.trial_access and not self.is_unlimited(user) and self.store.has_consent(user):
             self.store.grant_trial(user)
         return self.store.wallet(user, trial=self.trial_access)
 
@@ -138,9 +149,18 @@ class Service:
             if self._owned_recent_file(user, path, MAX_BYTES) is None:
                 raise DomainError("invalid_inputs")
         prompt = prompt_for(preset, description)
-        if self.trial_access:
+        quota_exempt = self.is_unlimited(user)
+        try:
+            job = self.store.reserve(
+                user, key, preset, self.cost(preset), trial=self.trial_access, quota_exempt=quota_exempt,
+            )
+        except DomainError as error:
+            if str(error) != "trial_not_granted" or not self.trial_access or quota_exempt:
+                raise
+            # Reserve returns existing requests first: replaying an exempt job after
+            # disabling owner testing must not grant a new trial just for the replay.
             self.store.grant_trial(user)
-        job = self.store.reserve(user, key, preset, self.cost(preset), trial=self.trial_access)
+            job = self.store.reserve(user, key, preset, self.cost(preset), trial=self.trial_access)
         payload_name = f"{job}.json"
         payload_path = self.media.path(f"{user}/{payload_name}")
         if not payload_path.exists() and self.store.job(job)["status"] == "queued":

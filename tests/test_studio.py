@@ -22,6 +22,33 @@ from image_studio.studio import create_studio_app
 TOKEN = "123456:offline-token-only"
 
 
+async def test_owner_unlimited_is_authenticated_and_body_cannot_grant_it(studio):
+    client, settings, store, media, provider, service, _ = studio
+    settings.admin_user_id, settings.owner_unlimited_testing = 1, True
+    service.unlimited_user_id = 1
+    assert (await client.get("/api/me")).status_code == 401
+    for user in (1, 2):
+        headers = await auth(client, user)
+        assert (await client.post("/api/consent", json={"accepted": True}, headers=headers)).status_code == 200
+        result = (await client.get("/api/me", headers=headers)).json()
+        assert result["unlimited"] is (user == 1) and result["available"] == 0
+        upload = await client.post("/api/photos", content=image(), headers=headers)
+        assert upload.status_code == 200
+        if user == 1:
+            for _ in range(4):
+                response = await client.post("/api/jobs", json=body(upload.json()["id"]), headers=headers)
+                assert response.status_code == 200
+                job = response.json()["id"]
+                assert store.job(job)["quota_exempt"] == 1
+                assert await service.process(job)
+            assert (await client.get("/api/me", headers=headers)).json()["unlimited"] is True
+        else:
+            forged = body(upload.json()["id"]) | {"unlimited": True, "quota_exempt": True, "user_id": 1}
+            response = await client.post("/api/jobs", json=forged, headers=headers)
+            assert response.status_code == 409 and store.jobs(2) == []
+    assert store.wallet(1) == (0, 0) and store.wallet(2) == (0, 0) and provider.calls == 4
+
+
 def signed(user=1, age=0, extra=None, user_data=None):
     fields = {
         "auth_date": str(int(time.time()) - age),

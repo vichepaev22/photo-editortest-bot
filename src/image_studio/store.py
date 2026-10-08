@@ -50,6 +50,7 @@ class Store:
                     status TEXT NOT NULL DEFAULT 'queued', created REAL NOT NULL,
                     result TEXT, usage TEXT, request_id TEXT, error TEXT,
                     trial INTEGER NOT NULL DEFAULT 0 CHECK(trial IN (0,1)),
+                    quota_exempt INTEGER NOT NULL DEFAULT 0 CHECK(quota_exempt IN (0,1)),
                     UNIQUE(user_id, request_key));
                 CREATE TABLE IF NOT EXISTS events (
                     id INTEGER PRIMARY KEY, created REAL NOT NULL, kind TEXT NOT NULL, ref TEXT NOT NULL);
@@ -83,6 +84,11 @@ class Store:
             job_columns = {row["name"] for row in c.execute("PRAGMA table_info(jobs)")}
             if "trial" not in job_columns:
                 c.execute("ALTER TABLE jobs ADD COLUMN trial INTEGER NOT NULL DEFAULT 0 CHECK(trial IN (0,1))")
+            if "quota_exempt" not in job_columns:
+                c.execute(
+                    "ALTER TABLE jobs ADD COLUMN quota_exempt INTEGER NOT NULL DEFAULT 0 "
+                    "CHECK(quota_exempt IN (0,1))"
+                )
 
     def _enable_wal(self):
         # Journal changes need an autocommit connection, outside BEGIN IMMEDIATE.
@@ -314,11 +320,11 @@ class Store:
             self._event(c, "payment", order)
             return True
 
-    def reserve(self, user, key, preset, cost, *, trial=False):
-        if (not isinstance(cost, int) or cost <= 0 or not key or type(trial) is not bool
-                or (trial and (type(cost) is not int or cost != 1))):
+    def reserve(self, user, key, preset, cost, *, trial=False, quota_exempt=False):
+        if (type(cost) is not int or cost <= 0 or not key or type(trial) is not bool
+                or type(quota_exempt) is not bool or (trial and cost != 1)):
             raise DomainError("invalid_job")
-        if trial:
+        if trial or quota_exempt:
             self._trial_user(user)
         with self.tx() as c:
             u = self._user(c, user)
@@ -336,21 +342,22 @@ class Store:
                 ).fetchone()
             ):
                 raise DomainError("already_active")
-            if trial:
+            if not quota_exempt and trial:
                 if not u["trial_granted"]:
                     raise DomainError("trial_not_granted")
                 if 3 - u["trial_used"] - u["trial_reserved"] < 1:
                     raise DomainError("trial_exhausted")
-            elif u["balance"] - u["reserved"] < cost:
+            elif not quota_exempt and u["balance"] - u["reserved"] < cost:
                 raise DomainError("insufficient_credits")
             job = uuid.uuid4().hex
-            if trial:
+            if not quota_exempt and trial:
                 c.execute("UPDATE users SET trial_reserved=trial_reserved+1 WHERE id=?", (user,))
-            else:
+            elif not quota_exempt:
                 c.execute("UPDATE users SET reserved=reserved+? WHERE id=?", (cost, user))
             c.execute(
-                "INSERT INTO jobs(id,user_id,request_key,preset,cost,created,trial) VALUES(?,?,?,?,?,?,?)",
-                (job, user, key, preset, cost, time.time(), int(trial)),
+                "INSERT INTO jobs(id,user_id,request_key,preset,cost,created,trial,quota_exempt) "
+                "VALUES(?,?,?,?,?,?,?,?)",
+                (job, user, key, preset, cost, time.time(), int(trial), int(quota_exempt)),
             )
             self._event(c, "reserve", job)
             return job
@@ -386,12 +393,12 @@ class Store:
                 return
             if j["status"] != "running":
                 raise DomainError("invalid_job_state")
-            if j["trial"]:
+            if not j["quota_exempt"] and j["trial"]:
                 c.execute(
                     "UPDATE users SET trial_reserved=trial_reserved-1,trial_used=trial_used+1 WHERE id=?",
                     (j["user_id"],),
                 )
-            else:
+            elif not j["quota_exempt"]:
                 c.execute(
                     "UPDATE users SET balance=balance-?,reserved=reserved-?,spent=spent+? WHERE id=?",
                     (j["cost"], j["cost"], j["cost"], j["user_id"]),
@@ -407,9 +414,9 @@ class Store:
             j = c.execute("SELECT * FROM jobs WHERE id=?", (job,)).fetchone()
             if j is None or j["status"] not in {"queued", "running", "review"}:
                 return
-            if j["trial"]:
+            if not j["quota_exempt"] and j["trial"]:
                 c.execute("UPDATE users SET trial_reserved=trial_reserved-1 WHERE id=?", (j["user_id"],))
-            else:
+            elif not j["quota_exempt"]:
                 c.execute("UPDATE users SET reserved=reserved-? WHERE id=?", (j["cost"], j["user_id"]))
             c.execute("UPDATE jobs SET status='failed',error=? WHERE id=?", (reason[:60], job))
             self._event(c, "release", job)
