@@ -17,6 +17,7 @@ from aiogram.fsm.storage.memory import SimpleEventIsolation
 from aiogram.types import (
     BotCommand,
     CallbackQuery,
+    CopyTextButton,
     ErrorEvent,
     FSInputFile,
     InlineKeyboardButton,
@@ -42,7 +43,7 @@ def buttons(rows):
     return InlineKeyboardMarkup(
         inline_keyboard=[
             [
-                InlineKeyboardButton(text=b[0], callback_data=b[1], style=b[2] if len(b) > 2 else "primary")
+                InlineKeyboardButton(text=b[0], callback_data=b[1], style=b[2] if len(b) > 2 else None)
                 for b in row
             ]
             for row in rows
@@ -58,6 +59,15 @@ def make_telegram_session():
 
 
 ICONS = {"hair": "💇", "clothes": "👕", "glasses": "👓", "background": "🌄", "enhance": "✨", "merge": "🧩"}
+EXAMPLES = {
+    "hair": "Каре до плеч с мягкими волнами",
+    "clothes": "Бежевый тренч поверх белой футболки",
+    "glasses": "Тонкая чёрная оправа с прозрачными линзами",
+    "background": "Парк с мягким вечерним светом",
+    "enhance": "Чётче детали и естественные цвета, без ретуши лица",
+    "merge": "Мы вместе в парке, сохрани лица и пропорции",
+}
+RESULT_FILENAME = "Образ · результат.jpg"
 _choices = [(ICONS[key] + " " + p.label, "preset:" + key) for key, p in PRESETS.items()]
 MENU = buttons([_choices[i : i + 2] for i in range(0, len(_choices), 2)])
 NAV = {
@@ -70,11 +80,11 @@ NAV = {
 }
 NAV_STYLES = {
     "edit": "primary",
-    "merge": "primary",
+    "merge": None,
     "balance": "success",
     "results": "success",
-    "help": "primary",
-    "support": "primary",
+    "help": None,
+    "support": None,
 }
 MAIN = ReplyKeyboardMarkup(
     keyboard=[
@@ -86,7 +96,7 @@ MAIN = ReplyKeyboardMarkup(
     input_field_placeholder="Выберите действие ниже",
 )
 BACK = buttons([[("🏠 Главное меню", "nav:home")]])
-CONSENT = buttons([[("Мне 18+, принимаю условия и согласен", "consent")]])
+CONSENT = buttons([[("Мне 18+, принимаю условия и согласен", "consent", "success")]])
 COMMANDS = [
     BotCommand(command=name, description=description)
     for name, description in [
@@ -114,6 +124,110 @@ class Draft:
     photo_messages: set[int] = field(default_factory=set)
     description: str = ""
     reusable: list[str] = field(default_factory=list)
+    steps_token: str = field(default_factory=lambda: uuid.uuid4().hex)
+
+
+@dataclass
+class TrackedSteps:
+    user: int
+    created: float = field(default_factory=time.time)
+    messages: list[int] = field(default_factory=list)
+    job: str | None = None
+    delivered: bool = False
+    cleaning: bool = False
+
+
+class StepMessages:
+    """Only IDs returned by step/progress sends; restart intentionally forgets them.
+
+    Access expires scopes after 24 hours. Caps are 1,000 scopes and 100 IDs each;
+    expired/evicted messages stay in Telegram, never get guessed or rediscovered.
+    """
+
+    def __init__(self, store):
+        self.store = store
+        self.scopes = {}
+        self.jobs = {}
+
+    def _prune(self):
+        for token, scope in list(self.scopes.items()):
+            if time.time() - scope.created > 86400:
+                self._forget(token)
+
+    def _forget(self, token):
+        scope = self.scopes.pop(token)
+        if scope.job:
+            self.jobs.pop((scope.user, scope.job), None)
+
+    def begin(self, user, token):
+        self._prune()
+        if len(self.scopes) >= 1000:
+            self._forget(min(self.scopes, key=lambda key: self.scopes[key].created))
+        self.scopes[token] = TrackedSteps(user)
+
+    def bind(self, user, token, job):
+        self._prune()
+        scope = self.scopes.get(token)
+        if scope and scope.user == user and scope.job is None:
+            scope.job = job
+            self.jobs[user, job] = token
+
+    async def sent(self, bot, user, token, message):
+        self._prune()
+        scope = self.scopes.get(token)
+        if (scope is None or scope.user != user or not isinstance(message, Message)
+                or message.chat.type != "private" or message.chat.id != user
+                or type(message.message_id) is not int or message.message_id <= 0):
+            return
+        if message.message_id not in scope.messages:
+            scope.messages.append(message.message_id)
+            del scope.messages[:-100]
+        # The provider may finish while Telegram is still sending the progress message.
+        if scope.delivered:
+            await self._delete(bot, scope)
+
+    async def delivered(self, bot, user, job):
+        try:
+            self._prune()
+            record = self.store.job(job)
+            if record["user_id"] != user or record["status"] != "delivered":
+                return
+            scope = self.scopes.get(self.jobs.get((user, job)))
+            if scope:
+                scope.delivered = True
+                await self._delete(bot, scope)
+        except Exception as exc:
+            logging.getLogger(__name__).warning("step_cleanup_failed type=%s", type(exc).__name__)
+
+    async def _delete(self, bot, scope):
+        if scope.cleaning:
+            return
+        scope.cleaning = True
+        try:
+            while scope.messages:
+                batch = scope.messages[:100]
+                await bot.delete_messages(chat_id=scope.user, message_ids=batch)
+                scope.messages[:] = [mid for mid in scope.messages if mid not in batch]
+        except Exception as exc:
+            logging.getLogger(__name__).warning("step_cleanup_failed type=%s", type(exc).__name__)
+        finally:
+            scope.cleaning = False
+
+
+async def deliver_result(bot, store, steps, user, job, path, *, demo=False):
+    if user == 0:  # Local browser demo has no Telegram destination.
+        return
+    caption = "Образ · готово ✨\n\nСохраните фото и проверьте сходство."
+    if demo:
+        caption = "DEMO: тестовая копия, ИИ-правка не выполнялась.\n\n" + caption
+    await bot.send_document(
+        user,
+        FSInputFile(path, filename=RESULT_FILENAME),
+        caption=caption,
+        reply_markup=buttons([[("📸 Новая правка", "nav:edit"), ("🖼 Мои результаты", "nav:results")]]),
+    )
+    store.delivered(job)
+    await steps.delivered(bot, user, job)
 
 
 async def processing_activity(bot, store, interval=4):
@@ -138,7 +252,7 @@ async def processing_activity(bot, store, interval=4):
         await asyncio.sleep(interval)
 
 
-def build_dispatcher(settings, store, media, service):
+def build_dispatcher(settings, store, media, service, *, step_messages=None):
     trial = settings.trial_access
     if trial != service.trial_access:
         raise ValueError("trial_access_service_mismatch")
@@ -147,6 +261,12 @@ def build_dispatcher(settings, store, media, service):
     router.callback_query.filter(F.message.chat.type == "private")
     dp = Dispatcher(events_isolation=SimpleEventIsolation())
     drafts = {}
+    steps = step_messages if step_messages is not None else StepMessages(store)
+    dp["step_messages"] = steps
+
+    async def step_answer(message, user, draft, text, *, reply_markup=BACK):
+        sent = await message.answer(text, reply_markup=reply_markup)
+        await steps.sent(message.bot, user, draft.steps_token, sent)
 
     def pricing():
         if trial:
@@ -180,6 +300,7 @@ def build_dispatcher(settings, store, media, service):
             oldest = min(drafts, key=lambda owner: drafts[owner].created)
             drafts.pop(oldest)
         draft = drafts[user] = Draft(key)
+        steps.begin(user, draft.steps_token)
         choice = PRESETS[key]
         draft.reusable = service.reusable_inputs(user, choice.inputs)
         markup = BACK
@@ -187,27 +308,34 @@ def build_dispatcher(settings, store, media, service):
             plural = choice.inputs == 2
             markup = buttons([
                 [("Использовать загруженные фото" if plural else "Использовать загруженное фото",
-                  "reuse:" + draft.token)],
+                  "reuse:" + draft.token, "success")],
                 [("Загрузить новые фото" if plural else "Загрузить новое фото", "fresh:" + draft.token)],
                 [("🏠 Главное меню", "nav:home")],
             ])
-        await message.answer(
-            f"{ICONS[key]} {choice.label}\nШаг 1 из 3 · Загрузите {choice.inputs} фото.\n"
+        await step_answer(
+            message, user, draft,
+            f"{ICONS[key]} Шаг 1 из 3 · {choice.label}\n\nЗагрузите {choice.inputs} фото.\n"
             "Для лучшего качества отправьте фото файлом. JPEG/PNG/WebP до 10 MB.\n"
             "Или сфотографируйте себя сейчас — желательно на нейтральном фоне, например у стены."
-            + ("\nВаше следующее описание запустит создание и использует 1 бесплатную генерацию."
+            + ("\n\nОтправка описания — 1 бесплатная генерация."
                if trial else ""),
             reply_markup=markup,
         )
 
     async def step_two(message, draft):
         if len(draft.photos) < PRESETS[draft.preset].inputs:
-            await message.answer("Первое фото принято. Отправьте второе с согласия изображённого человека.")
+            await step_answer(message, message.chat.id, draft,
+                              "📷 Шаг 1 из 3\n\nПервое фото принято. Отправьте второе с согласия человека.")
             return
-        await message.answer(
-            "Шаг 2 из 3 · Фото приняты. Опишите желаемое изменение, например «каре до плеч»."
-            + ("\nОписание сразу запустит создание: 1 бесплатная генерация." if trial else ""),
-            reply_markup=BACK,
+        example = EXAMPLES[draft.preset]
+        await step_answer(
+            message, message.chat.id, draft,
+            f"✍️ Шаг 2 из 3 · Опишите изменение\n\nНапример: «{example}»."
+            + ("\n\nОтправка описания — 1 бесплатная генерация." if trial else ""),
+            reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+                [InlineKeyboardButton(text="📋 Скопировать пример", copy_text=CopyTextButton(text=example))],
+                *BACK.inline_keyboard,
+            ]),
         )
 
     def submission_error(code):
@@ -223,14 +351,16 @@ def build_dispatcher(settings, store, media, service):
 
     async def submit_draft(message, user, draft, key):
         try:
-            service.submit(user, key, draft.preset, draft.photos, draft.description)
+            job = service.submit(user, key, draft.preset, draft.photos, draft.description)
         except DomainError as exc:
             await message.answer(submission_error(str(exc)), reply_markup=BACK)
             return
         drafts.pop(user, None)
-        await message.answer(
-            "Создаём ваш образ ✨ Обычно это занимает до 2 минут.\n"
-            "Готовое фото появится здесь. Его также можно найти в «Мои результаты».",
+        steps.bind(user, draft.steps_token, job)
+        await step_answer(
+            message, user, draft,
+            "✨ Создаём ваш образ\n\nОбычно до 2 минут.\n"
+            "Результат появится здесь и в «Мои результаты».",
             reply_markup=MAIN,
         )
 
@@ -243,11 +373,12 @@ def build_dispatcher(settings, store, media, service):
             "DEMO: тестовая копия, ИИ-правка не выполнялась.\n" if settings.image_provider == "mock" else ""
         )
         await message.answer_document(
-            FSInputFile(path, filename="Ваш образ.jpg"),
-            caption=mode + "Ваш результат. Локальное хранение — 24 часа.",
+            FSInputFile(path, filename=RESULT_FILENAME),
+            caption=mode + "Образ · ваш результат\n\nХранение — 24 часа.",
             reply_markup=buttons([[("📸 Новая правка", "nav:edit"), ("🖼 Результаты", "nav:results")]]),
         )
         store.delivered(job)
+        await steps.delivered(message.bot, user, job)
 
     async def navigate(message, user, action):
         if action in {"home", "edit"}:
@@ -342,7 +473,7 @@ def build_dispatcher(settings, store, media, service):
             if trial else ""
         )
         await message.answer(
-            "Образ — примерка причёсок, одежды, очков и объединение фото.\n"
+            "Образ · фотостудия\n\nПримерка причёсок, одежды, очков и объединение фото.\n\n"
             "Загрузите собственные фото либо фото людей, давших согласие. Изображения в рабочем режиме "
             "передаются OpenAI; лицо может измениться. /terms /privacy /support" + mode,
             reply_markup=MAIN if store.has_consent(message.from_user.id) else CONSENT,
@@ -520,9 +651,10 @@ def build_dispatcher(settings, store, media, service):
         if action == "reuse":
             await step_two(callback.message, draft)
         else:
-            await callback.message.answer(
-                ("Шаг 1 из 3 · Загрузите два новых фото.\n" if PRESETS[draft.preset].inputs == 2
-                 else "Шаг 1 из 3 · Загрузите новое фото.\n")
+            await step_answer(
+                callback.message, user, draft,
+                ("📷 Шаг 1 из 3\n\nЗагрузите два новых фото.\n" if PRESETS[draft.preset].inputs == 2
+                 else "📷 Шаг 1 из 3\n\nЗагрузите новое фото.\n")
                 +
                 "Для лучшего качества отправьте фото файлом. JPEG/PNG/WebP до 10 MB.\n"
                 "Или сфотографируйте себя сейчас — желательно на нейтральном фоне, например у стены.",
@@ -613,10 +745,10 @@ def build_dispatcher(settings, store, media, service):
         choice = PRESETS[draft.preset]
         cost = service.cost(draft.preset)
         unit = "бесплатная генерация" if trial else "попытка(и)"
-        await message.answer(
-            f"Шаг 3 из 3 · {choice.label}\nИзменение: {draft.description}\n"
-            f"Стоимость: {cost} {unit}. Один результат.\n"
-            "Каждый новый вариант — новая попытка.",
+        await step_answer(
+            message, user, draft,
+            f"✨ Шаг 3 из 3 · {choice.label}\n\n{draft.description}\n\n"
+            f"{cost} {unit} · один результат.",
             reply_markup=BACK if trial else buttons(
                 [
                     [(f"Создать · {cost} {unit}", "confirm:" + draft.token, "success")],
@@ -661,6 +793,7 @@ async def run(settings):
             if (await bot.get_webhook_info()).url:
                 raise ValueError("telegram_webhook_already_configured")
             store, media = Store(settings.data_dir / "db.sqlite3"), Media(settings.data_dir)
+            steps = StepMessages(store)
             provider = (
                 MockProvider()
                 if settings.image_provider == "mock"
@@ -668,21 +801,8 @@ async def run(settings):
             )
 
             async def deliver(user, job, path):
-                if user == 0:  # Local browser demo has no Telegram destination.
-                    return
-                caption = "Ваш новый образ готов ✨ Сохраните фото и проверьте сходство."
-                if settings.image_provider == "mock":
-                    caption = "DEMO: тестовая копия, ИИ-правка не выполнялась. " + caption
-                await bot.send_document(
-                    user,
-                    FSInputFile(path, filename="Ваш образ.jpg"),
-                    caption=caption,
-                    reply_markup=buttons(
-                        [
-                            [("📸 Новая правка", "nav:edit"), ("🖼 Мои результаты", "nav:results")],
-                        ]
-                    ),
-                )
+                await deliver_result(bot, store, steps, user, job, path,
+                                     demo=settings.image_provider == "mock")
 
             async def notify(user, job):
                 if user == 0:
@@ -700,7 +820,7 @@ async def run(settings):
                 )
 
             service = Service(store, media, provider, deliver, notify, trial_access=settings.trial_access)
-            dp = build_dispatcher(settings, store, media, service)
+            dp = build_dispatcher(settings, store, media, service, step_messages=steps)
             await bot.set_my_commands([
                 command.model_copy(update={"description": {
                     "demo": "Мои бесплатные генерации", "id": "Мой Telegram ID",

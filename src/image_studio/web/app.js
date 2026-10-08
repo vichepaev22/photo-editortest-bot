@@ -10,16 +10,16 @@
   if (typeof configuredBase === 'string' && configuredBase.trim()) {
     try { const parsed = new URL(configuredBase,location.href); if (parsed.protocol === 'https:' || localHost && parsed.protocol === 'http:') apiBase = parsed.origin; } catch {}
   } else if (localHost) apiBase = location.origin;
-  const state = {preview:!apiBase,trial:!apiBase && window.OBRAZ_PREVIEW_TRIAL===true,catalog: [], mode: 'mock', localDemo: false, token: '', me: null, tab: 'studio', preset: 'hair', photos: [], uploading: new Set(), jobs: [], job: null, pending: null, submitting: false, polling: null, resultURLs: new Map(), sourceURLs: new Map(), liveURLs: new Set()};
+  const state = {preview:!apiBase,trial:!apiBase && window.OBRAZ_PREVIEW_TRIAL===true,connection:'loading',connecting:false,entering:false,pickerOpen:false,catalog: [], mode: 'mock', localDemo: false, token: '', me: null, tab: 'studio', preset: 'hair', photos: [], uploading: new Set(), jobs: [], job: null, pending: null, submitting: false, polling: null, resultURLs: new Map(), sourceURLs: new Map(), liveURLs: new Set()};
   const bridge = window.Telegram?.WebApp?.initData ? window.Telegram.WebApp : null;
   const supports = version => Boolean(bridge?.isVersionAtLeast?.(version));
   const hints = {
-    hair: ['Новая длина, цвет или укладка. Сохраним ваш характер.', 'Например: каре до плеч, мягкие волны и натуральный каштановый цвет'],
-    clothes: ['Примерьте другой стиль, сохранив себя в кадре.', 'Например: светлый льняной костюм и белая футболка'],
-    glasses: ['Найдите свою форму оправы и настроение.', 'Например: тонкая круглая оправа тёмного металла'],
-    background: ['Перенесите кадр в место, которое вам близко.', 'Например: светлая студия, тёплый дневной свет и бежевый фон'],
-    enhance: ['Больше света и деталей. Естественно и бережно.', 'Например: убрать шум, мягко улучшить свет, сохранить естественную кожу'],
-    merge: ['Два исходных фото — один общий кадр.', 'Например: объединить людей с обоих фото в одном кадре у моря']
+    hair: ['Укажите длину, цвет и укладку.', 'Например: каре до плеч, мягкие волны и натуральный каштановый цвет', 'Портрет до и после изменения причёски'],
+    clothes: ['Опишите одежду, цвет и материал.', 'Например: светлый льняной костюм и белая футболка; сохранить позу и лицо', 'Один человек в двух вариантах одежды'],
+    glasses: ['Укажите форму, цвет и материал оправы.', 'Например: тонкая круглая оправа тёмного металла с прозрачными линзами', 'Один портрет без очков и с оправой'],
+    background: ['Опишите место, свет и настроение кадра.', 'Например: заменить фон на светлую студию с тёплым дневным светом; сохранить человека', 'Один портрет с исходным и новым фоном'],
+    enhance: ['Укажите, что улучшить без изменения внешности.', 'Например: убрать шум, мягко улучшить свет, сохранить черты лица и естественную кожу', 'Фото до и после улучшения света и чёткости'],
+    merge: ['Загрузите два фото и опишите общий кадр.', 'Например: люди с обоих фото рядом у моря, общий дневной свет; сохранить лица', 'Два исходных портрета и один общий кадр']
   };
   const presetIcon = id => `<span class="preset-emoji" aria-hidden="true">${({hair:"✂",clothes:"♧",glasses:"◉",background:"▧",enhance:"✦",merge:"⊞"})[id] || "·"}</span>`;
   const credits = number => state.trial ? `${number} ${number === 1 ? 'генерация' : number >= 2 && number <= 4 ? 'генерации' : 'генераций'}` : `${number} ${number === 1 ? 'попытка' : number >= 2 && number <= 4 ? 'попытки' : 'попыток'}`;
@@ -34,7 +34,7 @@
   function haptic(type = 'selectionChanged') { try { if(supports('6.1')) bridge?.HapticFeedback?.[type]?.(); } catch {} }
   function trackURL(blob) { const url = URL.createObjectURL(blob); state.liveURLs.add(url); return url; }
   function releaseURL(url) { if (url) { URL.revokeObjectURL(url); state.liveURLs.delete(url); } }
-  function resetMedia() { for (const url of state.liveURLs) URL.revokeObjectURL(url); state.liveURLs.clear(); state.photos = []; state.resultURLs.clear(); state.sourceURLs.clear(); }
+  function resetMedia() { for (const url of state.liveURLs) URL.revokeObjectURL(url); state.liveURLs.clear(); state.photos = []; state.resultURLs.clear(); state.sourceURLs.clear(); state.pickerOpen=false; document.querySelectorAll('[data-upload]').forEach(input => {input.value='';}); }
   class APIError extends Error { constructor(code, status) { super(errors[code] || 'Не удалось выполнить действие. Попробуйте позже или обратитесь в поддержку.'); this.code = code; this.status = status; } }
   async function api(path, options = {}) {
     if (state.preview) throw new APIError('demo_unavailable',403);
@@ -68,9 +68,17 @@
       $('enterButton').textContent='Попробовать интерфейс';$('enterButton').disabled=false;
       return;
     }
+    if (state.connection === 'error' && !state.catalog.length) {
+      $('entryHeading').textContent='Подключение к студии прервалось';
+      $('entryCopy').textContent='Выберите фото сейчас — оно останется в этой вкладке. Для загрузки на сервер нужно подключение и ваше согласие.';
+      $('entryConsent').closest('label').hidden=true;
+      $('enterButton').textContent='Подключиться снова';$('enterButton').disabled=false;
+      return;
+    }
+    $('entryConsent').closest('label').hidden=false;
     $('entryConsent').checked = false;
     const telegram = Boolean(bridge?.initData);
-    $('entryHeading').textContent = state.me ? 'Разрешите обработку ваших фото' : telegram ? 'Добро пожаловать в вашу студию' : 'Посмотрите, как устроена студия';
+    $('entryHeading').textContent = state.me ? 'Разрешите обработку ваших фото' : telegram ? 'Добро пожаловать в Образ' : 'Посмотрите, как устроена студия';
     $('entryCopy').textContent = state.mode === 'mock' ? 'Это тестовый режим: результат — копия исходного фото, без ИИ-правки и передачи OpenAI. Фото и описания хранятся локально до 24 часов. Для людей на фото нужны права и их согласие.' : 'После подтверждения фото и описание передаются OpenAI для правки. Лицо может измениться. Локальные фото, описания и результаты хранятся до 24 часов. Для людей на фото нужны права и их согласие.';
     $('entryConsentText').textContent = state.mode === 'mock' ? 'Мне 18+, у меня есть права на фото и согласие всех изображённых людей. Согласен на локальную обработку фото и описания в тестовом режиме.' : 'Мне 18+, у меня есть права на фото и согласие всех изображённых людей. Согласен на обработку фото и описания и их передачу OpenAI.';
     if(state.trial) $('entryCopy').textContent='После входа через Telegram и согласия — всего 3 бесплатные реальные генерации OpenAI. Любая функция, включая объединение, использует 1 генерацию. Каждый новый вариант — ещё 1. ' + $('entryCopy').textContent;
@@ -80,19 +88,20 @@
   }
   async function enter() {
     if(state.preview) {$('entryPanel').hidden=true;showTab('studio');return;}
-    if (!$('entryConsent').checked) return;
-    $('enterButton').disabled = true;
+    if (state.connection === 'error' && !state.catalog.length) {await connect();return;}
+    if (state.entering || !$('entryConsent').checked) return;
+    state.entering=true;$('enterButton').disabled = true;$('enterButton').textContent='Подключаем…';updatePhotoStatus();
     try {
       if (!state.token) {
         const session = await api(bridge?.initData ? '/api/session' : '/api/demo-session', {method:'POST', json:bridge?.initData ? {init_data:bridge.initData} : {consent:true}});
         storeToken(session.token);
       }
       if (bridge?.initData || state.me) await api('/api/consent', {method:'POST',json:{accepted:true}});
-      await loadMe(); $('entryPanel').hidden = true; $('notice').hidden = true; updateAction();
+      await loadMe(); state.connection='ready';$('entryPanel').hidden = Boolean(state.me?.consent); $('notice').hidden = true; updateAction();
     } catch (error) { notify(error instanceof APIError ? error.message : 'Студия недоступна. Проверьте соединение и попробуйте войти снова.', true); }
-    finally { $('enterButton').disabled = !$('entryConsent').checked; }
+    finally { state.entering=false;$('enterButton').textContent=state.me ? 'Разрешить и продолжить' : bridge?.initData ? 'Войти через Telegram' : state.localDemo ? 'Открыть тестовую студию' : 'Откройте студию из Telegram';$('enterButton').disabled = !$('entryConsent').checked;updatePhotoStatus(); }
   }
-  async function loadMe() { state.me = await api('/api/me'); state.trial=state.me.trial_access===true; renderMe(); if (!state.me.consent) showEntry(); else $('entryPanel').hidden = true; updateAction(); }
+  async function loadMe() { state.me = await api('/api/me'); state.trial=state.me.trial_access===true; renderMe(); if (!state.me.consent) showEntry(); else $('entryPanel').hidden = true; updateAction(); flushPhotos(); }
   function renderMe() {
     const available = state.me?.available;
     $('headerBalance').textContent = available ?? '—'; $('profileBalance').textContent = available ?? '—';
@@ -119,40 +128,91 @@
   }
   function renderPresets() {
     $('presetGrid').innerHTML = state.catalog.map(item => `<button type="button" class="preset-card ${item.id === state.preset ? 'selected' : ''}" data-preset="${escape(item.id)}" aria-pressed="${item.id === state.preset}">${presetIcon(item.id)}<span class="preset-label">${escape(item.label.replace('Объединить два фото','Объединить').replace('Улучшение фото','Улучшение'))}</span><span class="preset-cost">${credits(item.credits)}</span>${item.id === state.preset ? '<span class="selection-mark" aria-hidden="true">✓</span>' : ''}</button>`).join('');
-    $('looksGrid').innerHTML = state.catalog.map(item => `<button type="button" class="look-card" data-look="${escape(item.id)}"><div class="look-art-wrap"><span class="asset-slot-label">Место для вашего примера<br><small>${escape(item.label)}</small></span></div><div class="look-copy"><strong>${escape(item.label)}</strong><p>${escape(hints[item.id]?.[0] || 'Опишите свою идею в студии.')}</p><span>Попробовать · ${credits(item.credits)} ${icon('arrow')}</span></div></button>`).join('');
+    $('looksGrid').innerHTML = state.catalog.map(item => `<button type="button" class="look-card" data-look="${escape(item.id)}"><div class="look-art-wrap"><span class="asset-slot-label"><strong>${escape(item.label)}</strong><span>${escape(hints[item.id]?.[2] || 'Пример этого изменения')}</span><small>Здесь будет пример владельца студии</small></span></div><div class="look-copy"><strong>${escape(item.label)}</strong><p>${escape(hints[item.id]?.[0] || 'Опишите свою идею в студии.')}</p><span>Попробовать · ${credits(item.credits)} ${icon('arrow')}</span></div></button>`).join('');
     $('description').placeholder = hints[state.preset]?.[1] || 'Опишите, что вы хотите изменить на фото';
     updateAction();
   }
   function selectPreset(id) {
     if (state.uploading.size || state.pending) { notify('Завершите загрузку или отправку текущего задания перед сменой образа.'); return; }
-    state.preset = id; renderPresets(); renderPhotos(); haptic();
+    state.preset = id; renderPresets(); renderPhotos(); flushPhotos(); haptic();
   }
   function renderPhotos() {
     const required = currentPreset()?.inputs || 1;
     $('photoSlots').classList.toggle('merge-slots', required === 2);
     $('photoSlots').innerHTML = Array.from({length:required}, (_, index) => {
       const photo = state.photos[index];
-      return `<div class="photo-slot">${photo ? `<img src="${escape(photo.url)}" alt="Ваше исходное фото ${index + 1}"><div class="photo-overlay"><span>Фото ${index + 1}</span><button type="button" class="icon-button" data-remove="${index}" aria-label="Убрать фото ${index + 1}" ${state.pending ? 'disabled' : ''}>${icon('close')}</button></div>` : `<label class="upload-label"><span class="upload-plus">${icon('plus')}</span><strong>${state.uploading.has(index) ? 'Загружаем фото…' : required === 2 ? `Добавить фото ${index + 1}` : 'Добавьте своё фото'}</strong><small>${required === 2 ? 'Два фото, один общий кадр' : 'Здесь начинается новый образ'}</small><input type="file" accept="image/jpeg,image/png,image/webp" data-upload="${index}" aria-label="Загрузить фото ${index + 1}" ${!state.preview && !state.me?.consent || state.uploading.has(index) || state.pending ? 'disabled' : ''}></label>`}</div>`;
+      return `<div class="photo-slot">${photo ? `<img src="${escape(photo.url)}" alt="Ваше исходное фото ${index + 1}"><div class="photo-overlay"><span>${state.uploading.has(index) ? 'Загружаем…' : photo.error ? 'Загрузка прервалась' : photo.id ? `Фото ${index + 1}` : 'Выбрано в этой вкладке'}</span>${photo.error ? `<button type="button" class="upload-retry" data-retry-upload="${index}">Повторить</button>` : ''}<button type="button" class="icon-button" data-remove="${index}" aria-label="Убрать фото ${index + 1}" ${state.pending || state.uploading.has(index) ? 'disabled' : ''}>${icon('close')}</button></div>` : `<button type="button" class="upload-label" data-pick-photo="${index}" aria-controls="photoPicker${index}" aria-describedby="photoStatus"><span class="upload-plus">${icon('plus')}</span><strong>${required === 2 ? `Добавить фото ${index + 1}` : 'Добавьте своё фото'}</strong><small>${required === 2 ? 'Два фото, один общий кадр' : 'Здесь начинается новый образ'}</small></button>`}</div>`;
     }).join('');
     $('photoCount').textContent = `${state.photos.slice(0,required).filter(Boolean).length} / ${required}`;
     updateAction();
   }
+  function updatePhotoStatus() {
+    const required=currentPreset()?.inputs || 1;
+    const selected=state.photos.slice(0,required).filter(Boolean);
+    const waiting=selected.some(photo => !photo.id);
+    const failed=selected.find(photo => photo.error);
+    let message='Фото можно заменить или убрать до создания. Загрузка не тратит попытки.';
+    if (state.pending) message='Проверяем отправку задания. Фото можно изменить после получения ответа.';
+    else if (state.uploading.size) message='Загружаем выбранное фото… Создание ещё не началось.';
+    else if (state.pickerOpen) message='Выберите фото в системном окне. Если окно не открылось, нажмите «Добавить фото» ещё раз.';
+    else if (state.preview) message='Фото остаётся только в этой вкладке. Генерация в предпросмотре не подключена.';
+    else if (failed) message=failed.error;
+    else if (state.connection==='loading' || state.entering) message=waiting ? 'Фото выбрано и остаётся в этой вкладке. Подключаем студию…' : 'Подключаем студию… Фото можно выбрать сейчас.';
+    else if (state.connection==='error') message='Нет связи со студией. Выбранное фото остаётся в этой вкладке; подключитесь снова.';
+    else if (!state.me?.consent) message=waiting ? 'Фото выбрано и остаётся в этой вкладке. Для загрузки подтвердите согласие выше.' : 'Можно выбрать фото сейчас. Для загрузки на сервер подтвердите согласие выше.';
+    else if (waiting) message='Фото выбрано. Готовим загрузку…';
+    else if (state.me.available < (currentPreset()?.credits || 1)) message=state.trial ? 'Бесплатные генерации закончились. Выбор и загрузка фото остаются доступны.' : 'Не хватает попыток для создания. Выбор и загрузка фото остаются доступны.';
+    $('photoStatus').textContent=message;
+    $('photoStatus').classList.toggle('error',Boolean(failed) || state.connection==='error');
+    $('photoStatus').classList.toggle('loading',Boolean(state.uploading.size) || state.connection==='loading' || state.entering);
+    $('reconnectButton').hidden=state.preview || state.connection!=='error';
+  }
+  function pickPhoto(index) {
+    if (state.pending || state.uploading.size) {notify(state.pending ? 'Сначала проверим отправку текущего задания.' : 'Дождитесь завершения загрузки фото.');return;}
+    const input=$(`photoPicker${index}`);
+    if (!input) return;
+    state.pickerOpen=true;updatePhotoStatus();
+    // Keep the picker in this click's user gesture; authentication runs separately.
+    try {
+      if (typeof input.showPicker==='function') input.showPicker();
+      else input.click();
+    } catch {
+      try {input.click();} catch {state.pickerOpen=false;notify('Не удалось открыть выбор фото. Попробуйте нажать «Добавить фото» ещё раз.',true);updatePhotoStatus();}
+    }
+  }
   async function upload(file, index) {
-    if (!file || !state.preview && !state.me?.consent || state.pending) return;
-    if (file.size > 10_000_000 || file.size === 0) { notify('Выберите фото размером до 10 MB.', true); return; }
-    if (!['image/jpeg','image/png','image/webp'].includes(file.type)) { notify('Поддерживаются JPEG, PNG и WebP.', true); return; }
+    state.pickerOpen=false;
+    if (!file) {updatePhotoStatus();return;}
+    if (state.pending || state.uploading.size) {notify('Завершите загрузку или отправку текущего задания перед выбором другого фото.');updatePhotoStatus();return;}
+    if (file.size > 10_000_000 || file.size === 0) { notify('Выберите фото размером до 10 MB.', true); updatePhotoStatus();return; }
+    if (!['image/jpeg','image/png','image/webp'].includes(file.type)) { notify('Поддерживаются JPEG, PNG и WebP.', true); updatePhotoStatus();return; }
+    const previous=state.photos[index];
+    if (previous && ![...state.sourceURLs.values()].includes(previous.url)) releaseURL(previous.url);
+    state.photos[index]={id:state.preview ? crypto.randomUUID() : null,url:trackURL(file),file:state.preview ? null : file,error:null};
+    $('notice').hidden=true;renderPhotos();
+    await sendPhoto(index);
+  }
+  function flushPhotos() {
+    if (state.preview || !state.token || !state.me?.consent || state.pending) return;
+    state.photos.slice(0,currentPreset()?.inputs || 1).forEach((photo,index) => {if(photo?.file && !photo.error) sendPhoto(index);});
+  }
+  async function sendPhoto(index) {
+    const selected=state.photos[index];
+    if (!selected?.file || state.preview || !state.token || !state.me?.consent || state.pending || state.uploading.has(index)) return;
     state.uploading.add(index); renderPhotos();
     try {
-      const photo = state.preview ? {id:crypto.randomUUID()} : await api('/api/photos', {method:'POST',headers:{'Content-Type':'application/octet-stream'},body:file});
-      const previous = state.photos[index];
-      if (previous && ![...state.sourceURLs.values()].includes(previous.url)) releaseURL(previous.url);
-      state.photos[index] = {id:photo.id,url:trackURL(file)}; $('notice').hidden = true;
-    } catch (error) { notify(error instanceof APIError ? error.message : 'Фото не загружено. Проверьте соединение и выберите его снова.', true); }
+      const photo = await api('/api/photos', {method:'POST',headers:{'Content-Type':'application/octet-stream'},body:selected.file});
+      if(state.photos[index]===selected) {selected.id=photo.id;selected.file=null;selected.error=null;}
+      $('notice').hidden = true;
+    } catch (error) {
+      if(state.photos[index]===selected) selected.error=error instanceof APIError ? error.message : 'Фото осталось в этой вкладке. Проверьте связь и нажмите «Повторить».';
+      notify(error instanceof APIError ? error.message : 'Фото не загружено. Проверьте связь и нажмите «Повторить».', true);
+    }
     finally { state.uploading.delete(index); renderPhotos(); }
   }
   function updateAction() {
     const preset = currentPreset(); const description = $('description').value.trim();
-    const ready = Boolean((state.preview || state.me?.consent) && preset && !state.uploading.size && state.photos.slice(0,preset.inputs).filter(Boolean).length === preset.inputs && description && !state.submitting);
+    const ready = Boolean((state.preview || state.me?.consent) && preset && !state.uploading.size && state.photos.slice(0,preset.inputs).filter(photo => photo?.id).length === preset.inputs && description && !state.submitting);
     const hasCredits = !state.me || (state.me.available >= (preset?.credits || 1));
     const running = state.jobs.some(job => activeStatuses.has(job.status) || job.status === 'review');
     $('reviewButton').disabled = state.pending ? state.submitting || !state.token : !ready || !hasCredits || running;
@@ -162,9 +222,10 @@
     $('description').disabled = Boolean(state.pending);
     if(state.preview) $('createHint').textContent=ready ? 'Предпросмотр: создание изображений не подключено' : 'Добавьте фото и описание — они останутся в браузере';
     else if(state.trial && state.me?.consent) $('createHint').textContent=!hasCredits ? 'Все 3 бесплатные генерации использованы' : running ? 'Сначала завершите текущее задание' : !ready ? 'Добавьте фото и описание' : 'Один результат — 1 из 3 бесплатных генераций';
+    updatePhotoStatus();
     try {
       if (state.tab === 'studio' && !state.pending && ready && hasCredits && !running && !$('confirmDialog').open) {
-        if(supports('6.0')) {bridge?.MainButton?.setParams({text:state.preview ? 'Предпросмотр · подтверждение' : `Создать · ${credits(preset.credits)}`,color: '#7349bb',text_color:'#ffffff',is_active:true}); bridge?.MainButton?.show();}
+        if(supports('6.0')) {const colors=getComputedStyle(document.documentElement);bridge?.MainButton?.setParams({text:state.preview ? 'Предпросмотр · подтверждение' : `Создать · ${credits(preset.credits)}`,color:colors.getPropertyValue('--accent').trim(),text_color:colors.getPropertyValue('--accent-ink').trim(),is_active:true}); bridge?.MainButton?.show();}
       } else if(supports('6.0')) bridge?.MainButton?.hide();
     } catch {}
   }
@@ -276,13 +337,17 @@
     const root = document.documentElement;
     root.dataset.theme = bridge.colorScheme === 'dark' ? 'dark' : 'light';
     const theme = bridge.themeParams || {};
-    for (const [variable,key] of [['--bg','bg_color'],['--surface','secondary_bg_color'],['--text','text_color'],['--muted','hint_color']]) if (/^#[\da-f]{6}$/i.test(theme[key] || '')) root.style.setProperty(variable,theme[key]);
+    for (const [variable,key] of [['--bg','bg_color'],['--surface','secondary_bg_color'],['--text','text_color'],['--muted','hint_color']]) {
+      root.style.removeProperty(variable);
+      if (/^#[\da-f]{6}$/i.test(theme[key] || '')) root.style.setProperty(variable,theme[key]);
+    }
     document.querySelector('meta[name=theme-color]').content = theme.bg_color || '#f6f5f3';
     const safe = bridge.safeAreaInset || {};
     const content = bridge.contentSafeAreaInset || {};
     // Both insets describe protected viewport edges: reserve the larger exclusion once.
     root.style.setProperty('--safe-top', `${Math.max(0,safe.top || 0,content.top || 0)}px`);
     root.style.setProperty('--safe-bottom', `${Math.max(0,safe.bottom || 0,content.bottom || 0)}px`);
+    updateAction();
   }
   function setupBridge() {
     if(!bridge) return;
@@ -294,11 +359,20 @@
     $('balanceButton').addEventListener('click',() => showTab('profile',true));
     document.querySelector('.wordmark').addEventListener('click',event => {event.preventDefault();showTab('studio',true);});
     $('allPresetsButton').addEventListener('click',() => showTab('looks',true));
-    $('entryConsent').addEventListener('change',() => {$('enterButton').disabled = !$('entryConsent').checked;}); $('enterButton').addEventListener('click',enter);
+    $('entryConsent').addEventListener('change',() => {$('enterButton').disabled = state.entering || !$('entryConsent').checked;}); $('enterButton').addEventListener('click',enter);
+    $('reconnectButton').addEventListener('click',connect);
     $('presetGrid').addEventListener('click',event => {const button = event.target.closest('[data-preset]');if(button) selectPreset(button.dataset.preset);});
     $('looksGrid').addEventListener('click',event => {const button = event.target.closest('[data-look]');if(button) {selectPreset(button.dataset.look);showTab('studio',true);}});
-    $('photoSlots').addEventListener('change',event => {if (event.target.matches('[data-upload]')) upload(event.target.files[0],Number(event.target.dataset.upload));});
-    $('photoSlots').addEventListener('click',event => {const button=event.target.closest('[data-remove]');if (!button || state.pending || state.uploading.size) return; const index=Number(button.dataset.remove); const photo=state.photos[index]; if (photo && ![...state.sourceURLs.values()].includes(photo.url)) releaseURL(photo.url); state.photos[index]=null;renderPhotos();});
+    document.querySelectorAll('[data-upload]').forEach(input => {
+      input.addEventListener('change',() => {const file=input.files[0];input.value='';upload(file,Number(input.dataset.upload));});
+      input.addEventListener('cancel',() => {state.pickerOpen=false;updatePhotoStatus();notify('Выбор фото отменён. Нажмите «Добавить фото», когда будете готовы.');});
+    });
+    $('photoSlots').addEventListener('click',event => {
+      const picker=event.target.closest('[data-pick-photo]');if(picker) {pickPhoto(Number(picker.dataset.pickPhoto));return;}
+      const retry=event.target.closest('[data-retry-upload]');if(retry) {sendPhoto(Number(retry.dataset.retryUpload));return;}
+      const button=event.target.closest('[data-remove]');if (!button || state.pending || state.uploading.size) return;
+      const index=Number(button.dataset.remove);const photo=state.photos[index];if(photo && ![...state.sourceURLs.values()].includes(photo.url)) releaseURL(photo.url);state.photos[index]=null;renderPhotos();
+    });
     $('description').addEventListener('input',updateAction); $('reviewButton').addEventListener('click',openReview); $('confirmSubmit').addEventListener('click',submitJob);
     for (const id of ['closeConfirm','editDraft']) $(id).addEventListener('click',() => {if(!state.submitting) {$('confirmDialog').close();updateAction();}});
     $('confirmDialog').addEventListener('cancel',event => {if(state.submitting) event.preventDefault();}); $('confirmDialog').addEventListener('close',updateAction);
@@ -333,6 +407,7 @@
   async function init() {
     bindEvents(); setupBridge(); renderPhotos(); renderResults();
     if(state.preview){
+      state.connection='ready';
       state.catalog=[{id:'hair',label:'Причёска',inputs:1,credits:1},{id:'clothes',label:'Одежда',inputs:1,credits:1},{id:'glasses',label:'Очки',inputs:1,credits:1},{id:'background',label:'Фон',inputs:1,credits:1},{id:'enhance',label:'Улучшение фото',inputs:1,credits:1},{id:'merge',label:'Объединить два фото',inputs:2,credits:state.trial?1:2}];
       $('modeBadge').textContent='Предпросмотр';renderPresets();renderPhotos();renderMe();showEntry();
       document.querySelector('.privacy-note').innerHTML='<span class="privacy-dot"></span>Фото остаются только в вашей вкладке браузера.';
@@ -340,6 +415,12 @@
       $('deleteHeading').textContent='Очистить предпросмотр?';$('deleteDialog').querySelector('.dialog-content>p').textContent='Выбранные фото и описание будут убраны из текущей вкладки.';$('confirmDelete').textContent='Да, очистить предпросмотр';
       return;
     }
+    await connect();
+  }
+  async function connect() {
+    if (state.preview || state.entering || state.connecting) return;
+    state.connecting=true;state.connection='loading';updateAction();
+    $('reconnectButton').disabled=true;
     try {
       const catalog=await api('/api/catalog'); state.catalog=catalog.presets;state.mode=catalog.mode;state.localDemo=catalog.local_demo;state.trial=catalog.trial_access===true;
       if (!state.catalog.some(item=>item.id===state.preset)) state.preset=state.catalog[0]?.id;
@@ -349,7 +430,9 @@
       if(bridge?.initData) {const session=await api('/api/session',{method:'POST',json:{init_data:bridge.initData}});storeToken(session.token);}
       else {try{storeToken(sessionStorage.getItem('obraz.session') || '');}catch{}}
       if(state.token) {await loadMe();await loadJobs();}else showEntry();
-    } catch(error) {showEntry();notify(error instanceof APIError ? error.message : 'Не удалось подключиться к локальной студии. Проверьте, что сервер работает, и обновите страницу.',true);}
+      state.connection='ready';
+    } catch(error) {state.connection='error';showEntry();notify(error instanceof APIError ? error.message : 'Не удалось подключиться к студии. Проверьте связь и нажмите «Подключиться снова».',true);}
+    finally {state.connecting=false;$('reconnectButton').disabled=false;updateAction();}
   }
   init();
 })();

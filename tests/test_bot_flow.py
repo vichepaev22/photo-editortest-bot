@@ -16,6 +16,42 @@ from image_studio.service import Service
 from image_studio.store import Store
 
 
+class TrackedBot(OfflineBot):
+    """Telegram-like distinct outbound IDs, including a delayed progress acknowledgement."""
+
+    def __init__(self):
+        super().__init__()
+        self.message_sequence = 5000
+        self.history = []
+        self.before_progress = None
+        self.fail_delete = False
+        self.fail_document = False
+        self.on_delete = None
+
+    async def __call__(self, method, request_timeout=None):
+        self.sent.append(method)
+        api = method.__api_method__
+        if api == "deleteMessages":
+            if self.on_delete:
+                self.on_delete()
+            self.history.append((method, None))
+            if self.fail_delete:
+                raise OSError("private fake payload")
+            return True
+        if api in {"answerCallbackQuery", "sendChatAction"}:
+            return True
+        if api == "sendDocument" and self.fail_document:
+            raise OSError("private fake payload")
+        if api == "sendMessage" and "Создаём ваш образ" in method.text and self.before_progress:
+            hook, self.before_progress = self.before_progress, None
+            await hook()
+        self.message_sequence += 1
+        response = Message(message_id=self.message_sequence, date=datetime.now(timezone.utc),
+                           chat=Chat(id=method.chat_id, type="private"))
+        self.history.append((method, response))
+        return response
+
+
 def build_ui(tmp_path, *, trial=True):
     store, media, provider = Store(tmp_path / "db.sqlite3"), Media(tmp_path), MockProvider()
     store.consent(1)
@@ -24,7 +60,7 @@ def build_ui(tmp_path, *, trial=True):
     service = Service(store, media, provider, trial_access=trial)
     service.wallet(1)
     settings = Settings(image_provider="openai" if trial else "mock", trial_access=trial)
-    return build_dispatcher(settings, store, media, service), OfflineBot(), store, media, service, provider
+    return build_dispatcher(settings, store, media, service), TrackedBot(), store, media, service, provider
 
 
 @pytest.fixture
@@ -191,7 +227,7 @@ async def test_result_list_download_and_support_are_friendly_without_ids(flow):
     calls, wallet = flow[5].calls, flow[4].wallet(1)
     downloaded = await feed(flow, callback="result:" + job["id"])
     documents = [method.document for method in downloaded if method.__api_method__ == "sendDocument"]
-    assert documents and all(document.filename == "Ваш образ.jpg" for document in documents)
+    assert documents and all(document.filename == "Образ · результат.jpg" for document in documents)
     assert flow[5].calls == calls and flow[4].wallet(1) == wallet
     assert "ID" not in texts(await feed(flow, "/support"))
 
@@ -205,6 +241,105 @@ async def test_nontrial_still_requires_green_confirmation(tmp_path):
     assert button and button.style == "success" and ui[2].jobs(1) == []
     accepted = await feed(ui, callback=button.callback_data)
     assert len(ui[2].jobs(1)) == 1 and ui[2].jobs(1)[0]["id"] not in texts(accepted)
+
+
+def deleted_ids(bot):
+    return {mid for method, _ in bot.history if method.__api_method__ == "deleteMessages"
+            for mid in method.message_ids}
+
+
+def step_ids(bot):
+    return {response.message_id for method, response in bot.history
+            if method.__api_method__ == "sendMessage"
+            and any(text in method.text for text in ["Шаг 1", "Шаг 2", "Шаг 3", "Создаём ваш образ"])}
+
+
+async def test_worker_delivery_cleans_only_steps_even_before_progress_ack(flow):
+    dp, bot, store, _, service, provider = flow
+    await feed(flow, "/start", message_id=1200)
+    await feed(flow, callback="preset:glasses")
+    await feed(flow, photo=True, message_id=1201)
+    await feed(flow, "/help", message_id=1202)
+    await feed(flow, "x" * 1501, message_id=1203)
+    assert deleted_ids(bot) == set()
+
+    async def deliver(user, job, path):
+        await module.deliver_result(bot, store, dp["step_messages"], user, job, path)
+
+    async def finish_before_progress():
+        job = store.jobs(1)[0]["id"]
+        assert await service.process(job)
+
+    def check_delivery_before_delete():
+        assert store.jobs(1)[0]["status"] == "delivered"
+
+    service.deliver = deliver
+    bot.before_progress = finish_before_progress
+    bot.on_delete = check_delivery_before_delete
+    await feed(flow, "Тонкая оправа", message_id=1204)
+    assert store.jobs(1)[0]["status"] == "delivered" and service.wallet(1) == (2, 0)
+    assert provider.calls == 1 and deleted_ids(bot) == step_ids(bot)
+    kept = {response.message_id for method, response in bot.history if response
+            and (method.__api_method__ == "sendDocument" or "фотостудия" in getattr(method, "text", "")
+                 or "Как пользоваться" in getattr(method, "text", "")
+                 or "Описание должно" in getattr(method, "text", ""))}
+    assert kept and kept.isdisjoint(deleted_ids(bot))
+    assert deleted_ids(bot).isdisjoint({1200, 1201, 1202, 1203, 1204})
+    first_delete = next(i for i, (method, _) in enumerate(bot.history)
+                        if method.__api_method__ == "deleteMessages")
+    progress_ack = next(i for i, (method, _) in enumerate(bot.history)
+                        if "Создаём ваш образ" in getattr(method, "text", ""))
+    assert first_delete < progress_ack
+
+
+@pytest.mark.parametrize("failure", ["document", "delete"])
+async def test_result_cleanup_failures_do_not_regenerate_or_change_quota(flow, failure):
+    _, bot, store, media, service, provider = flow
+    await feed(flow, callback="preset:hair")
+    await feed(flow, photo=True)
+    await feed(flow, "Каре")
+    job = store.jobs(1)[0]
+    assert await service.process(job["id"])
+    assert store.job(job["id"])["status"] == "generated" and deleted_ids(bot) == set()
+    old_steps = step_ids(bot)
+    await feed(flow, callback="preset:glasses")
+    newer_steps = step_ids(bot) - old_steps
+    assert newer_steps
+    calls, wallet = provider.calls, service.wallet(1)
+    bot.fail_document, bot.fail_delete = failure == "document", failure == "delete"
+    await feed(flow, callback="result:" + job["id"])
+    assert store.job(job["id"])["status"] == ("generated" if failure == "document" else "delivered")
+    assert provider.calls == calls and service.wallet(1) == wallet
+    assert media.path(store.job(job["id"])["result"]).is_file()
+    assert service.reusable_inputs(1, 1)
+    if failure == "document":
+        assert deleted_ids(bot) == set()
+    else:
+        assert deleted_ids(bot) == old_steps
+    bot.fail_document = bot.fail_delete = False
+    await feed(flow, callback="result:" + job["id"])
+    assert store.job(job["id"])["status"] == "delivered" and deleted_ids(bot) == old_steps
+    assert newer_steps.isdisjoint(deleted_ids(bot))
+    assert provider.calls == calls and service.wallet(1) == wallet
+
+
+@pytest.mark.parametrize("preset,example", [
+    ("hair", "Каре до плеч"), ("clothes", "Бежевый тренч"),
+    ("glasses", "Тонкая чёрная оправа"), ("background", "Парк"),
+    ("enhance", "без ретуши лица"), ("merge", "Мы вместе"),
+])
+async def test_step_two_example_is_specific_and_copy_does_not_submit(flow, preset, example):
+    await feed(flow, callback="preset:" + preset)
+    sent = await feed(flow, photo=True)
+    if preset == "merge":
+        sent = await feed(flow, photo=True)
+    copy = [button for method in sent
+            for row in getattr(getattr(method, "reply_markup", None), "inline_keyboard", [])
+            for button in row if button.copy_text]
+    assert len(copy) == 1 and example in copy[0].copy_text.text
+    assert copy[0].copy_text.text in texts(sent) and copy[0].callback_data is None
+    assert copy[0].style is None and flow[2].jobs(1) == [] and flow[5].calls == 0
+    assert flow[4].wallet(1) == (3, 0)
 
 
 async def test_processing_activity_terminal_filter_failures_and_cancellation():
