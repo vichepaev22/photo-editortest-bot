@@ -96,7 +96,7 @@ MAIN = ReplyKeyboardMarkup(
     input_field_placeholder="Выберите действие ниже",
 )
 BACK = buttons([[("🏠 Главное меню", "nav:home")]])
-CONSENT = buttons([[("Мне 18+, принимаю условия и согласен", "consent", "success")]])
+CONSENT = buttons([[("Для совершеннолетних · принимаю условия", "consent", "success")]])
 COMMANDS = [
     BotCommand(command=name, description=description)
     for name, description in [
@@ -554,7 +554,7 @@ def build_dispatcher(settings, store, media, service, *, step_messages=None):
     @router.message(Command("terms"))
     async def terms(message: Message):
         await message.answer(
-            "Условия пилота: 18+, права и согласие всех изображённых людей, "
+            "Условия пилота: сервис для совершеннолетних, права и согласие всех изображённых людей, "
             "полностью одетые образы. Не используйте результат для обмана. "
             + pricing() + " Новый вариант использует ещё одну попытку. "
             "При ошибке обработки резерв возвращается. Качество и сходство не гарантированы. "
