@@ -338,10 +338,16 @@ async def test_step_two_example_is_specific_and_copy_does_not_submit(flow, prese
     copy = [button for method in sent
             for row in getattr(getattr(method, "reply_markup", None), "inline_keyboard", [])
             for button in row if button.copy_text]
-    assert len(copy) == 1 and example in copy[0].copy_text.text
+    assert len(copy) == (3 if preset == "hair" else 1) and example in copy[0].copy_text.text
     assert copy[0].copy_text.text in texts(sent) and copy[0].callback_data is None
     assert copy[0].style is None and flow[2].jobs(1) == [] and flow[5].calls == 0
     assert flow[4].wallet(1) == (3, 0)
+    if preset == "hair":
+        assert "от 1 до 12" in texts(sent) and "Коллаж — 1 попытка" in texts(sent)
+        assert "может отклониться" in texts(sent)
+        assert "сетка 3×3 из 9" in copy[1].copy_text.text
+        assert "сетка 3×4 из 12" in copy[2].copy_text.text
+        assert all(button.callback_data is None and button.style is None for button in copy)
 
 
 async def test_processing_activity_terminal_filter_failures_and_cancellation():

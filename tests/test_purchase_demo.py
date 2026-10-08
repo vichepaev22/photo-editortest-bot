@@ -1,6 +1,7 @@
 import asyncio
 import io
 import sqlite3
+from contextlib import closing
 from datetime import datetime, timezone
 
 import pytest
@@ -74,9 +75,23 @@ class Harness:
         )
         self.sequence = 0
 
-    def snapshot(self):
-        with sqlite3.connect(self.store.path) as connection:
-            return list(connection.iterdump())
+    def snapshot(self, baseline=None):
+        # Normalize visits in a copy; the source database and all accounting stay intact.
+        with closing(sqlite3.connect(self.store.path)) as source, closing(sqlite3.connect(":memory:")) as copy:
+            source.backup(copy)
+            copy.row_factory = sqlite3.Row
+            accounting = [row["name"] for row in copy.execute("PRAGMA table_info(users)")
+                          if row["name"] not in {"id", "username", "first_seen", "last_seen"}]
+            if baseline is not None:
+                for user in copy.execute("SELECT * FROM users").fetchall():
+                    if (user["id"] not in baseline["user_ids"] and 0 < user["id"] < 2**52
+                            and all(user[column] == 0 for column in accounting)):
+                        copy.execute("DELETE FROM users WHERE id=?", (user["id"],))
+            copy.execute("UPDATE users SET username=NULL,first_seen=NULL,last_seen=NULL")
+            return {
+                "user_ids": frozenset(row["id"] for row in copy.execute("SELECT id FROM users")),
+                "dump": list(copy.iterdump()),
+            }
 
     async def send(self, text=None, *, data=None, user=1, mid=None, chat=None, photo=False):
         self.sequence += 1
@@ -172,7 +187,7 @@ async def test_single_message_flow_back_cancel_and_no_ledger(ui, plan, label, pr
     assert "отменена" in content(cancelled).text and content(cancelled).reply_markup is None
     assert content(cancelled).text.startswith("Образ · Покупка доступа (демо)")
     only_alert(await ui.click(plan_data))
-    assert ui.snapshot() == before and ui.provider.calls == 0
+    assert ui.snapshot(before) == before and ui.provider.calls == 0
     assert ui.settings.trial_access == ui.service.trial_access
 
 
@@ -187,7 +202,7 @@ async def test_expiry_exact_boundary_and_repeated_open_does_not_extend_session(u
     assert ui.demo.sessions[1].created == 0
     ui.now = TTL_SECONDS
     only_alert(await ui.send(data=data(choice, "method:sbp"), mid=initial_id))
-    assert ui.demo.sessions == {} and ui.snapshot() == before
+    assert ui.demo.sessions == {} and ui.snapshot(before) == before
     await ui.send(NAV["buy"])
     assert ui.demo.sessions[1].message_id != initial_id
     assert ui.demo.sessions[1].created == TTL_SECONDS
@@ -219,7 +234,7 @@ async def test_tampered_callbacks_only_alert_and_preserve_state(ui, tamper):
     else:
         payload += ":extra"
     only_alert(await ui.send(data=payload, user=user, chat=chat, mid=mid))
-    assert ui.demo.sessions[1] == session and ui.snapshot() == before and ui.provider.calls == 0
+    assert ui.demo.sessions[1] == session and ui.snapshot(before) == before and ui.provider.calls == 0
 
 
 async def test_two_users_isolated_and_nav_buy_requires_own_private_chat(ui):
@@ -272,7 +287,7 @@ async def test_purchase_preserves_loaded_photo_active_job_and_step_tracking(ui):
     choice = await ui.click(data(first, "plan:express"))
     final = await ui.click(data(choice, "method:crypto"))
     await ui.click(data(final, "cancel"))
-    assert ui.snapshot() == before and ui.store.job(job)["status"] == "queued"
+    assert ui.snapshot(before) == before and ui.store.job(job)["status"] == "queued"
     assert list(ui.dp["step_messages"].scopes) == scopes_before
     assert {path: path.read_bytes() for path in ui.media.root.rglob("*") if path.is_file()} == files_before
     after = await ui.send("Сохрани лицо, добавь каре")
@@ -295,6 +310,62 @@ async def test_support_direct_green_url_keeps_draft(ui):
         assert button.callback_data is None
     after = await ui.send("Каре")
     assert "Шаг 3" in content(after).text or ui.settings.trial_access
+
+
+def test_snapshot_excludes_only_visits_and_new_zero_accounting_users(ui):
+    before = ui.snapshot()
+    ui.store.record_visit(1, "changed_user")
+    ui.store.record_visit(2, "new_visitor")
+    assert ui.snapshot(before) == before
+    with ui.store.tx() as connection:
+        columns = [row["name"] for row in connection.execute("PRAGMA table_info(users)")
+                   if row["name"] not in {"id", "username", "first_seen", "last_seen"}]
+    for column in columns:
+        mutation = "balance=1,reserved=1" if column == "reserved" else f"{column}=1"
+        reset = "balance=0,reserved=0" if column == "reserved" else f"{column}=0"
+        with ui.store.tx() as connection:
+            connection.execute(f"UPDATE users SET {mutation} WHERE id=2")
+        assert ui.snapshot(before) != before, column
+        with ui.store.tx() as connection:
+            connection.execute(f"UPDATE users SET {reset} WHERE id=2")
+        assert ui.snapshot(before) == before
+    # Normalizing a snapshot must not clear real visit identity or timestamps.
+    with ui.store.tx() as connection:
+        users = connection.execute("SELECT id,username,first_seen,last_seen FROM users ORDER BY id").fetchall()
+        assert [row["username"] for row in users] == ["changed_user", "new_visitor"]
+        assert all(row["first_seen"] is not None and row["last_seen"] is not None for row in users)
+
+
+def test_snapshot_preserves_existing_zero_users_and_every_accounting_table(ui):
+    ui.store.record_visit(2)
+    before = ui.snapshot()
+    with ui.store.tx() as connection:
+        connection.execute("DELETE FROM users WHERE id=2")
+    assert ui.snapshot(before) != before
+    ui.store.record_visit(2)
+    assert ui.snapshot(before) == before
+    mutations = {
+        "events": "INSERT INTO events(created,kind,ref) VALUES(1,'guard','offline')",
+        "invoices": (
+            "INSERT INTO invoices(id,user_id,pack,amount,credits,created,spent_baseline) "
+            "VALUES('guard',1,'offline',100,1,1,0)"
+        ),
+        "payments": (
+            "INSERT INTO payments(charge_id,order_id,user_id,amount,is_test) VALUES('guard','guard',1,100,1)"
+        ),
+        "jobs": (
+            "INSERT INTO jobs(id,user_id,request_key,preset,cost,created) VALUES('guard',1,'guard','hair',1,1)"
+        ),
+    }
+    for table, mutation in mutations.items():
+        with ui.store.tx() as connection:
+            connection.execute(mutation)
+        assert ui.snapshot(before) != before, table
+        with ui.store.tx() as connection:
+            connection.execute(f"DELETE FROM {table} WHERE " + ("kind='guard'" if table == "events"
+                                                               else "charge_id='guard'" if table == "payments"
+                                                               else "id='guard'"))
+        assert ui.snapshot(before) == before
 
 
 async def test_concurrent_lower_presses_reuse_message_and_memory_cap():

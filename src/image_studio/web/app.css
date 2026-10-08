@@ -16,3 +16,4 @@
 .compare-frame.document-sheet{aspect-ratio:7/9}.compare-frame.document-sheet img{object-fit:contain}
 
 .document-options{margin-bottom:14px}.document-options label{display:block;margin-bottom:8px}.document-options select{width:100%;min-height:44px;border-radius:12px;padding:10px;color:inherit;background:var(--surface,#f3f3f3);border:1px solid var(--line,#ddd)}.document-options p{font-size:12px;line-height:1.5;margin:10px 0}
+.hair-examples{margin-bottom:14px}.hair-examples p{font-size:12px;line-height:1.5;color:var(--muted);margin:10px 0}.hair-example-actions{display:flex;gap:8px;flex-wrap:wrap}.hair-example-actions .secondary-button{flex:1;min-height:44px;padding:10px 12px;font-size:12px}

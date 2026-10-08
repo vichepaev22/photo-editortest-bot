@@ -79,6 +79,14 @@ DOCUMENT_OPTIONS = {
     "suit": "Белый фон, тёмный деловой костюм и светлая рубашка; сохранить лицо. Фото на документы",
     "shirt": EXAMPLES["document"],
 }
+HAIR_EXAMPLES = {
+    9: "Одно изображение: сетка 3×3 из 9 разных причёсок — каре, боб, пикси, каскад, "
+       "прямые длинные волосы, волны, кудри, чёлка, собранные волосы. "
+       "В каждой ячейке человек с моего фото. Сохрани лицо, возраст, ракурс, одежду и фон; без текста.",
+    12: "Одно изображение: сетка 3×4 из 12 разных причёсок — каре, боб, пикси, каскад, "
+        "прямые длинные волосы, волны, кудри, чёлка, хвост, пучок, коса, короткая стрижка. "
+        "В каждой ячейке человек с моего фото. Сохрани лицо, возраст, ракурс, одежду и фон; без текста.",
+}
 RESULT_FILENAME = "Образ · результат.jpg"
 
 
@@ -381,12 +389,24 @@ def build_dispatcher(settings, store, media, service, *, step_messages=None, pur
                 ] + [[("🏠 Главное меню", "nav:home")]]),
             )
             return
+        hair_hint = (
+            "\n\n💇 Рекомендуем запрашивать от 1 до 12 причёсок на одном изображении: "
+            "один образ или коллаж из 9/12 вариантов. Коллаж — 1 попытка.\n"
+            "В коллаже портреты мельче; модель может отклониться от числа вариантов."
+            if draft.preset == "hair" else ""
+        )
+        collage_buttons = [
+            [InlineKeyboardButton(text=f"📋 Пример · {count} причёсок", copy_text=CopyTextButton(text=text))]
+            for count, text in HAIR_EXAMPLES.items()
+        ] if draft.preset == "hair" else []
         await step_answer(
             message, message.chat.id, draft,
             f"✍️ Шаг 2 из 3 · Опишите изменение\n\nНапример: «{example}»."
+            + hair_hint
             + ("\n\nОтправка описания — 1 бесплатная генерация." if trial else ""),
             reply_markup=InlineKeyboardMarkup(inline_keyboard=[
                 [InlineKeyboardButton(text="📋 Скопировать пример", copy_text=CopyTextButton(text=example))],
+                *collage_buttons,
                 *BACK.inline_keyboard,
             ]),
         )

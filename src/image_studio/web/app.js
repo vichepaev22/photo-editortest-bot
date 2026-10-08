@@ -25,6 +25,15 @@
   };
   const presetIcon = id => `<span class="preset-emoji" aria-hidden="true">${({hair:"✂",clothes:"♧",glasses:"◉",background:"▧",enhance:"✦",merge:"⊞",document_original:"▤",document:"♧"})[id] || "·"}</span>`;
   const documentPreset = id => ['document','document_original'].includes(id);
+  const hairExamples = {
+    single:'Каре до плеч с мягкими волнами. Один образ; сохранить лицо, одежду и фон.',
+    nine:'Одно изображение: сетка 3×3 из 9 разных причёсок — каре, боб, пикси, каскад, прямые длинные волосы, волны, кудри, чёлка, собранные волосы. В каждой ячейке человек с моего фото. Сохрани лицо, возраст, ракурс, одежду и фон; без текста.',
+    twelve:'Одно изображение: сетка 3×4 из 12 разных причёсок — каре, боб, пикси, каскад, прямые длинные волосы, волны, кудри, чёлка, хвост, пучок, коса, короткая стрижка. В каждой ячейке человек с моего фото. Сохрани лицо, возраст, ракурс, одежду и фон; без текста.'
+  };
+  function renderHairExamples() {
+    $('hairExamples').hidden=state.preset !== 'hair';
+    $('hairExamples').querySelectorAll('button').forEach(button => {button.disabled=Boolean(state.pending || state.submitting);});
+  }
   const documentDescriptions = {keep:'Белый фон, сохранить одежду и лицо. Четыре фото 35×45 мм',suit:'Белый фон, тёмный деловой костюм и светлая рубашка; сохранить лицо',shirt:'Белый фон, светлая рубашка; сохранить лицо',original:'Подготовить исходное фото: четыре снимка 35×45 мм без ИИ'};
   const selectedPresetId = () => state.preset === 'document' && state.documentMode === 'original' ? 'document_original' : currentPreset()?.id;
   function renderDocumentOptions() {
@@ -223,6 +232,7 @@
     finally { state.uploading.delete(index); renderPhotos(); }
   }
   function updateAction() {
+    renderHairExamples();
     renderDocumentOptions();
     const preset = currentPreset(); const description = $('description').value.trim();
     const ready = Boolean((state.preview || state.me?.consent) && preset && !state.uploading.size && state.photos.slice(0,preset.inputs).filter(photo => photo?.id).length === preset.inputs && description && !state.submitting);
@@ -389,6 +399,12 @@
       const index=Number(button.dataset.remove);const photo=state.photos[index];if(photo && ![...state.sourceURLs.values()].includes(photo.url)) releaseURL(photo.url);state.photos[index]=null;renderPhotos();
     });
     $('documentMode').addEventListener('change',() => {if(state.pending || state.submitting) return; state.documentMode=$('documentMode').value; $('description').value=documentDescriptions[state.documentMode]; updateAction();});
+    $('hairExamples').addEventListener('click',event => {
+      const button=event.target.closest('[data-hair-example]');
+      if(!button || state.preset !== 'hair' || state.pending || state.submitting) return;
+      const example=hairExamples[button.dataset.hairExample]; if(!example) return;
+      $('description').value=example; updateAction(); $('description').focus();
+    });
     $('description').addEventListener('input',updateAction); $('reviewButton').addEventListener('click',openReview); $('confirmSubmit').addEventListener('click',submitJob);
     for (const id of ['closeConfirm','editDraft']) $(id).addEventListener('click',() => {if(!state.submitting) {$('confirmDialog').close();updateAction();}});
     $('confirmDialog').addEventListener('cancel',event => {if(state.submitting) event.preventDefault();}); $('confirmDialog').addEventListener('close',updateAction);
