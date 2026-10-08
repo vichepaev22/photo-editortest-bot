@@ -6,6 +6,7 @@ import socket
 import time
 import uuid
 from dataclasses import dataclass, field
+from datetime import datetime
 from urllib.request import getproxies, proxy_bypass
 
 import uvicorn
@@ -95,7 +96,7 @@ COMMANDS = [
         ("balance", "Остаток попыток"),
         ("id", "Мой ID для пилотного доступа"),
         ("cancel", "Сбросить новую заявку"),
-        ("result", "Получить готовый результат по ID"),
+        ("result", "Мои готовые результаты"),
         ("delete", "Удалить локальные фото"),
         ("terms", "Условия тестирования"),
         ("privacy", "Обработка фотографий"),
@@ -112,6 +113,29 @@ class Draft:
     photos: list[str] = field(default_factory=list)
     photo_messages: set[int] = field(default_factory=set)
     description: str = ""
+    reusable: list[str] = field(default_factory=list)
+
+
+async def processing_activity(bot, store, interval=4):
+    while True:
+        try:
+            users = {
+                job["user_id"] for job in store.jobs()
+                if type(job["user_id"]) is int and job["user_id"] > 0
+                and job["status"] in {"queued", "running"}
+            }
+            for user in sorted(users):
+                try:
+                    await bot.send_chat_action(user, "upload_photo")
+                except Exception as exc:
+                    logging.getLogger(__name__).warning(
+                        "processing_activity_failed type=%s", type(exc).__name__
+                    )
+        except Exception as exc:
+            logging.getLogger(__name__).warning(
+                "processing_activity_scan_failed type=%s", type(exc).__name__
+            )
+        await asyncio.sleep(interval)
 
 
 def build_dispatcher(settings, store, media, service):
@@ -155,13 +179,59 @@ def build_dispatcher(settings, store, media, service):
         if len(drafts) >= 1000:
             oldest = min(drafts, key=lambda owner: drafts[owner].created)
             drafts.pop(oldest)
-        drafts[user] = Draft(key)
+        draft = drafts[user] = Draft(key)
         choice = PRESETS[key]
+        draft.reusable = service.reusable_inputs(user, choice.inputs)
+        markup = BACK
+        if draft.reusable:
+            plural = choice.inputs == 2
+            markup = buttons([
+                [("Использовать загруженные фото" if plural else "Использовать загруженное фото",
+                  "reuse:" + draft.token)],
+                [("Загрузить новые фото" if plural else "Загрузить новое фото", "fresh:" + draft.token)],
+                [("🏠 Главное меню", "nav:home")],
+            ])
         await message.answer(
             f"{ICONS[key]} {choice.label}\nШаг 1 из 3 · Загрузите {choice.inputs} фото.\n"
-            "Лицо должно быть хорошо видно. Для лучшего качества отправьте фото файлом: "
-            "JPEG/PNG/WebP до 10 MiB. Затем напишите желаемое изменение.",
+            "Для лучшего качества отправьте фото файлом. JPEG/PNG/WebP до 10 MB.\n"
+            "Или сфотографируйте себя сейчас — желательно на нейтральном фоне, например у стены."
+            + ("\nВаше следующее описание запустит создание и использует 1 бесплатную генерацию."
+               if trial else ""),
+            reply_markup=markup,
+        )
+
+    async def step_two(message, draft):
+        if len(draft.photos) < PRESETS[draft.preset].inputs:
+            await message.answer("Первое фото принято. Отправьте второе с согласия изображённого человека.")
+            return
+        await message.answer(
+            "Шаг 2 из 3 · Фото приняты. Опишите желаемое изменение, например «каре до плеч»."
+            + ("\nОписание сразу запустит создание: 1 бесплатная генерация." if trial else ""),
             reply_markup=BACK,
+        )
+
+    def submission_error(code):
+        return {
+            "insufficient_credits": "Недостаточно попыток. Откройте «Мои попытки».",
+            "already_active": "Ваш образ уже создаётся. Подождите немного.",
+            "trial_exhausted": "Все 3 бесплатные генерации использованы. Новые попытки не выдаются.",
+            "trial_not_granted": "Сначала подтвердите условия и согласие в /start.",
+            "consent_required": "Сначала подтвердите условия и согласие в /start.",
+            "invalid_inputs": "Фото больше недоступно. Выберите функцию и загрузите новое фото.",
+            "request_mismatch": "Это сообщение уже обработано. Новый вариант отправьте новым сообщением.",
+        }.get(code, "Не получилось начать создание. Попробуйте ещё раз чуть позже.")
+
+    async def submit_draft(message, user, draft, key):
+        try:
+            service.submit(user, key, draft.preset, draft.photos, draft.description)
+        except DomainError as exc:
+            await message.answer(submission_error(str(exc)), reply_markup=BACK)
+            return
+        drafts.pop(user, None)
+        await message.answer(
+            "Создаём ваш образ ✨ Обычно это занимает до 2 минут.\n"
+            "Готовое фото появится здесь. Его также можно найти в «Мои результаты».",
+            reply_markup=MAIN,
         )
 
     async def send_result(message, user, job):
@@ -173,7 +243,7 @@ def build_dispatcher(settings, store, media, service):
             "DEMO: тестовая копия, ИИ-правка не выполнялась.\n" if settings.image_provider == "mock" else ""
         )
         await message.answer_document(
-            FSInputFile(path),
+            FSInputFile(path, filename="Ваш образ.jpg"),
             caption=mode + "Ваш результат. Локальное хранение — 24 часа.",
             reply_markup=buttons([[("📸 Новая правка", "nav:edit"), ("🖼 Результаты", "nav:results")]]),
         )
@@ -212,11 +282,12 @@ def build_dispatcher(settings, store, media, service):
                     continue
                 path = media.path(j["result"])
                 if path.is_file() and time.time() - path.stat().st_mtime <= 86400:
-                    rows.append([(f"{PRESETS[j['preset']].label} · {j['id'][:6]}", "result:" + j["id"])])
+                    date = datetime.fromtimestamp(j["created"]).strftime("%d.%m · %H:%M")
+                    rows.append([(f"{PRESETS[j['preset']].label} · {date}", "result:" + j["id"])])
                 if len(rows) == 5:
                     break
             await message.answer(
-                "🖼 Ваши последние результаты. Повторное получение не тратит попытки.\nХранение — 24 часа."
+                "🖼 Ваши последние результаты. Скачать ещё раз можно без расхода попыток.\nХранение — 24 часа."
                 if rows
                 else "Здесь появятся ваши результаты. Начните с кнопки «Изменить фото».\n"
                 "Готовые файлы хранятся локально 24 часа.",
@@ -225,7 +296,10 @@ def build_dispatcher(settings, store, media, service):
         elif action == "help":
             await message.answer(
                 "Как пользоваться\n1. Выберите функцию.\n2. Отправьте своё фото (для объединения — два).\n"
-                "3. Опишите желаемое изменение.\n4. Проверьте цену и нажмите «Создать».\n"
+                "3. Опишите желаемое изменение.\n"
+                + ("4. Создание начнётся сразу после описания.\n" if trial else
+                   "4. Проверьте цену и нажмите «Создать».\n")
+                +
                 "5. Получите файл и сохраните его.\n\n"
                 + pricing() + " Новый вариант — отдельная попытка.\n"
                 + (
@@ -241,7 +315,7 @@ def build_dispatcher(settings, store, media, service):
             await message.answer(
                 "Поддержка: "
                 + (settings.support_contact or "контакт владельца ещё не настроен.")
-                + "\nУкажите ID задачи или заказа. Ключи и банковские данные не присылайте.",
+                + "\nОпишите, что произошло. Ключи и банковские данные не присылайте.",
                 reply_markup=BACK,
             )
 
@@ -392,11 +466,15 @@ def build_dispatcher(settings, store, media, service):
 
     @router.message(Command("result"))
     async def result(message: Message):
+        parts = (message.text or "").split(maxsplit=1)
+        if len(parts) == 1:
+            await navigate(message, message.from_user.id, "results")
+            return
         try:
-            job = (message.text or "").split(maxsplit=1)[1].strip()
+            job = parts[1].strip()
             await send_result(message, message.from_user.id, job)
         except (DomainError, ValueError, IndexError):
-            await message.answer("Результат недоступен. Используйте /result ID из сообщения о задаче.")
+            await message.answer("Результат недоступен. Откройте «Мои результаты».")
 
     @router.callback_query(F.data.startswith("result:"))
     async def result_callback(callback: CallbackQuery):
@@ -418,54 +496,120 @@ def build_dispatcher(settings, store, media, service):
         await callback.answer()
         await choose_preset(callback.message, callback.from_user.id, key)
 
-    @router.message(F.photo | F.document)
-    async def photo(message: Message):
-        draft = current(message.from_user.id)
-        if not draft or not store.has_consent(message.from_user.id):
-            await message.answer("Сначала /start и выберите функцию.")
+    @router.callback_query(F.data.startswith("reuse:") | F.data.startswith("fresh:"))
+    async def source_choice(callback: CallbackQuery):
+        user = callback.from_user.id
+        action, token = callback.data.split(":", 1)
+        draft = current(user)
+        if not draft or draft.token != token or not store.has_consent(user):
+            await callback.answer("Выбор фото устарел. Выберите функцию снова.", show_alert=True)
             return
+        await callback.answer()
+        if action == "reuse":
+            inputs = service.reusable_inputs(user, PRESETS[draft.preset].inputs)
+            if not inputs or inputs != draft.reusable:
+                await callback.message.answer("Это фото уже недоступно. Загрузите новое фото.", reply_markup=BACK)
+                return
+            draft.photos = inputs
+        else:
+            draft.photos.clear()
+        draft.photo_messages.clear()
+        draft.description = ""
+        draft.reusable.clear()
+        draft.token = uuid.uuid4().hex
+        if action == "reuse":
+            await step_two(callback.message, draft)
+        else:
+            await callback.message.answer(
+                ("Шаг 1 из 3 · Загрузите два новых фото.\n" if PRESETS[draft.preset].inputs == 2
+                 else "Шаг 1 из 3 · Загрузите новое фото.\n")
+                +
+                "Для лучшего качества отправьте фото файлом. JPEG/PNG/WebP до 10 MB.\n"
+                "Или сфотографируйте себя сейчас — желательно на нейтральном фоне, например у стены.",
+                reply_markup=BACK,
+            )
+
+    async def accept_photo(message, draft, source):
         choice = PRESETS[draft.preset]
-        if message.message_id in draft.photo_messages:
+        if source.message_id in draft.photo_messages:
             return
         if len(draft.photos) >= choice.inputs:
             await message.answer("Фото уже загружены. Напишите, какой образ хотите, или /cancel.")
             return
-        attachment = message.photo[-1] if message.photo else message.document
+        attachment = source.photo[-1] if source.photo else source.document
         if attachment.file_size and attachment.file_size > MAX_BYTES:
-            await message.answer("Максимум 10 MiB на фото.")
+            await message.answer("Максимум 10 MB на фото.")
             return
         buffer = io.BytesIO()
         await message.bot.download(attachment, destination=buffer)
         try:
             data = normalize(buffer.getvalue())
             path = media.save(message.from_user.id, data)
-        except (ValueError, OSError):
-            await message.answer("Не удалось прочитать фото. Нужен JPEG, PNG или WebP до 10 MiB/24 MP.")
+            service.remember_inputs(message.from_user.id, draft.photos + [path])
+        except (ValueError, OSError, DomainError):
+            await message.answer("Не удалось принять фото. Нужен JPEG, PNG или WebP до 10 MB/24 MP.")
             return
         draft.photos.append(path)
-        draft.photo_messages.add(message.message_id)
-        if len(draft.photos) < choice.inputs:
-            await message.answer("Первое фото принято. Отправьте второе с согласия изображённого человека.")
-        else:
-            await message.answer(
-                "Шаг 2 из 3 · Фото приняты. Опишите желаемое изменение, например «каре до плеч».",
-                reply_markup=BACK,
-            )
+        draft.photo_messages.add(source.message_id)
+        await step_two(message, draft)
+
+    @router.message(F.photo | F.document)
+    async def photo(message: Message):
+        draft = current(message.from_user.id)
+        if not draft or not store.has_consent(message.from_user.id):
+            await message.answer("Сначала /start и выберите функцию.")
+            return
+        await accept_photo(message, draft, message)
 
     @router.message(F.text)
     async def description(message: Message):
         if (message.text or "").startswith("/"):
             await message.answer("Неизвестная команда. Откройте /help или нижнюю панель.")
             return
-        draft = current(message.from_user.id)
+        user = message.from_user.id
+        if message.external_reply:
+            await message.answer("Ответьте на своё фото в этом чате или загрузите новое фото.")
+            return
+        request_key = "telegram-description:" + str(message.message_id)
+        if trial and any(job["request_key"] == request_key for job in store.jobs(user)):
+            await message.answer(
+                "Это сообщение уже обработано. Готовый образ можно скачать в «Мои результаты».",
+                reply_markup=MAIN,
+            )
+            return
+        draft = current(user)
+        if not draft or not store.has_consent(user):
+            await message.answer("Выберите функцию и загрузите фото через /start.")
+            return
+        source = message.reply_to_message
+        if source and (source.photo or source.document):
+            if (source.chat.type != "private" or source.chat.id != message.chat.id
+                    or source.from_user is None or source.from_user.id != user or source.from_user.is_bot):
+                await message.answer("Выберите своё фото из этого чата или загрузите новое фото.")
+                return
+            if len(draft.photos) == PRESETS[draft.preset].inputs:
+                draft.photos.clear()
+                draft.photo_messages.clear()
+                draft.description = ""
+                draft.token = uuid.uuid4().hex
+            # Replying selects the attachment. It never spends a generation by itself.
+            await accept_photo(message, draft, source)
+            return
         if not draft or len(draft.photos) != PRESETS[draft.preset].inputs:
             await message.answer("Выберите функцию и загрузите фото через /start.")
+            return
+        selection = (message.text or "").strip().casefold().strip(" .!?,")
+        if selection in {"возьми это фото", "возьми фото", "используй это фото", "используй фото",
+                         "использовать это фото", "использовать фото", "это фото",
+                         "возьми эту фотографию", "используй эту фотографию"}:
+            await step_two(message, draft)
             return
         if not 1 <= len(message.text.strip()) <= 1500:
             await message.answer("Описание должно быть от 1 до 1500 символов.")
             return
         draft.description = message.text.strip()
-        draft.token = uuid.uuid4().hex
+        if not trial:
+            draft.token = uuid.uuid4().hex
         choice = PRESETS[draft.preset]
         cost = service.cost(draft.preset)
         unit = "бесплатная генерация" if trial else "попытка(и)"
@@ -473,37 +617,30 @@ def build_dispatcher(settings, store, media, service):
             f"Шаг 3 из 3 · {choice.label}\nИзменение: {draft.description}\n"
             f"Стоимость: {cost} {unit}. Один результат.\n"
             "Каждый новый вариант — новая попытка.",
-            reply_markup=buttons(
+            reply_markup=BACK if trial else buttons(
                 [
                     [(f"Создать · {cost} {unit}", "confirm:" + draft.token, "success")],
                     [("🏠 Главное меню", "nav:home")],
                 ]
             ),
         )
+        if trial:
+            await submit_draft(message, user, draft, request_key)
 
     @router.callback_query(F.data.startswith("confirm:"))
     async def confirm(callback: CallbackQuery):
+        if trial:
+            await callback.answer("Создание запускается вашим описанием. Напишите желаемое изменение.",
+                                  show_alert=True)
+            return
         user = callback.from_user.id
         token = callback.data.split(":", 1)[1]
         draft = current(user)
         if draft is None or draft.token != token or not draft.description:
             await callback.answer("Эта заявка уже подтверждена или устарела", show_alert=True)
             return
-        try:
-            job = service.submit(user, token, draft.preset, draft.photos, draft.description)
-            drafts.pop(user, None)
-            await callback.answer("Задача принята")
-            await callback.message.answer(
-                f"Обрабатываем. ID: {job}\nПовторная доставка: /result {job}\nОбычно это занимает до 2 минут."
-            )
-        except DomainError as exc:
-            explanation = {
-                "insufficient_credits": "Недостаточно кредитов. Проверьте /balance.",
-                "already_active": "Уже есть задача в обработке. Проверьте /support.",
-                "trial_exhausted": "Все 3 бесплатные генерации использованы. Новые попытки не выдаются.",
-                "trial_not_granted": "Сначала подтвердите условия и согласие в /start.",
-            }
-            await callback.answer(explanation.get(str(exc), "Не удалось принять заявку"), show_alert=True)
+        await callback.answer()
+        await submit_draft(callback.message, user, draft, token)
 
     dp.include_router(router)
     return dp
@@ -533,12 +670,12 @@ async def run(settings):
             async def deliver(user, job, path):
                 if user == 0:  # Local browser demo has no Telegram destination.
                     return
-                caption = f"Готово. ID: {job}. Генеративный результат; проверьте сходство."
+                caption = "Ваш новый образ готов ✨ Сохраните фото и проверьте сходство."
                 if settings.image_provider == "mock":
                     caption = "DEMO: тестовая копия, ИИ-правка не выполнялась. " + caption
                 await bot.send_document(
                     user,
-                    FSInputFile(path),
+                    FSInputFile(path, filename="Ваш образ.jpg"),
                     caption=caption,
                     reply_markup=buttons(
                         [
@@ -552,14 +689,14 @@ async def run(settings):
                     return
                 reason = store.job(job)["error"]
                 explanations = {
-                    "provider_quota": "У сервиса OpenAI закончился доступный баланс или квота.",
-                    "provider_rate_limit": "OpenAI временно ограничил частоту запросов.",
-                    "provider_authentication": "Подключение OpenAI требует проверки владельцем.",
+                    "provider_quota": "Студия временно недоступна. Попробуйте немного позже.",
+                    "provider_rate_limit": "Студии нужно немного времени. Попробуйте позже.",
+                    "provider_authentication": "Студия временно недоступна. Попробуйте позже.",
                 }
                 await bot.send_message(
                     user,
                     explanations.get(reason, "Обработка не выполнена.")
-                    + f" Резерв {'генерации' if settings.trial_access else 'кредитов'} возвращён. ID: {job}",
+                    + f" Резерв {'генерации' if settings.trial_access else 'кредитов'} возвращён.",
                 )
 
             service = Service(store, media, provider, deliver, notify, trial_access=settings.trial_access)
@@ -620,7 +757,11 @@ async def run(settings):
                         await studio_task
                         raise RuntimeError("studio_start_failed")
                     await asyncio.sleep(0.05)
-            tasks.extend([asyncio.create_task(service.worker()), asyncio.create_task(watch_stop())])
+            tasks.extend([
+                asyncio.create_task(service.worker()),
+                asyncio.create_task(processing_activity(bot, store)),
+                asyncio.create_task(watch_stop()),
+            ])
             runtime.ready(identity.username)
             await dp.start_polling(bot, close_bot_session=False)
         finally:

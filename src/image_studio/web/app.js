@@ -26,7 +26,7 @@
   const currentPreset = () => state.catalog.find(item => item.id === state.preset) || state.catalog[0];
   const activeStatuses = new Set(['queued', 'running']);
   const statusText = {queued:'Фото принято. Ожидаем своей очереди', running:'Создаём ваш образ', generated:'Образ готов', delivered:'Образ готов', failed:'Не удалось создать образ', review:'Задание требует проверки'};
-  const errors = {insufficient_credits:'Недостаточно попыток. Посмотрите баланс в профиле.', invalid_image:'Не удалось прочитать фото. Выберите JPEG, PNG или WebP.', image_too_large:'Фото слишком большое. Максимум — 10 МБ.', upload_limit:'Достигнут лимит загруженных фото. Удалите данные или дождитесь очистки.', consent_required:'Сначала подтвердите согласие на обработку фото.', active_job:'Дождитесь завершения текущего задания.', job_active:'Дождитесь завершения текущего задания.', not_found:'Файл недоступен: срок хранения истёк или он был удалён.', unauthorized:'Вход в студию завершился. Войдите снова.', demo_unavailable:'Тестовый вход здесь недоступен. Откройте студию из Telegram.', invalid_description:'Добавьте описание от 1 до 1500 символов.', interrupted_provider:'Задание прервалось и требует проверки поддержки.'};
+  const errors = {insufficient_credits:'Недостаточно попыток. Посмотрите баланс в профиле.', invalid_image:'Не удалось прочитать фото. Выберите JPEG, PNG или WebP.', image_too_large:'Фото слишком большое. Максимум — 10 MB.', upload_limit:'Достигнут лимит загруженных фото. Удалите данные или дождитесь очистки.', consent_required:'Сначала подтвердите согласие на обработку фото.', active_job:'Дождитесь завершения текущего задания.', job_active:'Дождитесь завершения текущего задания.', not_found:'Файл недоступен: срок хранения истёк или он был удалён.', unauthorized:'Вход в студию завершился. Войдите снова.', demo_unavailable:'Тестовый вход здесь недоступен. Откройте студию из Telegram.', invalid_description:'Добавьте описание от 1 до 1500 символов.', interrupted_provider:'Задание прервалось и требует проверки поддержки.'};
   Object.assign(errors,{body_too_large:errors.image_too_large,photo_limit:errors.upload_limit,already_active:errors.active_job,unsupported_media:errors.invalid_image,invalid_prompt:errors.invalid_description,invalid_inputs:'Проверьте количество фото и описание, затем подтвердите ещё раз.',request_mismatch:'Это подтверждение уже использовано для другого образа. Обновите результаты.',confirmation_required:'Перед созданием подтвердите стоимость.'});
   Object.assign(errors,{trial_exhausted:'Все 3 бесплатные генерации использованы. Повторная выдача недоступна.',trial_not_granted:'Подтвердите согласие, чтобы получить 3 бесплатные реальные генерации.',invalid_trial_user:'Бесплатные реальные генерации доступны только после входа через Telegram.'});
   function notify(message, error = false) { $('notice').textContent = message; $('notice').classList.toggle('error', error); $('notice').hidden = false; }
@@ -139,7 +139,7 @@
   }
   async function upload(file, index) {
     if (!file || !state.preview && !state.me?.consent || state.pending) return;
-    if (file.size > 10 * 1024 * 1024 || file.size === 0) { notify('Выберите фото размером до 10 МБ.', true); return; }
+    if (file.size > 10_000_000 || file.size === 0) { notify('Выберите фото размером до 10 MB.', true); return; }
     if (!['image/jpeg','image/png','image/webp'].includes(file.type)) { notify('Поддерживаются JPEG, PNG и WebP.', true); return; }
     state.uploading.add(index); renderPhotos();
     try {

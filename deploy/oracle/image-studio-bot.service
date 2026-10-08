@@ -1,0 +1,33 @@
+[Unit]
+Description=Photo Editor Telegram bot and local studio API
+Wants=network-online.target
+After=network-online.target
+StartLimitIntervalSec=300
+StartLimitBurst=3
+
+[Service]
+Type=simple
+User=image-studio
+Group=image-studio
+WorkingDirectory=/opt/image-studio-bot/app
+EnvironmentFile=/etc/image-studio-bot.env
+Environment=PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1
+ExecStart=/opt/image-studio-bot/app/.venv/bin/python -m image_studio run
+Restart=on-failure
+RestartSec=10
+TimeoutStopSec=210
+UMask=0077
+LimitCORE=0
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+CapabilityBoundingSet=
+ReadWritePaths=/var/lib/image-studio-bot /opt/image-studio-bot/app/data/runtime
+
+[Install]
+WantedBy=multi-user.target

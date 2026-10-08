@@ -189,17 +189,15 @@ async def test_trial_native_merge_one_generation_fourth_blocked_and_delete_not_r
         await send(trial_ui, callback="preset:merge")
         await send(trial_ui, photo=True)
         await send(trial_ui, photo=True)
-        button = confirmation(await send(trial_ui, f"Вместе в парке {number}"))
-        assert button and "1" in button.text and "2" not in button.text
-        await send(trial_ui, callback=button.callback_data)
+        sent = await send(trial_ui, f"Вместе в парке {number}")
+        assert confirmation(sent) is None
         job = next(job for job in store.jobs(1) if job["status"] == "queued")
         assert job["cost"] == 1 and service.wallet(1) == (3 - number, 1)
         assert await service.process(job["id"])
     assert provider.calls == 3 and service.wallet(1) == (0, 0)
     await send(trial_ui, callback="preset:hair")
     await send(trial_ui, photo=True)
-    button = confirmation(await send(trial_ui, "Новый вариант"))
-    await send(trial_ui, callback=button.callback_data)
+    await send(trial_ui, "Новый вариант")
     assert len(store.jobs(1)) == 3 and provider.calls == 3
     await send(trial_ui, "/delete")
     await send(trial_ui, callback="consent")

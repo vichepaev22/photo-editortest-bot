@@ -1,13 +1,17 @@
 import asyncio
 import json
 import logging
+import time
 
 from .catalog import PRESETS, prompt_for
-from .media import normalize
+from .media import MAX_BYTES, normalize
 from .provider import ProviderError
 from .store import DomainError
 
 log = logging.getLogger(__name__)
+RECENT_INPUTS = "recent-inputs.json"
+INPUT_TTL = 86400
+INPUT_RECORD_LIMIT = 16384
 
 
 class Service:
@@ -26,6 +30,103 @@ class Service:
         if self.trial_access and self.store.has_consent(user):
             self.store.grant_trial(user)
         return self.store.wallet(user, trial=self.trial_access)
+
+    def _owned_recent_file(self, user, relative, limit):
+        if not isinstance(relative, str) or len(relative) > 1024:
+            return None
+        parts = relative.replace("\\", "/").split("/")
+        if len(parts) != 2 or parts[0] != str(user) or parts[1] in {"", ".", ".."}:
+            return None
+        try:
+            path = self.media.path(relative)
+            # Compare against the literal owner directory: symlinks cannot transfer ownership.
+            if path.parent != self.media.root / str(user) or not path.is_file():
+                return None
+            stat = path.stat()
+            if not 0 < stat.st_size <= limit or time.time() - stat.st_mtime > INPUT_TTL:
+                return None
+            return path
+        except (ValueError, OSError):
+            return None
+
+    def _originals(self, user, inputs, jobs):
+        if not isinstance(inputs, list) or len(inputs) not in {1, 2}:
+            return []
+        paths = []
+        outputs = {f"{job['id']}.jpg" for job in jobs}
+        for job in jobs:
+            if isinstance(job.get("result"), str):
+                try:
+                    outputs.add(self.media.path(job["result"]).name)
+                except ValueError:
+                    pass
+        for relative in inputs:
+            path = self._owned_recent_file(user, relative, MAX_BYTES)
+            if (path is None or path.name in outputs or path in paths
+                    or path.suffix.lower() not in {".jpg", ".jpeg", ".png", ".webp"}):
+                return []
+            try:
+                with path.open("rb") as file:
+                    normalize(file.read(MAX_BYTES + 1))
+            except (ValueError, OSError):
+                return []
+            paths.append(path)
+        return [str(path.relative_to(self.media.root)) for path in paths]
+
+    def _input_record(self, user, relative):
+        path = self._owned_recent_file(user, relative, INPUT_RECORD_LIMIT)
+        if path is None:
+            return None
+        try:
+            with path.open("rb") as file:
+                data = file.read(INPUT_RECORD_LIMIT + 1)
+            if len(data) > INPUT_RECORD_LIMIT:
+                return None
+            record = json.loads(data)
+            return record if isinstance(record, dict) else None
+        except (ValueError, OSError, UnicodeError, RecursionError):
+            return None
+
+    def remember_inputs(self, user, inputs):
+        if type(user) is not int or user < 0:
+            raise DomainError("invalid_inputs")
+        if not self.store.has_consent(user):
+            raise DomainError("consent_required")
+        checked = self._originals(user, inputs, self.store.jobs(user))
+        if not checked:
+            raise DomainError("invalid_inputs")
+        try:
+            self.media.save(user, json.dumps({"inputs": checked}).encode("utf-8"), RECENT_INPUTS)
+        except OSError:
+            raise DomainError("storage_error") from None
+
+    def reusable_inputs(self, user, count):
+        if type(user) is not int or user < 0 or type(count) is not int or count not in {1, 2}:
+            return []
+        if not self.store.has_consent(user):
+            return []
+        jobs = self.store.jobs(user)
+        relative = f"{user}/{RECENT_INPUTS}"
+        try:
+            recent = self.media.path(relative)
+            if recent.parent != self.media.root / str(user):
+                return []
+            present = recent.exists()
+        except (ValueError, OSError):
+            return []
+        if present:
+            record = self._input_record(user, relative)
+        elif jobs:
+            # Legacy users have no upload metadata. Use only the latest owned job's
+            # private payload, never an arbitrary JSON file or its generated result.
+            latest = max(jobs, key=lambda job: job["created"])
+            record = self._input_record(user, f"{user}/{latest['id']}.json")
+        else:
+            return []
+        if record is None:
+            return []
+        checked = self._originals(user, record.get("inputs"), jobs)
+        return checked if len(checked) == count else []
 
     def submit(self, user, key, preset, inputs, description):
         choice = PRESETS.get(preset)

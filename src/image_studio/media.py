@@ -6,7 +6,7 @@ from pathlib import Path
 
 from PIL import Image, ImageOps, UnidentifiedImageError
 
-MAX_BYTES = 10 * 1024 * 1024
+MAX_BYTES = 10_000_000
 MAX_PIXELS = 24_000_000
 
 
