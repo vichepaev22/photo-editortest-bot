@@ -9,8 +9,9 @@ from .store import DomainError
 
 CHANNELS = ("@FutureDarkSide", "@nofuturenews")
 CHECK_CALLBACK = "subscription:check"
-OFFER_TEXT = ("Хочешь ещё одну бесплатную генерацию? Подпишись на эти два канала "
-              "и нажми «Проверить подписку».\n\nБонус выдаётся один раз.")
+OFFER_TEXT = ("Ваша бесплатная генерация закончилась.\n\n"
+              "🎁 Хотите ещё одну? Подпишитесь на оба канала и нажмите «Проверить подписку».\n\n"
+              "За подписку — одна генерация, только один раз. Дальше — платные пакеты.")
 SUBSCRIPTION_KEYBOARD = InlineKeyboardMarkup(inline_keyboard=[
     [InlineKeyboardButton(text=channel, url="https://t.me/" + channel[1:]) for channel in CHANNELS],
     [InlineKeyboardButton(text="✅ Проверить подписку · +1 генерация", callback_data=CHECK_CALLBACK)],
