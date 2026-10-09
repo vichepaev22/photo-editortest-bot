@@ -31,20 +31,21 @@ def trial(tmp_path):
     return store, media, provider, photos
 
 
-async def test_three_results_include_merge_and_regeneration_without_spending_paid_wallet(trial):
+@pytest.mark.parametrize("preset", ["hair", "clothes", "glasses", "background", "enhance", "merge", "document"])
+async def test_one_result_exhausts_trial_and_blocks_regeneration_without_spending_paid_wallet(trial, preset):
     store, media, provider, photos = trial
     service = Service(store, media, provider, trial_access=True)
-    assert service.wallet(1) == (3, 0)
-    for key, preset, inputs in (("a", "hair", photos[:1]), ("b", "merge", photos), ("c", "hair", photos[:1])):
-        job = service.submit(1, key, preset, inputs, "test")
-        assert service.submit(1, key, preset, inputs, "test") == job
-        assert store.job(job)["cost"] == 1
-        assert await service.process(job)
-        assert not await service.process(job)
-        assert media.path(store.result(1, job)["result"]).is_file()
+    assert service.wallet(1) == (1, 0)
+    inputs = photos if preset == "merge" else photos[:1]
+    job = service.submit(1, "first", preset, inputs, "test")
+    assert service.submit(1, "first", preset, inputs, "test") == job
+    assert store.job(job)["cost"] == 1
+    assert await service.process(job)
+    assert not await service.process(job)
+    assert media.path(store.result(1, job)["result"]).is_file()
     with pytest.raises(DomainError, match="^trial_exhausted$"):
-        service.submit(1, "d", "glasses", photos[:1], "test")
-    assert provider.calls == 3
+        service.submit(1, "variation", preset, inputs, "test")
+    assert provider.calls == 1
     assert service.wallet(1) == (0, 0)
     assert store.wallet(1) == (3, 0)
     assert user_row(store, 1)["spent"] == 0
@@ -59,9 +60,9 @@ async def test_failure_restores_trial_and_delivery_failure_never_generates_again
 
     failed = Service(store, media, Broken(), trial_access=True)
     job = failed.submit(1, "fail", "hair", photos[:1], "test")
-    assert failed.wallet(1) == (3, 1)
+    assert failed.wallet(1) == (1, 1)
     assert not await failed.process(job)
-    assert failed.wallet(1) == (3, 0)
+    assert failed.wallet(1) == (1, 0)
 
     async def no_delivery(*args):
         raise OSError("network")
@@ -71,7 +72,7 @@ async def test_failure_restores_trial_and_delivery_failure_never_generates_again
     assert await service.process(job)
     assert not await service.process(job)
     assert provider.calls == 1
-    assert service.wallet(1) == (2, 0)
+    assert service.wallet(1) == (0, 0)
     assert store.wallet(1) == (3, 0)
     assert store.result(1, job)["result"]
 
@@ -83,20 +84,19 @@ def test_interruption_and_restart_preserve_trial_reservation(trial):
     assert store.claim(job)
     store.recover()
     restarted = Service(Store(store.path), media, provider, trial_access=True)
-    assert restarted.wallet(1) == (3, 1)
+    assert restarted.wallet(1) == (1, 1)
     assert restarted.store.job(job)["status"] == "review"
     with pytest.raises(DomainError, match="^already_active$"):
         restarted.submit(1, "next", "hair", photos[:1], "test")
     restarted.store.fail(job, "released_by_support")
-    assert restarted.wallet(1) == (3, 0)
+    assert restarted.wallet(1) == (1, 0)
     assert provider.calls == 0
 
 
 async def test_delete_reconsent_and_new_service_do_not_reset_used_trial(trial):
     store, media, provider, photos = trial
     service = Service(store, media, provider, trial_access=True)
-    for key in ("a", "b", "c"):
-        assert await service.process(service.submit(1, key, "hair", photos[:1], "test"))
+    assert await service.process(service.submit(1, "first", "hair", photos[:1], "test"))
     service.delete(1)
     assert not media.path(photos[0]).exists()
     store.consent(1)
@@ -111,8 +111,8 @@ def test_trial_claim_requires_consent_and_is_per_user(trial):
     assert service.wallet(2) == (0, 0)
     assert not user_row(store, 2)["trial_granted"]
     store.consent(2)
-    assert service.wallet(2) == (3, 0)
-    assert service.wallet(1) == (3, 0)
+    assert service.wallet(2) == (1, 0)
+    assert service.wallet(1) == (1, 0)
     assert store.wallet(2) == (0, 0)
 
 

@@ -9,7 +9,7 @@ from dataclasses import dataclass, replace
 from aiogram.exceptions import TelegramBadRequest
 from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, Message
 
-PLANS = {"express": ("Express", 150), "base": ("Базовый", 350), "premium": ("Premium", 850)}
+PLANS = {"express": ("Express", 180, 4), "base": ("Базовый", 380, 10), "premium": ("Premium", 790, 25)}
 METHODS = {"sbp": "СБП", "crypto": "Крипта"}
 TEST_URL = "https://example.com/?payment-demo=1"
 PRIVACY_URL = "https://telegra.ph/Politika-konfidencialnosti-08-01-83"
@@ -55,14 +55,16 @@ def render(checkout):
         )
     if checkout.stage == "plans":
         text = (
-            notice + "\nВыберите тариф. Цены предварительные. "
-            "Количество генераций и срок доступа пока не определены.\n"
+            notice + "\nВыберите пакет генераций.\n"
+            "Во всех пакетах — текущее качество студии. Любая правка, объединение фото "
+            "или новый вариант — 1 генерация.\n"
             "Демонстрационная сессия действует 60 минут с открытия."
         )
-        rows = [[action(f"{name} · {price} ₽", "plan:" + key)] for key, (name, price) in PLANS.items()]
+        rows = [[action(f"{name} · {price} ₽ ({count} {'генерации' if count == 4 else 'генераций'})", "plan:" + key)]
+                for key, (name, price, count) in PLANS.items()]
     else:
-        name, price = PLANS[checkout.plan]
-        text = notice + f"\nТариф: {name} · {price} ₽\n"
+        name, price, count = PLANS[checkout.plan]
+        text = notice + f"\nТариф: {name}\nСтоимость: {price} ₽\nГенераций: {count}\n"
         if checkout.stage == "methods":
             text += "Выберите способ для демонстрации."
             rows = [[action(name, "method:" + key) for key, name in METHODS.items()]]

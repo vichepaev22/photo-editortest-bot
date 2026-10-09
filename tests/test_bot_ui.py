@@ -179,35 +179,34 @@ async def test_trial_native_auto_grant_after_consent_and_repeat_does_not_reset(t
     await send(trial_ui, "/demo")
     assert store.wallet(1, trial=True) == (0, 0)
     sent = await send(trial_ui, callback="consent")
-    assert store.wallet(1, trial=True) == (3, 0)
-    assert any("3" in getattr(m, "text", "") and "реальн" in getattr(m, "text", "").lower() for m in sent)
+    assert store.wallet(1, trial=True) == (1, 0)
+    assert any("1 бесплатная успешная генерация" in getattr(m, "text", "") for m in sent)
     for text in ["/start", "/demo", "/balance"]:
         sent = await send(trial_ui, text)
         assert not any("2 за объединение" in getattr(m, "text", "") for m in sent)
     await send(trial_ui, callback="demo:grant")
     await send(trial_ui, callback="consent")
-    assert service.wallet(1) == (3, 0) and store.wallet(1) == (0, 0)
+    assert service.wallet(1) == (1, 0) and store.wallet(1) == (0, 0)
     await send(trial_ui, callback="consent", user_id=2)
-    assert service.wallet(2) == (3, 0)
+    assert service.wallet(2) == (1, 0)
 
 
-async def test_trial_native_merge_one_generation_fourth_blocked_and_delete_not_reset(trial_ui):
+async def test_trial_native_merge_one_generation_second_blocked_and_delete_not_reset(trial_ui):
     _, _, store, _, service, provider = trial_ui
     await send(trial_ui, callback="consent")
-    for number in range(3):
-        await send(trial_ui, callback="preset:merge")
-        await send(trial_ui, photo=True)
-        await send(trial_ui, photo=True)
-        sent = await send(trial_ui, f"Вместе в парке {number}")
-        assert confirmation(sent) is None
-        job = next(job for job in store.jobs(1) if job["status"] == "queued")
-        assert job["cost"] == 1 and service.wallet(1) == (3 - number, 1)
-        assert await service.process(job["id"])
-    assert provider.calls == 3 and service.wallet(1) == (0, 0)
+    await send(trial_ui, callback="preset:merge")
+    await send(trial_ui, photo=True)
+    await send(trial_ui, photo=True)
+    sent = await send(trial_ui, "Вместе в парке")
+    assert confirmation(sent) is None
+    job = next(job for job in store.jobs(1) if job["status"] == "queued")
+    assert job["cost"] == 1 and service.wallet(1) == (1, 1)
+    assert await service.process(job["id"])
+    assert provider.calls == 1 and service.wallet(1) == (0, 0)
     await send(trial_ui, callback="preset:hair")
     await send(trial_ui, photo=True)
     await send(trial_ui, "Новый вариант")
-    assert len(store.jobs(1)) == 3 and provider.calls == 3
+    assert len(store.jobs(1)) == 1 and provider.calls == 1
     await send(trial_ui, "/delete")
     await send(trial_ui, callback="consent")
     await send(trial_ui, "/demo")

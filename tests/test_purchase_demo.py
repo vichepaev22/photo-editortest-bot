@@ -142,11 +142,11 @@ def only_alert(sent):
     assert sent[0].__api_method__ == "answerCallbackQuery" and sent[0].show_alert is True
 
 
-@pytest.mark.parametrize("plan,label,price", [
-    ("express", "Express", 150), ("base", "Базовый", 350), ("premium", "Premium", 850),
+@pytest.mark.parametrize("plan,label,price,count", [
+    ("express", "Express", 180, 4), ("base", "Базовый", 380, 10), ("premium", "Premium", 790, 25),
 ])
 @pytest.mark.parametrize("method,label_method", [("sbp", "СБП"), ("crypto", "Крипта")])
-async def test_single_message_flow_back_cancel_and_no_ledger(ui, plan, label, price, method, label_method):
+async def test_single_message_flow_back_cancel_and_no_ledger(ui, plan, label, price, count, method, label_method):
     before = ui.snapshot()
     initial = await ui.send(NAV["buy"])
     session = ui.demo.sessions[1]
@@ -154,8 +154,11 @@ async def test_single_message_flow_back_cancel_and_no_ledger(ui, plan, label, pr
     assert len(initial) == 1 and initial[0].__api_method__ == "sendMessage"
     assert content(initial).text.startswith("Образ · Покупка доступа (демо)")
     assert {b.text for row in content(initial).reply_markup.inline_keyboard for b in row} == {
-        "Express · 150 ₽", "Базовый · 350 ₽", "Premium · 850 ₽", "❌ Отменить покупку",
+        "Express · 180 ₽ (4 генерации)", "Базовый · 380 ₽ (10 генераций)",
+        "Premium · 790 ₽ (25 генераций)", "❌ Отменить покупку",
     }
+    assert "Любая правка, объединение фото" in content(initial).text
+    assert "Количество генераций и срок доступа пока не определены" not in content(initial).text
     plan_data = data(initial, "plan:" + plan)
     choice = await ui.click(plan_data)
     assert content(choice).__api_method__ == "editMessageText"
@@ -164,7 +167,8 @@ async def test_single_message_flow_back_cancel_and_no_ledger(ui, plan, label, pr
     final = await ui.click(data(choice, "method:" + method))
     result = content(final)
     assert result.message_id == session.message_id
-    assert f"{label} · {price} ₽" in result.text and f"Способ: {label_method}" in result.text
+    assert f"Тариф: {label}" in result.text and f"Стоимость: {price} ₽" in result.text
+    assert f"Генераций: {count}" in result.text and f"Способ: {label_method}" in result.text
     assert "DEMO" in result.text and "деньги не списываются" in result.text
     assert "Сервис: Platega · демо" in result.text
     assert "доступ и генерации не начисляются" in result.text

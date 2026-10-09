@@ -35,7 +35,7 @@ def test_trial_claim_requires_consent_and_never_changes_paid_wallet(store):
     assert store.grant_trial(10)
     assert not store.grant_trial(10)
     assert store.wallet(10) == (3, 0)
-    assert store.wallet(10, trial=True) == (3, 0)
+    assert store.wallet(10, trial=True) == (1, 0)
 
 
 @pytest.mark.parametrize("user", [0, -1, True, False, "10", 1.0, None, 2**52])
@@ -51,29 +51,26 @@ def test_trial_is_granted_once_under_concurrent_requests(store):
     with ThreadPoolExecutor(max_workers=8) as pool:
         grants = list(pool.map(lambda _: store.grant_trial(10), range(16)))
     assert grants.count(True) == 1 and grants.count(False) == 15
-    assert store.wallet(10, trial=True) == (3, 0) and store.wallet(10) == (0, 0)
+    assert store.wallet(10, trial=True) == (1, 0) and store.wallet(10) == (0, 0)
     with store.tx() as connection:
         assert connection.execute("SELECT COUNT(*) FROM events WHERE kind='trial_grant'").fetchone()[0] == 1
 
 
-def test_three_outputs_merge_and_regeneration_use_one_each_paid_wallet_cannot_extend_trial(store):
+def test_one_output_merge_consumes_trial_and_paid_wallet_cannot_extend_it(store):
     ready(store)
     for _ in range(10):
         store.grant_pilot(10, 10)
     first = complete(store, "first-merge", "merge")
     assert store.job(first)["trial"] == 1 and store.job(first)["cost"] == 1
-    assert store.wallet(10, trial=True) == (2, 0)
-    second = complete(store, "regenerate-merge", "merge")
-    assert second != first and store.wallet(10, trial=True) == (1, 0)
-    complete(store, "third-output")
     assert store.wallet(10, trial=True) == (0, 0)
     assert store.wallet(10) == (100, 0)
     with store.tx() as connection:
         assert connection.execute("SELECT spent FROM users WHERE id=10").fetchone()[0] == 0
-    with pytest.raises(DomainError, match="^trial_exhausted$"):
-        store.reserve(10, "fourth-output", "hair", 1, trial=True)
+    for key, preset in (("regenerate-merge", "merge"), ("second-output", "hair")):
+        with pytest.raises(DomainError, match="^trial_exhausted$"):
+            store.reserve(10, key, preset, 1, trial=True)
     assert store.reserve(10, "first-merge", "merge", 1, trial=True) == first
-    assert store.wallet(10) == (100, 0) and len(store.jobs(10)) == 3
+    assert store.wallet(10) == (100, 0) and len(store.jobs(10)) == 1
 
 
 @pytest.mark.parametrize("cost", [0, 2, -1, True, 1.0])
@@ -81,7 +78,7 @@ def test_trial_reservation_must_cost_exactly_one(store, cost):
     ready(store)
     with pytest.raises(DomainError, match="^invalid_job$"):
         store.reserve(10, "bad-cost", "merge", cost, trial=True)
-    assert store.jobs(10) == [] and store.wallet(10, trial=True) == (3, 0)
+    assert store.jobs(10) == [] and store.wallet(10, trial=True) == (1, 0)
 
 
 def test_trial_reserve_requires_existing_claim_and_consent(store):
@@ -100,14 +97,14 @@ def test_trial_reserve_duplicate_and_failure_release_only_once(store):
         duplicates = list(pool.map(lambda _: store.reserve(10, "same", "hair", 1, trial=True), range(8)))
     assert len(set(duplicates)) == 1 and len(store.jobs(10)) == 1
     job = duplicates[0]
-    assert store.wallet(10, trial=True) == (3, 1) and store.wallet(10) == (0, 0)
+    assert store.wallet(10, trial=True) == (1, 1) and store.wallet(10) == (0, 0)
     store.fail(job, "provider_rejected")
     store.fail(job, "provider_rejected")
     assert store.reserve(10, "same", "hair", 1, trial=True) == job
     assert not store.claim(job)
-    assert store.wallet(10, trial=True) == (3, 0)
+    assert store.wallet(10, trial=True) == (1, 0)
     complete(store, "explicit-new-retry")
-    assert store.wallet(10, trial=True) == (2, 0)
+    assert store.wallet(10, trial=True) == (0, 0)
 
 
 def test_trial_result_finish_and_delivery_are_idempotent_and_owner_scoped(store):
@@ -117,7 +114,7 @@ def test_trial_result_finish_and_delivery_are_idempotent_and_owner_scoped(store)
     store.fail(job, "late_failure")
     store.delivered(job)
     store.finish(job, "replacement.jpg", {}, None)
-    assert store.wallet(10, trial=True) == (2, 0)
+    assert store.wallet(10, trial=True) == (0, 0)
     assert store.result(10, job)["result"] == f"10/{job}.jpg"
     assert store.result(10, job)["status"] == "delivered"
     with pytest.raises(DomainError, match="^result_unavailable$"):
@@ -132,7 +129,7 @@ def test_review_keeps_trial_reserved_until_explicit_release_and_blocks_other_mod
     store.recover()
     store.recover()
     assert store.job(job)["status"] == "review"
-    assert store.wallet(10, trial=True) == (3, 1)
+    assert store.wallet(10, trial=True) == (1, 1)
     assert store.wallet(10) == (3, 0) and not store.claim(job)
     for trial in (False, True):
         with pytest.raises(DomainError, match="^already_active$"):
@@ -143,7 +140,7 @@ def test_review_keeps_trial_reserved_until_explicit_release_and_blocks_other_mod
         store.finish(job, "uncertain-output.jpg", {}, None)
     store.fail(job, "manual_release")
     store.fail(job, "manual_release")
-    assert store.wallet(10, trial=True) == (3, 0)
+    assert store.wallet(10, trial=True) == (1, 0)
     assert store.wallet(10) == (3, 0)
 
 
@@ -153,11 +150,11 @@ def test_queued_cancel_and_financial_active_job_preserve_distinct_reservations(s
     financial = store.reserve(10, "paid", "merge", 2)
     with pytest.raises(DomainError, match="^already_active$"):
         store.reserve(10, "trial-blocked", "hair", 1, trial=True)
-    assert store.wallet(10) == (3, 2) and store.wallet(10, trial=True) == (3, 0)
+    assert store.wallet(10) == (3, 2) and store.wallet(10, trial=True) == (1, 0)
     store.fail(financial, "cancel")
     trial = store.reserve(10, "trial", "merge", 1, trial=True)
     store.fail(trial, "cancel")
-    assert store.wallet(10) == (3, 0) and store.wallet(10, trial=True) == (3, 0)
+    assert store.wallet(10) == (3, 0) and store.wallet(10, trial=True) == (1, 0)
 
 
 def test_request_identity_includes_financial_vs_trial_mode(store):
@@ -171,20 +168,20 @@ def test_request_identity_includes_financial_vs_trial_mode(store):
     store.fail(paid, "cancel")
     with pytest.raises(DomainError, match="^request_mismatch$"):
         store.reserve(10, "paid-first", "hair", 1, trial=True)
-    assert store.wallet(10) == (3, 0) and store.wallet(10, trial=True) == (3, 0)
+    assert store.wallet(10) == (3, 0) and store.wallet(10, trial=True) == (1, 0)
 
 
 def test_trial_history_survives_revoke_reconsent_and_restart(store):
     ready(store)
     complete(store, "one")
-    complete(store, "two")
     store.revoke_consent(10)
     reopened = Store(store.path)
     assert not reopened.has_consent(10)
-    assert reopened.wallet(10, trial=True) == (1, 0)
+    assert reopened.wallet(10, trial=True) == (0, 0)
     reopened.consent(10)
     assert not reopened.grant_trial(10)
-    complete(reopened, "last")
+    with pytest.raises(DomainError, match="^trial_exhausted$"):
+        reopened.reserve(10, "second", "hair", 1, trial=True)
     reopened.revoke_consent(10)
     restarted = Store(store.path)
     restarted.consent(10)
@@ -224,7 +221,7 @@ def test_additive_idempotent_legacy_migration_preserves_wallet_jobs_history_and_
     assert migrated.job("legacy-job")["status"] == "running"
     assert migrated.grant_trial(10)
     migrated.finish("legacy-job", "legacy-output.jpg", {}, None)
-    assert migrated.wallet(10) == (5, 0) and migrated.wallet(10, trial=True) == (3, 0)
+    assert migrated.wallet(10) == (5, 0) and migrated.wallet(10, trial=True) == (1, 0)
     again = Store(path)
     assert not again.grant_trial(10) and again.wallet(10) == (5, 0)
     assert photo.read_bytes() == b"offline-sentinel"
@@ -242,7 +239,46 @@ def test_sqlite_constraints_enforce_trial_counter_bounds(store, update):
     with pytest.raises(sqlite3.IntegrityError):
         with store.tx() as connection:
             connection.execute("UPDATE users SET " + update + " WHERE id=10")
-    assert store.wallet(10, trial=True) == (3, 0)
+    assert store.wallet(10, trial=True) == (1, 0)
+
+
+@pytest.mark.parametrize("settle", ["finish", "fail"])
+def test_legacy_used_two_three_and_pending_reservation_survive_reopen_without_new_trial(store, settle):
+    for user in (10, 11, 12):
+        ready(store, user)
+        store.grant_pilot(user, 7)
+    pending = store.reserve(12, "legacy-pending", "merge", 1, trial=True)
+    with store.tx() as connection:
+        connection.executemany("UPDATE users SET trial_used=? WHERE id=?", [(2, 10), (3, 11), (2, 12)])
+        before = [tuple(row) for row in connection.execute("SELECT * FROM users ORDER BY id")]
+        grants = connection.execute("SELECT COUNT(*) FROM events WHERE kind='trial_grant'").fetchone()[0]
+    reopened = Store(store.path)
+    with reopened.tx() as connection:
+        assert [tuple(row) for row in connection.execute("SELECT * FROM users ORDER BY id")] == before
+    for user in (10, 11):
+        assert reopened.wallet(user, trial=True) == (0, 0)
+        assert reopened.wallet(user) == (7, 0)
+        reopened.revoke_consent(user)
+        reopened.consent(user)
+        assert not reopened.grant_trial(user)
+        with pytest.raises(DomainError, match="^trial_exhausted$"):
+            reopened.reserve(user, "new", "hair", 1, trial=True)
+    assert reopened.wallet(12, trial=True) == (1, 1)
+    assert reopened.reserve(12, "legacy-pending", "merge", 1, trial=True) == pending
+    if settle == "finish":
+        assert reopened.claim(pending)
+        reopened.finish(pending, "legacy-output.jpg", {}, None)
+    else:
+        reopened.fail(pending, "legacy-provider-failure")
+    assert reopened.wallet(12, trial=True) == (0, 0) and reopened.wallet(12) == (7, 0)
+    with pytest.raises(DomainError, match="^trial_exhausted$"):
+        reopened.reserve(12, "new", "hair", 1, trial=True)
+    again = Store(store.path)
+    with again.tx() as connection:
+        assert [row[0] for row in connection.execute("SELECT trial_used FROM users ORDER BY id")] == (
+            [2, 3, 3 if settle == "finish" else 2]
+        )
+        assert connection.execute("SELECT COUNT(*) FROM events WHERE kind='trial_grant'").fetchone()[0] == grants
 
 
 def journal_lock_injection(monkeypatch, *, failures, code):

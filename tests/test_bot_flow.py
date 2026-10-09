@@ -120,7 +120,7 @@ async def test_owner_unlimited_native_balance_and_submission_only_for_owner(tmp_
         assert job["quota_exempt"] == 1 and await ui[4].process(job["id"])
     ui[2].consent(2)
     non_owner = texts(await feed(ui, callback="nav:balance", user=2))
-    assert "безлимит" not in non_owner.lower() and "3" in non_owner
+    assert "безлимит" not in non_owner.lower() and "1 бесплатная успешная генерация" in non_owner
     assert ui[2].wallet(1, trial=True) == (0, 0) and ui[5].calls == 4
 
 
@@ -134,14 +134,14 @@ def button_data(sent, prefix):
     return None
 
 
-async def test_trial_description_auto_queue_once_replay_after_new_draft_and_retry(flow):
+async def test_trial_description_auto_queue_once_replay_after_new_draft_and_exhausted_variation(flow):
     _, _, store, _, service, provider = flow
     prompt = await feed(flow, callback="preset:hair")
     assert "JPEG/PNG/WebP до 10 MB.\nИли сфотографируйте" in texts(prompt)
     await feed(flow, photo=True)
     sent = await feed(flow, "Каре", message_id=200)
     assert confirmation(sent) is None and "Шаг 3" in texts(sent) and "Создаём" in texts(sent)
-    assert len(store.jobs(1)) == 1 and service.wallet(1) == (3, 1) and provider.calls == 0
+    assert len(store.jobs(1)) == 1 and service.wallet(1) == (1, 1) and provider.calls == 0
     job = store.jobs(1)[0]
     assert job["request_key"] == f"telegram-description:{flow[1].id}:200" and job["id"] not in texts(sent)
     await feed(flow, "Каре", message_id=200)
@@ -151,14 +151,17 @@ async def test_trial_description_auto_queue_once_replay_after_new_draft_and_retr
     assert reuse
     await feed(flow, callback=reuse)
     await feed(flow, "Каре", message_id=200)
-    assert len(store.jobs(1)) == 1 and service.wallet(1) == (2, 0)
-    await feed(flow, "Ещё один вариант", message_id=201)
-    assert len(store.jobs(1)) == 2 and service.wallet(1) == (2, 1) and provider.calls == 1
+    assert len(store.jobs(1)) == 1 and service.wallet(1) == (0, 0)
+    rejected = await feed(flow, "Ещё один вариант", message_id=201)
+    assert "Бесплатная генерация уже использована" in texts(rejected)
+    assert len(store.jobs(1)) == 1 and service.wallet(1) == (0, 0) and provider.calls == 1
 
 
-async def test_description_keys_separate_bot_ids_and_preserve_legacy_history_and_duplicate_quota(tmp_path):
-    old = build_ui(tmp_path, bot_id=123456789)
+async def test_description_keys_separate_bot_ids_and_preserve_legacy_history_and_duplicate_jobs(tmp_path):
+    # The owner gate lets this request-identity scenario exercise multiple successful results.
+    old = build_ui(tmp_path, bot_id=123456789, admin_user_id=1, owner_unlimited_testing=True)
     store = old[2]
+    store.grant_trial(1)
     legacy = store.reserve(1, "telegram-description:200", "hair", 1, trial=True)
     assert store.claim(legacy)
     store.finish(legacy, "legacy-result.jpg", {}, None)
@@ -173,7 +176,7 @@ async def test_description_keys_separate_bot_ids_and_preserve_legacy_history_and
     assert await old[4].process(first["id"])
     first_history = store.job(first["id"])
 
-    new = build_ui(tmp_path, bot_id=987654321)
+    new = build_ui(tmp_path, bot_id=987654321, admin_user_id=1, owner_unlimited_testing=True)
     assert new[2].path == store.path and new[2].jobs(1) == store.jobs(1)
     await feed(new, callback="preset:hair")
     await feed(new, photo=True)
@@ -202,7 +205,7 @@ async def test_reuse_sources_survive_restart_and_ignore_generated_output(flow, t
     job = store.jobs(1)[0]
     assert await service.process(job["id"])
     source = json.loads(media.path(f"1/{job['id']}.json").read_text())["inputs"][0]
-    restarted = build_ui(tmp_path)
+    restarted = build_ui(tmp_path, admin_user_id=1, owner_unlimited_testing=True)
     sent = await feed(restarted, callback="preset:glasses")
     callback = button_data(sent, "reuse:")
     assert callback and any(
@@ -273,7 +276,7 @@ async def test_choose_new_sources_clears_reuse_and_requires_all_new_uploads(flow
     job = flow[2].jobs(1)[0]
     inputs = json.loads(flow[3].path(f"1/{job['id']}.json").read_text())["inputs"]
     assert len(inputs) == count and all(path not in previous for path in inputs)
-    assert job["cost"] == 1 and flow[4].wallet(1) == (3, 1) and flow[5].calls == 0
+    assert job["cost"] == 1 and flow[4].wallet(1) == (1, 1) and flow[5].calls == 0
 
 
 async def test_result_list_download_and_support_are_friendly_without_ids(flow):
@@ -403,7 +406,7 @@ async def test_step_two_example_is_specific_and_copy_does_not_submit(flow, prese
     assert len(copy) == (3 if preset == "hair" else 1) and example in copy[0].copy_text.text
     assert copy[0].copy_text.text in texts(sent) and copy[0].callback_data is None
     assert copy[0].style is None and flow[2].jobs(1) == [] and flow[5].calls == 0
-    assert flow[4].wallet(1) == (3, 0)
+    assert flow[4].wallet(1) == (1, 0)
     if preset == "hair":
         assert "от 1 до 12" in texts(sent) and "Коллаж — 1 попытка" in texts(sent)
         assert "может отклониться" in texts(sent)
@@ -470,7 +473,7 @@ async def test_document_options_create_one_png_sheet_and_stale_button_cannot_reu
     assert "Шаг 3" in texts(sent) and len(store.jobs(1)) == 1
     job = store.jobs(1)[0]
     assert await service.process(job["id"])
-    assert provider.calls == provider_calls and service.wallet(1) == (2, 0)
+    assert provider.calls == provider_calls and service.wallet(1) == (0, 0)
     with Image.open(media.path(store.job(job["id"])["result"])) as sheet:
         assert sheet.format == "PNG" and sheet.size == (826, 1062)
     downloaded = await feed(flow, "/result " + job["id"])
@@ -478,5 +481,5 @@ async def test_document_options_create_one_png_sheet_and_stale_button_cannot_reu
     assert documents and documents[0].document.filename.endswith(".png")
     assert "35×45" in texts(downloaded)
     await feed(flow, callback=callback)
-    assert len(store.jobs(1)) == 1 and service.wallet(1) == (2, 0)
+    assert len(store.jobs(1)) == 1 and service.wallet(1) == (0, 0)
     assert store.admin_stats()["generated_count"] == 1

@@ -36,7 +36,7 @@ def counters(store, user=1):
 
 
 @pytest.mark.parametrize("already_exhausted", [False, True])
-async def test_owner_can_complete_five_without_grant_or_debit_others_keep_three(setup, already_exhausted):
+async def test_owner_can_complete_five_without_grant_or_debit_others_keep_one(setup, already_exhausted):
     store, media, provider, photos = setup
     store.grant_pilot(1, 2)
     if already_exhausted:
@@ -52,17 +52,16 @@ async def test_owner_can_complete_five_without_grant_or_debit_others_keep_three(
         assert store.job(job)["trial"] == 1
         assert await service.process(job)
         assert counters(store) == before
-    assert service.wallet(2) == (3, 0)
-    for index in range(3):
-        job = service.submit(2, f"other-{index}", "hair", photos[2][:1], "test")
-        assert store.job(job)["quota_exempt"] == 0
-        assert await service.process(job)
+    assert service.wallet(2) == (1, 0)
+    job = service.submit(2, "other-first", "hair", photos[2][:1], "test")
+    assert store.job(job)["quota_exempt"] == 0
+    assert await service.process(job)
     with pytest.raises(DomainError, match="^trial_exhausted$"):
-        service.submit(2, "other-fourth", "hair", photos[2][:1], "test")
-    assert service.wallet(2) == (0, 0) and counters(store, 2)["trial_used"] == 3
-    assert counters(store) == before and provider.calls == 8
-    assert store.admin_stats()["generated_count"] == 8
-    assert [row["generated_count"] for row in store.admin_stats()["users"]] == [5, 3]
+        service.submit(2, "other-second", "hair", photos[2][:1], "test")
+    assert service.wallet(2) == (0, 0) and counters(store, 2)["trial_used"] == 1
+    assert counters(store) == before and provider.calls == 6
+    assert store.admin_stats()["generated_count"] == 6
+    assert [row["generated_count"] for row in store.admin_stats()["users"]] == [5, 1]
     with store.tx() as connection:
         assert connection.execute("SELECT COUNT(*) FROM events WHERE kind='trial_grant' AND ref='1'").fetchone()[0] == 0
 
@@ -269,7 +268,7 @@ async def test_normal_job_replays_and_settles_normally_after_gate_on(setup, tria
     with pytest.raises(DomainError, match="^request_mismatch$"):
         store.reserve(1, "normal", "hair", 1, trial=not trial, quota_exempt=True)
     assert await enabled.process(job)
-    assert store.wallet(1, trial=trial) == (2, 0)
+    assert store.wallet(1, trial=trial) == (0 if trial else 2, 0)
     row = counters(store)
     assert row["trial_used"] == int(trial) and row["spent"] == int(not trial)
     store.revoke_consent(1)
@@ -307,5 +306,5 @@ def test_serialized_additive_migration_preserves_old_rows_and_old_job_settlement
     migrated.finish(paid, "legacy-result.jpg", {}, None)
     migrated.fail(trial, "legacy-release")
     assert migrated.wallet(1) == (7, 0) and counters(migrated)["spent"] == 2
-    assert migrated.wallet(2, trial=True) == (3, 0)
+    assert migrated.wallet(2, trial=True) == (1, 0)
     assert Store(store.path).admin_stats()["generated_count"] == 1

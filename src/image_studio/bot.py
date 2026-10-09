@@ -308,7 +308,7 @@ def build_dispatcher(settings, store, media, service, *, step_messages=None, pur
         if service.is_unlimited(user):
             return "Для вашего аккаунта включено безлимитное тестирование."
         if trial:
-            return "Любая функция, включая объединение — 1 бесплатная генерация. Всего 3 реальные генерации."
+            return "Любая функция, включая объединение — 1 генерация. Всего 1 бесплатная успешная генерация."
         return f"Правка — {service.cost('hair')} попытка. Объединение двух фото — {service.cost('merge')}."
 
     async def trial_balance(message, user):
@@ -321,7 +321,7 @@ def build_dispatcher(settings, store, media, service, *, step_messages=None, pur
             return
         total, reserved = service.wallet(user)
         await message.answer(
-            "Вам доступны всего 3 бесплатные реальные генерации OpenAI, включая объединение фото.\n"
+            "Вам доступна 1 бесплатная успешная генерация OpenAI, включая объединение фото.\n"
             f"Осталось: {total - reserved}. В обработке: {reserved}.\n"
             "Каждый новый вариант использует 1 генерацию. Повторная выдача не предусмотрена.",
             reply_markup=MAIN,
@@ -425,7 +425,7 @@ def build_dispatcher(settings, store, media, service, *, step_messages=None, pur
         return {
             "insufficient_credits": "Недостаточно попыток. Откройте «Мои попытки».",
             "already_active": "Ваш образ уже создаётся. Подождите немного.",
-            "trial_exhausted": "Все 3 бесплатные генерации использованы. Новые попытки не выдаются.",
+            "trial_exhausted": "Бесплатная генерация уже использована. Новые бесплатные попытки не выдаются.",
             "trial_not_granted": "Сначала подтвердите условия и согласие в /start.",
             "consent_required": "Сначала подтвердите условия и согласие в /start.",
             "invalid_inputs": "Фото больше недоступно. Выберите функцию и загрузите новое фото.",
@@ -565,7 +565,7 @@ def build_dispatcher(settings, store, media, service, *, step_messages=None, pur
             if settings.image_provider == "mock"
             else "\n♾ Для вашего аккаунта включено безлимитное тестирование."
             if service.is_unlimited(message.from_user.id)
-            else "\nВсего 3 бесплатные реальные генерации OpenAI после согласия. Любая функция — 1 генерация."
+            else "\nВсего 1 бесплатная успешная генерация OpenAI после согласия. Любая функция — 1 генерация."
             if trial else ""
         )
         await message.answer(
@@ -586,7 +586,7 @@ def build_dispatcher(settings, store, media, service, *, step_messages=None, pur
                 "♾ Для вашего аккаунта включено безлимитное тестирование."
                 if service.is_unlimited(callback.from_user.id)
                 else
-                f"Всего 3 бесплатные реальные генерации OpenAI. Доступно: {total - reserved}. "
+                f"Всего 1 бесплатная успешная генерация OpenAI. Доступно: {total - reserved}. "
                 "Объединение и каждый новый вариант — 1 генерация."
                 if trial else "Тестовые попытки доступны в «Мои попытки»."
                 if settings.image_provider == "mock"

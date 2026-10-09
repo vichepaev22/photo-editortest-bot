@@ -6,6 +6,8 @@ import uuid
 from contextlib import contextmanager
 from pathlib import Path
 
+TRIAL_LIMIT = 1
+
 
 class DomainError(Exception):
     pass
@@ -23,6 +25,7 @@ class Store:
         path.parent.mkdir(parents=True, exist_ok=True)
         self._enable_wal()
         with self.tx() as c:
+            # Keep the historical <=3 constraints so existing counters and reservations remain valid.
             c.executescript("""
                 CREATE TABLE IF NOT EXISTS users (
                     id INTEGER PRIMARY KEY, balance INTEGER NOT NULL DEFAULT 0 CHECK(balance>=0),
@@ -189,7 +192,9 @@ class Store:
         with self.tx() as c:
             u = self._user(c, user)
             if trial:
-                return 3 - u["trial_used"] if u["trial_granted"] else 0, u["trial_reserved"]
+                # Keep legacy reservations visible while clamping exhausted availability to zero.
+                total = max(u["trial_reserved"], TRIAL_LIMIT - u["trial_used"]) if u["trial_granted"] else 0
+                return total, u["trial_reserved"]
             return u["balance"], u["reserved"]
 
     @staticmethod
@@ -345,7 +350,7 @@ class Store:
             if not quota_exempt and trial:
                 if not u["trial_granted"]:
                     raise DomainError("trial_not_granted")
-                if 3 - u["trial_used"] - u["trial_reserved"] < 1:
+                if TRIAL_LIMIT - u["trial_used"] - u["trial_reserved"] < 1:
                     raise DomainError("trial_exhausted")
             elif not quota_exempt and u["balance"] - u["reserved"] < cost:
                 raise DomainError("insufficient_credits")

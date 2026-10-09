@@ -393,7 +393,7 @@ async def trial_studio(tmp_path):
         yield client, settings, store, media, provider, service, app
 
 
-async def test_trial_signed_consent_auto_three_no_anonymous_or_repeat_grant(trial_studio):
+async def test_trial_signed_consent_auto_one_no_anonymous_or_repeat_grant(trial_studio):
     client, _, store, _, _, service, _ = trial_studio
     headers = await auth(client)
     assert store.wallet(1, trial=True) == (0, 0)
@@ -402,36 +402,35 @@ async def test_trial_signed_consent_auto_three_no_anonymous_or_repeat_grant(tria
     assert (await client.post("/api/demo-session", json={"consent": True})).status_code == 403
     await client.post("/api/consent", json={"accepted": True}, headers=headers)
     me = (await client.get("/api/me", headers=headers)).json()
-    assert me["available"] == 3 and me["trial_access"] is True
+    assert me["available"] == 1 and me["trial_access"] is True
     assert (await client.post("/api/demo-credits", headers=headers)).json() == {"granted": False}
     await client.post("/api/consent", json={"accepted": True}, headers=headers)
     await auth(client)
-    assert service.wallet(1) == (3, 0) and store.wallet(1) == (0, 0)
+    assert service.wallet(1) == (1, 0) and store.wallet(1) == (0, 0)
     other = await auth(client, 2)
     await client.post("/api/consent", json={"accepted": True}, headers=other)
-    assert (await client.get("/api/me", headers=other)).json()["available"] == 3
+    assert (await client.get("/api/me", headers=other)).json()["available"] == 1
     catalog = (await client.get("/api/catalog")).json()
     assert catalog["trial_access"] is True and all(p["credits"] == 1 for p in catalog["presets"])
 
 
-async def test_trial_signed_three_merge_generations_fourth_blocked_delete_no_reset(trial_studio):
+async def test_trial_signed_one_merge_generation_second_blocked_delete_no_reset(trial_studio):
     client, _, store, _, provider, service, _ = trial_studio
     headers = await auth(client)
     await client.post("/api/consent", json={"accepted": True}, headers=headers)
     photos = [(await client.post("/api/photos", content=image(), headers=headers)).json()["id"]
               for _ in range(2)]
-    for number in range(3):
-        request = body(photos[0], "merge") | {"photos": photos}
-        accepted = await client.post("/api/jobs", json=request, headers=headers)
-        assert accepted.status_code == 200
-        job = accepted.json()["id"]
-        assert (await client.post("/api/jobs", json=request, headers=headers)).json()["id"] == job
-        assert service.wallet(1) == (3 - number, 1) and store.wallet(1) == (0, 0)
-        assert store.job(job)["cost"] == 1
-        assert await service.process(job)
+    request = body(photos[0], "merge") | {"photos": photos}
+    accepted = await client.post("/api/jobs", json=request, headers=headers)
+    assert accepted.status_code == 200
+    job = accepted.json()["id"]
+    assert (await client.post("/api/jobs", json=request, headers=headers)).json()["id"] == job
+    assert service.wallet(1) == (1, 1) and store.wallet(1) == (0, 0)
+    assert store.job(job)["cost"] == 1
+    assert await service.process(job)
     denied = await client.post("/api/jobs", json=body(photos[0]), headers=headers)
     assert denied.status_code == 409 and denied.json() == {"error": "trial_exhausted"}
-    assert provider.calls == 3 and len(store.jobs(1)) == 3
+    assert provider.calls == 1 and len(store.jobs(1)) == 1
     await client.post("/api/delete", json={"confirmed": True}, headers=headers)
     headers = await auth(client)
     await client.post("/api/consent", json={"accepted": True}, headers=headers)
@@ -444,10 +443,10 @@ async def test_trial_signed_preexisting_consent_session_grants_once_financial_wa
     store.consent(7)
     store.grant_demo(7)
     await auth(client, 7)
-    assert store.wallet(7, trial=True) == (3, 0)
+    assert store.wallet(7, trial=True) == (1, 0)
     assert store.wallet(7) == (3, 0)
     await auth(client, 7)
-    assert service.wallet(7) == (3, 0)
+    assert service.wallet(7) == (1, 0)
 
 
 async def test_trial_api_replay_cannot_change_reservation_mode(studio):
@@ -469,7 +468,7 @@ async def test_trial_api_failure_restores_free_quota_without_financial_changes(t
     photo = (await client.post("/api/photos", content=image(), headers=headers)).json()["id"]
     accepted = await client.post("/api/jobs", json=body(photo), headers=headers)
     assert accepted.status_code == 200
-    assert (await client.get("/api/me", headers=headers)).json()["available"] == 2
+    assert (await client.get("/api/me", headers=headers)).json()["available"] == 0
 
     async def rejected(*args):
         raise ProviderError("provider_rejected")
@@ -477,7 +476,7 @@ async def test_trial_api_failure_restores_free_quota_without_financial_changes(t
     monkeypatch.setattr(provider, "edit", rejected)
     assert not await service.process(accepted.json()["id"])
     me = (await client.get("/api/me", headers=headers)).json()
-    assert me["available"] == 3 and me["reserved"] == 0 and store.wallet(1) == (0, 0)
+    assert me["available"] == 1 and me["reserved"] == 0 and store.wallet(1) == (0, 0)
 
 
 async def test_authenticated_miniapp_visit_persists_only_verified_public_username(studio):

@@ -143,7 +143,7 @@ def test_legacy_migration_preserves_all_accounting_and_reopens(tmp_path):
             table: connection.execute(f"SELECT * FROM {table}").fetchall() for table in old_columns
         }
     migrated = Store(path)
-    assert migrated.wallet(OWNER) == (7, 2) and migrated.wallet(OWNER, trial=True) == (2, 1)
+    assert migrated.wallet(OWNER) == (7, 2) and migrated.wallet(OWNER, trial=True) == (1, 1)
     assert migrated.admin_stats()["paying_users"] == 0
     assert migrated.admin_stats()["generated_count"] == 1
     for reopened in (migrated, Store(path)):
@@ -181,12 +181,12 @@ def test_separate_real_purchase_and_generation_totals_survive_replay_delete_and_
     store.begin_refund(first_real)
     store.finish_refund(first_real)
     paid = complete(store, OWNER, "paid-job", cost=2)
+    failed = store.reserve(OWNER, "failure", "hair", 1, trial=True)
+    store.fail(failed, "offline-error")
     trial = complete(store, OWNER, "trial-job", trial=True)
     store.finish(paid, "replacement.jpg", {}, None)
     store.delivered(paid)
     store.delivered(paid)
-    failed = store.reserve(OWNER, "failure", "hair", 1, trial=True)
-    store.fail(failed, "offline-error")
     store.consent(42)
     store.grant_demo(42)
     pay(store, 42, "other-test")
