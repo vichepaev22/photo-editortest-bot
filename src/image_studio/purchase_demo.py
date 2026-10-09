@@ -9,7 +9,7 @@ from dataclasses import dataclass, replace
 from aiogram.exceptions import TelegramBadRequest
 from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, Message
 
-PLANS = {"express": ("Express", 180, 4), "base": ("Базовый", 380, 10), "premium": ("Premium", 790, 25)}
+PLANS = {"express": ("Express", 108, 5), "base": ("Базовый", 380, 12), "premium": ("Premium", 790, 30)}
 METHODS = {"sbp": "СБП", "crypto": "Крипта"}
 TEST_URL = "https://example.com/?payment-demo=1"
 PRIVACY_URL = "https://telegra.ph/Politika-konfidencialnosti-08-01-83"
@@ -37,10 +37,17 @@ class Checkout:
     last_data: str | None = None
 
 
+def _legal_footer():
+    return [
+        [InlineKeyboardButton(text="Политика конфиденциальности", url=PRIVACY_URL)],
+        [InlineKeyboardButton(text="Пользовательское соглашение", url=TERMS_URL)],
+    ]
+
+
 def render(checkout):
-    def action(text, name):
+    def action(text, name, *, style=None):
         return InlineKeyboardButton(
-            text=text, callback_data=f"{PREFIX}{checkout.token}:{checkout.revision}:{name}"
+            text=text, callback_data=f"{PREFIX}{checkout.token}:{checkout.revision}:{name}", style=style
         )
 
     cancel = [action("❌ Отменить покупку", "cancel")]
@@ -60,14 +67,15 @@ def render(checkout):
             "или новый вариант — 1 генерация.\n"
             "Демонстрационная сессия действует 60 минут с открытия."
         )
-        rows = [[action(f"{name} · {price} ₽ ({count} {'генерации' if count == 4 else 'генераций'})", "plan:" + key)]
+        rows = [[action(f"{name} · {price} ₽ ({count} генераций)", "plan:" + key)]
                 for key, (name, price, count) in PLANS.items()]
     else:
         name, price, count = PLANS[checkout.plan]
         text = notice + f"\nТариф: {name}\nСтоимость: {price} ₽\nГенераций: {count}\n"
         if checkout.stage == "methods":
             text += "Выберите способ для демонстрации."
-            rows = [[action(name, "method:" + key) for key, name in METHODS.items()]]
+            rows = [[action(name, "method:" + key, style="success" if key == "sbp" else "primary")
+                     for key, name in METHODS.items()]]
         else:
             text += (
                 f"Сервис: Platega · демо\nСпособ: {METHODS[checkout.method]}\n\n"
@@ -79,11 +87,11 @@ def render(checkout):
             )
             rows = [
                 [InlineKeyboardButton(text="🔗 Тестовая ссылка", url=TEST_URL)],
-                [InlineKeyboardButton(text="Политика конфиденциальности", url=PRIVACY_URL)],
-                [InlineKeyboardButton(text="Пользовательское соглашение", url=TERMS_URL)],
             ]
         rows.append([action("⬅️ Назад", "back")])
     rows.append(cancel)
+    if checkout.stage in {"methods", "link"}:
+        rows.extend(_legal_footer())
     return text, InlineKeyboardMarkup(inline_keyboard=rows)
 
 

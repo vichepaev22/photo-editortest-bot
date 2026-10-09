@@ -143,7 +143,7 @@ def only_alert(sent):
 
 
 @pytest.mark.parametrize("plan,label,price,count", [
-    ("express", "Express", 180, 4), ("base", "Базовый", 380, 10), ("premium", "Premium", 790, 25),
+    ("express", "Express", 108, 5), ("base", "Базовый", 380, 12), ("premium", "Premium", 790, 30),
 ])
 @pytest.mark.parametrize("method,label_method", [("sbp", "СБП"), ("crypto", "Крипта")])
 async def test_single_message_flow_back_cancel_and_no_ledger(ui, plan, label, price, count, method, label_method):
@@ -154,14 +154,21 @@ async def test_single_message_flow_back_cancel_and_no_ledger(ui, plan, label, pr
     assert len(initial) == 1 and initial[0].__api_method__ == "sendMessage"
     assert content(initial).text.startswith("Образ · Покупка доступа (демо)")
     assert {b.text for row in content(initial).reply_markup.inline_keyboard for b in row} == {
-        "Express · 180 ₽ (4 генерации)", "Базовый · 380 ₽ (10 генераций)",
-        "Premium · 790 ₽ (25 генераций)", "❌ Отменить покупку",
+        "Express · 108 ₽ (5 генераций)", "Базовый · 380 ₽ (12 генераций)",
+        "Premium · 790 ₽ (30 генераций)", "❌ Отменить покупку",
     }
     assert "Любая правка, объединение фото" in content(initial).text
     assert "Количество генераций и срок доступа пока не определены" not in content(initial).text
     plan_data = data(initial, "plan:" + plan)
     choice = await ui.click(plan_data)
-    assert content(choice).__api_method__ == "editMessageText"
+    selection = content(choice)
+    assert selection.__api_method__ == "editMessageText" and selection.message_id == session.message_id
+    assert f"Тариф: {label}" in selection.text and f"Стоимость: {price} ₽" in selection.text
+    assert f"Генераций: {count}" in selection.text
+    method_rows = selection.reply_markup.model_dump(mode="json", exclude_none=True)["inline_keyboard"]
+    assert [(button["text"], button["style"]) for button in method_rows[0]] == [
+        ("СБП", "success"), ("Крипта", "primary"),
+    ]
     duplicate = await ui.click(plan_data)
     assert len(duplicate) == 1 and duplicate[0].__api_method__ == "answerCallbackQuery"
     final = await ui.click(data(choice, "method:" + method))
@@ -177,6 +184,17 @@ async def test_single_message_flow_back_cancel_and_no_ledger(ui, plan, label, pr
     urls = {b.url: b.text for row in result.reply_markup.inline_keyboard for b in row if b.url}
     assert urls == {TEST_URL: "🔗 Тестовая ссылка", PRIVACY_URL: "Политика конфиденциальности",
                     TERMS_URL: "Пользовательское соглашение"}
+    for stage in (selection, result):
+        rows = stage.reply_markup.model_dump(mode="json", exclude_none=True)["inline_keyboard"]
+        assert rows[-2:] == [
+            [{"text": "Политика конфиденциальности", "url": PRIVACY_URL}],
+            [{"text": "Пользовательское соглашение", "url": TERMS_URL}],
+        ]
+        assert [row[0]["text"] for row in rows[-4:-2]] == ["⬅️ Назад", "❌ Отменить покупку"]
+        assert rows[-4][0]["callback_data"].endswith(":back")
+        assert rows[-3][0]["callback_data"].endswith(":cancel")
+        assert all("style" not in button for row in rows[-4:] for button in row)
+        assert sum(button.get("url") in {PRIVACY_URL, TERMS_URL} for row in rows for button in row) == 2
     for trigger in (NAV["buy"], "/buy"):
         repeated = await ui.send(trigger)
         assert len(repeated) == 1 and content(repeated).message_id == session.message_id
