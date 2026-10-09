@@ -9,7 +9,7 @@ from dataclasses import dataclass, replace
 from aiogram.exceptions import TelegramBadRequest
 from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, Message
 
-PLANS = {"express": ("Express", 108, 5), "base": ("Базовый", 380, 12), "premium": ("Premium", 790, 30)}
+PLANS = {"express": ("Express", 160, 5), "base": ("Базовый", 380, 12), "premium": ("Premium", 790, 30)}
 METHODS = {"sbp": "СБП", "crypto": "Крипта"}
 TEST_URL = "https://example.com/?payment-demo=1"
 PRIVACY_URL = "https://telegra.ph/Politika-konfidencialnosti-08-01-83"

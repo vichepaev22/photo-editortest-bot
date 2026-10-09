@@ -90,6 +90,12 @@ def confirmation(sent):
 
 async def test_bottom_navigation_after_start_and_consent(ui):
     sent = await send(ui, "/start")
+    greeting = next(m for m in sent if "фотостудия" in (getattr(m, "text", "") or ""))
+    assert greeting.text.startswith("Образ · ваша фотостудия ✨")
+    assert "📄 Сделайте фото на документы." in greeting.text
+    assert "для совершеннолетних" in greeting.text
+    assert "передаются OpenAI; лицо может измениться" in greeting.text
+    assert not any(command in greeting.text for command in ("/terms", "/privacy", "/support"))
     keyboards = [
         m.reply_markup for m in sent if isinstance(getattr(m, "reply_markup", None), ReplyKeyboardMarkup)
     ]
@@ -175,7 +181,14 @@ def trial_ui(tmp_path):
 
 async def test_trial_native_auto_grant_after_consent_and_repeat_does_not_reset(trial_ui):
     _, _, store, _, service, _ = trial_ui
-    await send(trial_ui, "/start")
+    sent = await send(trial_ui, "/start")
+    assert any(isinstance(getattr(m, "reply_markup", None), ReplyKeyboardMarkup) for m in sent)
+    assert any(
+        button.callback_data == "consent"
+        for m in sent
+        for row in getattr(getattr(m, "reply_markup", None), "inline_keyboard", [])
+        for button in row
+    )
     await send(trial_ui, "/demo")
     assert store.wallet(1, trial=True) == (0, 0)
     sent = await send(trial_ui, callback="consent")

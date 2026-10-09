@@ -143,7 +143,7 @@ def only_alert(sent):
 
 
 @pytest.mark.parametrize("plan,label,price,count", [
-    ("express", "Express", 108, 5), ("base", "Базовый", 380, 12), ("premium", "Premium", 790, 30),
+    ("express", "Express", 160, 5), ("base", "Базовый", 380, 12), ("premium", "Premium", 790, 30),
 ])
 @pytest.mark.parametrize("method,label_method", [("sbp", "СБП"), ("crypto", "Крипта")])
 async def test_single_message_flow_back_cancel_and_no_ledger(ui, plan, label, price, count, method, label_method):
@@ -154,7 +154,7 @@ async def test_single_message_flow_back_cancel_and_no_ledger(ui, plan, label, pr
     assert len(initial) == 1 and initial[0].__api_method__ == "sendMessage"
     assert content(initial).text.startswith("Образ · Покупка доступа (демо)")
     assert {b.text for row in content(initial).reply_markup.inline_keyboard for b in row} == {
-        "Express · 108 ₽ (5 генераций)", "Базовый · 380 ₽ (12 генераций)",
+        "Express · 160 ₽ (5 генераций)", "Базовый · 380 ₽ (12 генераций)",
         "Premium · 790 ₽ (30 генераций)", "❌ Отменить покупку",
     }
     assert "Любая правка, объединение фото" in content(initial).text

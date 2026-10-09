@@ -569,11 +569,20 @@ def build_dispatcher(settings, store, media, service, *, step_messages=None, pur
             if trial else ""
         )
         await message.answer(
-            "Образ · фотостудия\n\nПримерка причёсок, одежды, очков и объединение фото.\n\n"
-            "Загрузите собственные фото либо фото людей, давших согласие. Изображения в рабочем режиме "
-            "передаются OpenAI; лицо может измениться. /terms /privacy /support" + mode,
-            reply_markup=MAIN if store.has_consent(message.from_user.id) else CONSENT,
+            "Образ · ваша фотостудия ✨\n\n"
+            "💇 Примерьте причёску, одежду или очки, смените фон.\n"
+            "🧩 Объедините фотографии.\n"
+            "📄 Сделайте фото на документы.\n\n"
+            "Сервис для совершеннолетних. Используйте собственные фото или фото людей, давших согласие. "
+            "В рабочем режиме изображения передаются OpenAI; лицо может измениться.\n" + mode,
+            reply_markup=MAIN,
         )
+        if not store.has_consent(message.from_user.id):
+            await message.answer(
+                "Перед началом подтвердите совершеннолетие, права на фото и согласие изображённых людей. "
+                "Используйте только полностью одетые образы.",
+                reply_markup=CONSENT,
+            )
 
     @router.callback_query(F.data == "consent")
     async def consent(callback: CallbackQuery):
