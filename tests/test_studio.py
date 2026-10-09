@@ -223,6 +223,43 @@ async def test_upload_resolution_limit_rejects_before_decode(studio, monkeypatch
     source.load.assert_not_called()
 
 
+async def test_upload_cannot_save_when_consent_revoked_during_decode(studio, monkeypatch):
+    from image_studio import studio as studio_module
+
+    client, _, store, media, provider, *_ = studio
+    headers = await auth(client)
+    store.consent(1)
+    original = studio_module.normalize
+
+    def revoke_during_decode(data):
+        result = original(data)
+        store.revoke_consent(1)
+        return result
+
+    monkeypatch.setattr(studio_module, "normalize", revoke_during_decode)
+    response = await client.post("/api/photos", content=image(), headers=headers)
+    assert response.status_code == 403 and response.json() == {"error": "consent_required"}
+    assert not list(media.root.rglob("*.jpg")) and provider.calls == 0
+
+
+async def test_heic_upload_with_inaccurate_mime_returns_normalized_jpeg(studio):
+    client, _, store, _, provider, *_ = studio
+    headers = await auth(client)
+    store.consent(1)
+    source = io.BytesIO()
+    Image.new("RGB", (32, 48), "purple").save(source, "HEIF", quality=90)
+    response = await client.post("/api/photos", content=source.getvalue(),
+                                 headers=headers | {"Content-Type": "image/jpeg"})
+    assert response.status_code == 200
+    preview = await client.get("/api/photos/" + response.json()["id"], headers=headers)
+    assert preview.status_code == 200 and preview.headers["content-type"] == "image/jpeg"
+    with Image.open(io.BytesIO(preview.content)) as normalized:
+        normalized.load()
+        assert normalized.format == "JPEG" and normalized.size == (32, 48)
+        assert not normalized.getexif()
+    assert provider.calls == 0
+
+
 async def test_upload_count_and_stream_limit(studio):
     client, _, _, media, *_ = studio
     headers, _ = await prepare(studio)

@@ -47,7 +47,7 @@
   const currentPreset = () => state.catalog.find(item => item.id === state.preset) || state.catalog[0];
   const activeStatuses = new Set(['queued', 'running']);
   const statusText = {queued:'Фото принято. Ожидаем своей очереди', running:'Создаём ваш образ', generated:'Образ готов', delivered:'Образ готов', failed:'Не удалось создать образ', review:'Задание требует проверки'};
-  const errors = {insufficient_credits:'Недостаточно попыток. Посмотрите баланс в профиле.', invalid_image:'Не удалось прочитать фото. Выберите JPEG, PNG или WebP. Если это HEIC на iPhone, сохраните копию в JPEG.', image_resolution_limit:'Разрешение фото слишком большое. Максимум — 64 MP и 10 MB на файл. Уменьшите фото или выберите другое.', image_too_large:'Фото слишком большое. Максимум — 10 MB.', upload_limit:'Достигнут лимит загруженных фото. Удалите данные или дождитесь очистки.', consent_required:'Сначала подтвердите согласие на обработку фото.', active_job:'Дождитесь завершения текущего задания.', job_active:'Дождитесь завершения текущего задания.', not_found:'Файл недоступен: срок хранения истёк или он был удалён.', unauthorized:'Вход в студию завершился. Войдите снова.', demo_unavailable:'Тестовый вход здесь недоступен. Откройте студию из Telegram.', invalid_description:'Добавьте описание от 1 до 1500 символов.', interrupted_provider:'Задание прервалось и требует проверки поддержки.'};
+  const errors = {insufficient_credits:'Недостаточно попыток. Посмотрите баланс в профиле.', invalid_image:'Не удалось прочитать фото: файл повреждён или его формат не поддерживается. Выберите другое фото в JPEG, PNG, WebP, HEIC или HEIF.', image_resolution_limit:'Разрешение фото слишком большое. Максимум — 64 MP и 10 MB на файл. Уменьшите фото или выберите другое.', image_too_large:'Фото слишком большое. Максимум — 10 MB.', upload_limit:'Достигнут лимит загруженных фото. Удалите данные или дождитесь очистки.', consent_required:'Сначала подтвердите согласие на обработку фото.', active_job:'Дождитесь завершения текущего задания.', job_active:'Дождитесь завершения текущего задания.', not_found:'Файл недоступен: срок хранения истёк или он был удалён.', unauthorized:'Вход в студию завершился. Войдите снова.', demo_unavailable:'Тестовый вход здесь недоступен. Откройте студию из Telegram.', invalid_description:'Добавьте описание от 1 до 1500 символов.', interrupted_provider:'Задание прервалось и требует проверки поддержки.'};
   Object.assign(errors,{body_too_large:errors.image_too_large,photo_limit:errors.upload_limit,already_active:errors.active_job,unsupported_media:errors.invalid_image,invalid_prompt:errors.invalid_description,invalid_inputs:'Проверьте количество фото и описание, затем подтвердите ещё раз.',request_mismatch:'Это подтверждение уже использовано для другого образа. Обновите результаты.',confirmation_required:'Перед созданием подтвердите стоимость.'});
   Object.assign(errors,{trial_exhausted:'Бесплатная генерация уже использована. Повторная выдача недоступна.',trial_not_granted:'Подтвердите согласие, чтобы получить 1 бесплатную успешную генерацию.',invalid_trial_user:'Бесплатная реальная генерация доступна только после входа через Telegram.'});
   function notify(message, error = false) { $('notice').textContent = message; $('notice').classList.toggle('error', error); $('notice').hidden = false; }
@@ -55,6 +55,10 @@
   function haptic(type = 'selectionChanged') { try { if(supports('6.1')) bridge?.HapticFeedback?.[type]?.(); } catch {} }
   function trackURL(blob) { const url = URL.createObjectURL(blob); state.liveURLs.add(url); return url; }
   function releaseURL(url) { if (url) { URL.revokeObjectURL(url); state.liveURLs.delete(url); } }
+  function releaseUnusedURL(url) {
+    if (state.photos.some(photo => photo?.url===url) || state.pending?.source===url || [...state.sourceURLs.values(),...state.resultURLs.values()].includes(url)) return;
+    releaseURL(url);
+  }
   function resetMedia() { for (const url of state.liveURLs) URL.revokeObjectURL(url); state.liveURLs.clear(); state.photos = []; state.resultURLs.clear(); state.sourceURLs.clear(); state.pickerOpen=false; document.querySelectorAll('[data-upload]').forEach(input => {input.value='';}); }
   class APIError extends Error { constructor(code, status) { super(errors[code] || 'Не удалось выполнить действие. Попробуйте позже или обратитесь в поддержку.'); this.code = code; this.status = status; } }
   async function api(path, options = {}) {
@@ -175,8 +179,16 @@
     $('photoSlots').classList.toggle('merge-slots', required === 2);
     $('photoSlots').innerHTML = Array.from({length:required}, (_, index) => {
       const photo = state.photos[index];
-      return `<div class="photo-slot">${photo ? `<img src="${escape(photo.url)}" alt="Ваше исходное фото ${index + 1}"><div class="photo-overlay"><span>${state.uploading.has(index) ? 'Загружаем…' : photo.error ? 'Загрузка прервалась' : photo.id ? `Фото ${index + 1}` : 'Выбрано в этой вкладке'}</span>${photo.error ? `<button type="button" class="upload-retry" data-retry-upload="${index}">Повторить</button>` : ''}<button type="button" class="icon-button" data-remove="${index}" aria-label="Убрать фото ${index + 1}" ${state.pending || state.uploading.has(index) ? 'disabled' : ''}>${icon('close')}</button></div>` : `<button type="button" class="upload-label" data-pick-photo="${index}" aria-controls="photoPicker${index}" aria-describedby="photoStatus"><span class="upload-plus">${icon('plus')}</span><strong>${required === 2 ? `Добавить фото ${index + 1}` : 'Добавьте своё фото'}</strong><small>${required === 2 ? 'Два фото, один общий кадр' : 'Здесь начинается новый образ'}</small></button>`}</div>`;
+      const preview = photo?.previewUnavailable ? `<div class="upload-label" role="status"><span class="upload-plus">${icon('photo')}</span><strong>${photo.id && !state.preview ? 'Фото загружено' : 'Фото выбрано'}</strong><small>${state.preview ? 'Браузер не показывает этот формат. Предпросмотр доступен после загрузки в рабочей студии.' : photo.id ? 'Предпросмотр пока недоступен. Фото можно использовать для создания.' : 'Предпросмотр появится после загрузки.'}</small></div>` : photo ? `<img src="${escape(photo.url)}" data-photo-preview="${index}" alt="Ваше исходное фото ${index + 1}">` : '';
+      return `<div class="photo-slot">${photo ? `${preview}<div class="photo-overlay"><span>${state.uploading.has(index) ? 'Загружаем…' : photo.error ? 'Загрузка прервалась' : photo.id ? `Фото ${index + 1}` : 'Выбрано в этой вкладке'}</span>${photo.error ? `<button type="button" class="upload-retry" data-retry-upload="${index}">Повторить</button>` : ''}<button type="button" class="icon-button" data-remove="${index}" aria-label="Убрать фото ${index + 1}" ${state.pending || state.uploading.has(index) ? 'disabled' : ''}>${icon('close')}</button></div>` : `<button type="button" class="upload-label" data-pick-photo="${index}" aria-controls="photoPicker${index}" aria-describedby="photoStatus"><span class="upload-plus">${icon('plus')}</span><strong>${required === 2 ? `Добавить фото ${index + 1}` : 'Добавьте своё фото'}</strong><small>${required === 2 ? 'Два фото, один общий кадр' : 'Здесь начинается новый образ'}</small></button>`}</div>`;
     }).join('');
+    $('photoSlots').querySelectorAll('[data-photo-preview]').forEach(image => {
+      const index=Number(image.dataset.photoPreview), selected=state.photos[index];
+      image.addEventListener('error',() => {
+        if (state.photos[index]!==selected || selected.url!==image.getAttribute('src')) return;
+        selected.previewUnavailable=true;renderPhotos();
+      },{once:true});
+    });
     $('photoCount').textContent = `${state.photos.slice(0,required).filter(Boolean).length} / ${required}`;
     updateAction();
   }
@@ -219,10 +231,9 @@
     if (!file) {updatePhotoStatus();return;}
     if (state.pending || state.uploading.size) {notify('Завершите загрузку или отправку текущего задания перед выбором другого фото.');updatePhotoStatus();return;}
     if (file.size > 10_000_000 || file.size === 0) { notify('Выберите фото размером до 10 MB.', true); updatePhotoStatus();return; }
-    if (!['image/jpeg','image/png','image/webp'].includes(file.type)) { notify('Поддерживаются JPEG, PNG и WebP. Если это HEIC на iPhone, сохраните копию в JPEG.', true); updatePhotoStatus();return; }
     const previous=state.photos[index];
-    if (previous && ![...state.sourceURLs.values()].includes(previous.url)) releaseURL(previous.url);
-    state.photos[index]={id:state.preview ? crypto.randomUUID() : null,url:trackURL(file),file:state.preview ? null : file,error:null};
+    state.photos[index]={id:state.preview ? crypto.randomUUID() : null,url:trackURL(file),file:state.preview ? null : file,error:null,previewUnavailable:false};
+    if (previous) releaseUnusedURL(previous.url);
     $('notice').hidden=true;renderPhotos();
     await sendPhoto(index);
   }
@@ -236,13 +247,31 @@
     state.uploading.add(index); renderPhotos();
     try {
       const photo = await api('/api/photos', {method:'POST',headers:{'Content-Type':'application/octet-stream'},body:selected.file});
-      if(state.photos[index]===selected) {selected.id=photo.id;selected.file=null;selected.error=null;}
-      $('notice').hidden = true;
+      if(state.photos[index]===selected) {selected.id=photo.id;selected.file=null;selected.error=null;$('notice').hidden = true;}
     } catch (error) {
-      if(state.photos[index]===selected) selected.error=error instanceof APIError ? error.message : 'Фото осталось в этой вкладке. Проверьте связь и нажмите «Повторить».';
-      notify(error instanceof APIError ? error.message : 'Фото не загружено. Проверьте связь и нажмите «Повторить».', true);
+      if(state.photos[index]===selected) {
+        selected.error=error instanceof APIError ? error.message : 'Фото осталось в этой вкладке. Проверьте связь и нажмите «Повторить».';
+        notify(error instanceof APIError ? error.message : 'Фото не загружено. Проверьте связь и нажмите «Повторить».', true);
+      }
     }
     finally { state.uploading.delete(index); renderPhotos(); }
+    if (state.photos[index]===selected && selected.id) await loadPhotoPreview(selected,index);
+  }
+  async function loadPhotoPreview(selected,index) {
+    const id=selected.id;
+    try {
+      const blob=await api(`/api/photos/${encodeURIComponent(id)}`,{blob:true});
+      if (state.photos[index]!==selected || selected.id!==id) return;
+      const previousURL=selected.url;
+      selected.url=trackURL(blob);selected.previewUnavailable=false;
+      if(state.pending?.source===previousURL) state.pending.source=selected.url;
+      for(const [job,source] of state.sourceURLs) {
+        if(source===previousURL) state.sourceURLs.set(job,selected.url);
+      }
+      releaseUnusedURL(previousURL);renderPhotos();
+    } catch {
+      // Preview is optional: the successful upload and photo id remain usable.
+    }
   }
   function updateAction() {
     renderHairExamples();
@@ -416,7 +445,7 @@
       const picker=event.target.closest('[data-pick-photo]');if(picker) {pickPhoto(Number(picker.dataset.pickPhoto));return;}
       const retry=event.target.closest('[data-retry-upload]');if(retry) {sendPhoto(Number(retry.dataset.retryUpload));return;}
       const button=event.target.closest('[data-remove]');if (!button || state.pending || state.uploading.size) return;
-      const index=Number(button.dataset.remove);const photo=state.photos[index];if(photo && ![...state.sourceURLs.values()].includes(photo.url)) releaseURL(photo.url);state.photos[index]=null;renderPhotos();
+      const index=Number(button.dataset.remove);const photo=state.photos[index];state.photos[index]=null;if(photo) releaseUnusedURL(photo.url);renderPhotos();
     });
     $('documentMode').addEventListener('change',() => {if(state.pending || state.submitting) return; state.documentMode=$('documentMode').value; $('description').value=documentDescriptions[state.documentMode]; updateAction();});
     $('hairExamples').addEventListener('click',event => {

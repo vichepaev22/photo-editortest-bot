@@ -15,6 +15,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from urllib.parse import parse_qsl, urlsplit
 
+import anyio
 from fastapi import FastAPI, Request
 from fastapi.responses import FileResponse, JSONResponse, Response
 from starlette.exceptions import HTTPException
@@ -134,6 +135,7 @@ def _uuid(value, status=400):
 
 def create_studio_app(settings, store, media, service):
     app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
+    photo_decode_limiter = anyio.CapacityLimiter(1)
     sessions = {}
     assets = Path(__file__).parent / "web"
     local_hosts = {"localhost", "127.0.0.1", "::1"}
@@ -360,10 +362,15 @@ def create_studio_app(settings, store, media, service):
         if sum(1 for file in directory.glob("*.jpg") if file.is_file()) >= 24:
             raise APIError("photo_limit", 409)
         try:
-            normalized = normalize(body)
+            normalized = await anyio.to_thread.run_sync(normalize, body, limiter=photo_decode_limiter)
         except ValueError as exc:
             code = "image_resolution_limit" if str(exc) == "image_resolution_limit" else "invalid_image"
             raise APIError(code) from None
+        # Decode yields too: an expired session or revoked consent cannot save a new photo.
+        identity(request, consent=True)
+        directory = media.user_dir(user)
+        if sum(1 for file in directory.glob("*.jpg") if file.is_file()) >= 24:
+            raise APIError("photo_limit", 409)
         photo = uuid.uuid4().hex
         media.save(user, normalized, photo + ".jpg")
         return {"id": photo}

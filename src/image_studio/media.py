@@ -4,10 +4,13 @@ import time
 import uuid
 from pathlib import Path
 
-from PIL import Image, ImageOps, UnidentifiedImageError
+from PIL import Image, ImageCms, ImageOps, UnidentifiedImageError
+from pillow_heif import register_heif_opener
 
 MAX_BYTES = 10_000_000
 MAX_PIXELS = 64_000_000
+
+register_heif_opener(thumbnails=False, depth_images=False, aux_images=False, decode_threads=1)
 
 
 def normalize(data: bytes) -> bytes:
@@ -15,20 +18,36 @@ def normalize(data: bytes) -> bytes:
         raise ValueError("image_size_limit")
     try:
         with Image.open(io.BytesIO(data)) as source:
-            if source.format not in {"JPEG", "PNG", "WEBP"}:
+            if source.format not in {"JPEG", "PNG", "WEBP", "HEIF"}:
                 raise ValueError("invalid_image")
             if source.width * source.height > MAX_PIXELS:
                 raise ValueError("image_resolution_limit")
             source.load()
-            oriented = ImageOps.exif_transpose(source)
+            if source.width * source.height > MAX_PIXELS:
+                raise ValueError("image_resolution_limit")
+            # libheif applies HEIF transforms; its Pillow plugin resets EXIF orientation.
+            oriented = source if source.format == "HEIF" else ImageOps.exif_transpose(source)
             oriented.thumbnail((2048, 2048))
-            image = oriented.convert("RGB")
+            if source.format == "HEIF" and oriented.info.get("icc_profile"):
+                image = ImageCms.profileToProfile(
+                    oriented,
+                    ImageCms.ImageCmsProfile(io.BytesIO(oriented.info["icc_profile"])),
+                    ImageCms.createProfile("sRGB"),
+                    outputMode="RGB",
+                )
+            else:
+                image = oriented.convert("RGB")
+            image.info.clear()
             result = io.BytesIO()
             image.save(result, "JPEG", quality=92, exif=b"")
             return result.getvalue()
     except (Image.DecompressionBombError, Image.DecompressionBombWarning):
         raise ValueError("image_resolution_limit") from None
-    except (UnidentifiedImageError, OSError):
+    except (UnidentifiedImageError, OSError, SyntaxError, EOFError, RuntimeError, ImageCms.PyCMSError):
+        raise ValueError("invalid_image") from None
+    except ValueError as exc:
+        if str(exc) in {"invalid_image", "image_resolution_limit"}:
+            raise
         raise ValueError("invalid_image") from None
 
 

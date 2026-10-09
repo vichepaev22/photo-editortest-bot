@@ -10,7 +10,7 @@
   <link rel="stylesheet" href="./app.css">
   <script src="https://telegram.org/js/telegram-web-app.js" defer></script>
   <script src="./config.js" defer></script>
-  <script src="./app.js?v=20261009-manualcredits" defer></script>
+  <script src="./app.js?v=20261009-heic" defer></script>
 </head>
 <body>
   <div class="app-shell">
@@ -30,10 +30,10 @@
           <section class="photo-workspace" aria-labelledby="photoHeading">
             <div class="workspace-top"><h2 id="photoHeading">Исходное фото</h2><span id="photoCount">0 / 1</span></div>
             <div id="photoSlots" class="photo-slots"></div>
-            <div id="photoPickers" hidden><input id="photoPicker0" type="file" accept="image/jpeg,image/png,image/webp" data-upload="0" aria-label="Выбрать исходное фото 1"><input id="photoPicker1" type="file" accept="image/jpeg,image/png,image/webp" data-upload="1" aria-label="Выбрать исходное фото 2"></div>
+            <div id="photoPickers" hidden><input id="photoPicker0" type="file" accept="image/jpeg,image/png,image/webp,image/heic,image/heif,.jpg,.jpeg,.png,.webp,.heic,.heif" data-upload="0" aria-label="Выбрать исходное фото 1"><input id="photoPicker1" type="file" accept="image/jpeg,image/png,image/webp,image/heic,image/heif,.jpg,.jpeg,.png,.webp,.heic,.heif" data-upload="1" aria-label="Выбрать исходное фото 2"></div>
             <p id="photoStatus" class="photo-status" role="status" aria-live="polite">Подключаем студию… Фото можно выбрать сейчас.</p>
             <button id="reconnectButton" class="text-button" type="button" hidden>Подключиться снова</button>
-            <p class="photo-hint"><span aria-hidden="true">✓</span>Лицо хорошо видно · JPEG, PNG, WebP · до 10 MB</p>
+            <p class="photo-hint"><span aria-hidden="true">✓</span>Лицо хорошо видно · JPEG, PNG, WebP, HEIC, HEIF · до 10 MB</p>
             <div class="privacy-note"><span class="privacy-dot"></span>Фото доступны только вам. Хранение — 24 часа.</div>
           </section>
           <div class="editor-controls">
