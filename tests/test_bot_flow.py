@@ -344,7 +344,7 @@ async def test_worker_delivery_cleans_only_steps_even_before_progress_ack(flow):
     bot.before_progress = finish_before_progress
     bot.on_delete = check_delivery_before_delete
     await feed(flow, "Тонкая оправа", message_id=1204)
-    assert store.jobs(1)[0]["status"] == "delivered" and service.wallet(1) == (2, 0)
+    assert store.jobs(1)[0]["status"] == "delivered" and service.wallet(1) == (0, 0)
     assert provider.calls == 1 and deleted_ids(bot) == step_ids(bot)
     kept = {response.message_id for method, response in bot.history if response
             and (method.__api_method__ == "sendDocument" or "фотостудия" in getattr(method, "text", "")

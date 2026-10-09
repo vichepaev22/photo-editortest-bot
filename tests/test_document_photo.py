@@ -142,9 +142,9 @@ async def test_single_sheet_uses_one_credit_and_replay_or_failed_delivery_cannot
         raise OSError("synthetic delivery failure")
 
     service = Service(store, media, provider, failed_delivery, trial_access=trial)
-    assert service.wallet(1) == (3, 0)
+    assert service.wallet(1) == (1 if trial else 3, 0)
     job = service.submit(1, "one-sheet", preset, [photo], "Сохранить одежду")
-    assert service.wallet(1) == (3, 1)
+    assert service.wallet(1) == (1 if trial else 3, 1)
     assert store.job(job)["cost"] == 1
     assert await service.process(job)
     result = store.result(1, job)
@@ -157,7 +157,7 @@ async def test_single_sheet_uses_one_credit_and_replay_or_failed_delivery_cannot
     store.delivered(job)
     assert not await service.process(job)
     assert provider.calls == expected_calls
-    assert service.wallet(1) == (2, 0)
+    assert service.wallet(1) == (0 if trial else 2, 0)
     assert store.wallet(1) == ((3, 0) if trial else (2, 0))
     assert media.path(photo).read_bytes() == original
     assert json.loads(result["usage"]) == ({} if preset == "document_original" else {"output_tokens": 7})
@@ -179,11 +179,11 @@ async def test_render_failure_releases_reservation_once(workflow, preset, expect
 
     service = Service(store, media, provider, notify=notify, trial_access=trial)
     job = service.submit(1, "failed-sheet", preset, [photo], "Сохранить одежду")
-    assert service.wallet(1) == (3, 1)
+    assert service.wallet(1) == (1 if trial else 3, 1)
     assert not await service.process(job)
     assert store.job(job)["status"] == "failed"
     assert store.job(job)["error"] == "processing_error"
-    assert service.wallet(1) == (3, 0)
+    assert service.wallet(1) == (1 if trial else 3, 0)
     assert not await service.process(job)
     assert provider.calls == expected_calls
     assert notified == [(1, job)]
