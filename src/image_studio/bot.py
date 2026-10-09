@@ -40,6 +40,13 @@ from .purchase_demo import PRIVACY_URL, TERMS_URL, PurchaseDemo
 from .runtime import RUNTIME_DIR, BotRuntime
 from .service import Service
 from .store import DomainError, Store
+from .subscriptions import (
+    SUBSCRIPTION_KEYBOARD,
+    offer_channel_bonus,
+    register_subscriptions,
+    subscription_eligible,
+    subscription_hint,
+)
 
 
 def buttons(rows):
@@ -136,6 +143,7 @@ COMMANDS = [
         ("help", "Как пользоваться фотостудией"),
         ("demo", "Получить тестовые попытки"),
         ("balance", "Остаток попыток"),
+        ("bonus", "Бонус за подписку на каналы"),
         ("id", "Мой ID для пилотного доступа"),
         ("cancel", "Сбросить новую заявку"),
         ("result", "Мои готовые результаты"),
@@ -247,7 +255,7 @@ class StepMessages:
             scope.cleaning = False
 
 
-async def deliver_result(bot, store, steps, user, job, path, *, demo=False):
+async def deliver_result(bot, store, steps, user, job, path, *, demo=False, unlimited=False):
     if user == 0:  # Local browser demo has no Telegram destination.
         return
     filename, caption = result_presentation(store.job(job))
@@ -261,6 +269,8 @@ async def deliver_result(bot, store, steps, user, job, path, *, demo=False):
     )
     store.delivered(job)
     await steps.delivered(bot, user, job)
+    if not demo and not unlimited:
+        await offer_channel_bonus(bot, store, user, job)
 
 
 async def processing_activity(bot, store, interval=4):
@@ -307,25 +317,34 @@ def build_dispatcher(settings, store, media, service, *, step_messages=None, pur
     def pricing(user=None):
         if service.is_unlimited(user):
             return "Для вашего аккаунта включено безлимитное тестирование."
+        if store.has_manual_access(user):
+            return "Любая функция — 1 генерация из назначенного остатка. Бесплатного автопродления нет."
         if trial:
             return "Любая функция, включая объединение — 1 генерация. Всего 1 бесплатная успешная генерация."
         return f"Правка — {service.cost('hair')} попытка. Объединение двух фото — {service.cost('merge')}."
 
-    async def trial_balance(message, user):
+    async def trial_balance(message, user, *, edit=False, status=""):
+        answer = message.edit_text if edit else message.answer
         if not store.has_consent(user):
-            await message.answer("Сначала подтвердите условия и согласие в /start.", reply_markup=CONSENT)
+            await answer("Сначала подтвердите условия и согласие в /start.", reply_markup=CONSENT)
             return
         if service.is_unlimited(user):
-            await message.answer("♾ Безлимитное тестирование\n\nКоличество генераций для вашего аккаунта не ограничено.",
-                                 reply_markup=MAIN)
+            await answer("♾ Безлимитное тестирование\n\nКоличество генераций для вашего аккаунта не ограничено.",
+                         reply_markup=BACK if edit else MAIN)
             return
         total, reserved = service.wallet(user)
-        await message.answer(
-            "Вам доступна 1 бесплатная успешная генерация OpenAI, включая объединение фото.\n"
+        await answer(
+            ("🎁 Генерации с бонусом за подписку\n" if store.has_channel_bonus(user) else
+             "🎁 Дополнительные генерации\n" if store.has_manual_access(user) else
+             "Базовый доступ: 1 бесплатная успешная генерация OpenAI, включая объединение фото.\n") +
             f"Осталось: {total - reserved}. В обработке: {reserved}.\n"
-            "Каждый новый вариант использует 1 генерацию. Повторная выдача не предусмотрена.",
-            reply_markup=MAIN,
+            "Каждый новый вариант использует 1 генерацию. Повторная выдача не предусмотрена."
+            + ("\n\n" + status if status else subscription_hint(store, service, user)),
+            reply_markup=(SUBSCRIPTION_KEYBOARD if trial and subscription_eligible(store, service, user)
+                          else BACK if edit else MAIN),
         )
+
+    register_subscriptions(router, store, service, trial_balance, enabled=trial)
 
     def current(user):
         draft = drafts.get(user)
@@ -464,6 +483,8 @@ def build_dispatcher(settings, store, media, service, *, step_messages=None, pur
         )
         store.delivered(job)
         await steps.delivered(message.bot, user, job)
+        if settings.image_provider != "mock" and not service.is_unlimited(user):
+            await offer_channel_bonus(message.bot, store, user, job)
 
     async def navigate(message, user, action):
         if action in {"home", "edit"}:
@@ -480,7 +501,7 @@ def build_dispatcher(settings, store, media, service, *, step_messages=None, pur
         elif action == "merge":
             await choose_preset(message, user, "merge")
         elif action == "balance":
-            if service.is_unlimited(user):
+            if trial or service.is_unlimited(user):
                 await trial_balance(message, user)
                 return
             total, reserved = service.wallet(user)
@@ -559,12 +580,14 @@ def build_dispatcher(settings, store, media, service, *, step_messages=None, pur
     @router.message(CommandStart())
     async def start(message: Message):
         drafts.pop(message.from_user.id, None)
-        service.wallet(message.from_user.id)
+        total, reserved = service.wallet(message.from_user.id)
         mode = (
             "\nСейчас демо: результат — тестовая копия с отметкой DEMO."
             if settings.image_provider == "mock"
             else "\n♾ Для вашего аккаунта включено безлимитное тестирование."
             if service.is_unlimited(message.from_user.id)
+            else f"\n🎁 Доступно генераций: {total - reserved}. Бесплатного автопродления нет."
+            if store.has_manual_access(message.from_user.id)
             else "\nВсего 1 бесплатная успешная генерация OpenAI после согласия. Любая функция — 1 генерация."
             if trial else ""
         )
@@ -594,6 +617,9 @@ def build_dispatcher(settings, store, media, service, *, step_messages=None, pur
             + (
                 "♾ Для вашего аккаунта включено безлимитное тестирование."
                 if service.is_unlimited(callback.from_user.id)
+                else f"🎁 Доступно генераций: {total - reserved}. Любая функция — 1 генерация. "
+                "Бесплатного автопродления нет."
+                if store.has_manual_access(callback.from_user.id)
                 else
                 f"Всего 1 бесплатная успешная генерация OpenAI. Доступно: {total - reserved}. "
                 "Объединение и каждый новый вариант — 1 генерация."
@@ -953,7 +979,7 @@ async def run(settings):
 
             async def deliver(user, job, path):
                 await deliver_result(bot, store, steps, user, job, path,
-                                     demo=settings.image_provider == "mock")
+                                     demo=settings.image_provider == "mock", unlimited=service.is_unlimited(user))
 
             async def notify(user, job):
                 if user == 0:

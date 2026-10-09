@@ -39,9 +39,10 @@ class Service:
         return 1 if self.trial_access else choice.credits
 
     def wallet(self, user):
-        if self.trial_access and not self.is_unlimited(user) and self.store.has_consent(user):
+        use_trial = self.trial_access and not self.store.has_manual_access(user)
+        if use_trial and not self.is_unlimited(user) and self.store.has_consent(user):
             self.store.grant_trial(user)
-        return self.store.wallet(user, trial=self.trial_access)
+        return self.store.wallet(user, trial=use_trial)
 
     def _owned_recent_file(self, user, relative, limit):
         if not isinstance(relative, str) or len(relative) > 1024:
@@ -150,17 +151,28 @@ class Service:
                 raise DomainError("invalid_inputs")
         prompt = prompt_for(preset, description)
         quota_exempt = self.is_unlimited(user)
-        try:
-            job = self.store.reserve(
-                user, key, preset, self.cost(preset), trial=self.trial_access, quota_exempt=quota_exempt,
-            )
-        except DomainError as error:
-            if str(error) != "trial_not_granted" or not self.trial_access or quota_exempt:
-                raise
-            # Reserve returns existing requests first: replaying an exempt job after
-            # disabling owner testing must not grant a new trial just for the replay.
-            self.store.grant_trial(user)
-            job = self.store.reserve(user, key, preset, self.cost(preset), trial=self.trial_access)
+        use_trial = self.trial_access
+        if self.trial_access and self.store.has_manual_access(user):
+            previous = self.store.job_for_request(user, key)
+            use_trial = bool(previous["trial"]) if previous else False
+        for attempt in range(3):
+            try:
+                job = self.store.reserve(
+                    user, key, preset, self.cost(preset), trial=use_trial, quota_exempt=quota_exempt,
+                )
+                break
+            except DomainError as error:
+                if attempt == 2 or not use_trial or quota_exempt:
+                    raise
+                if str(error) == "manual_access_required":
+                    use_trial = False
+                elif str(error) == "trial_not_granted":
+                    # Existing requests return before this check. A replay cannot
+                    # grant a new trial, and conversion cannot allocate it twice.
+                    self.store.grant_trial(user)
+                    use_trial = not self.store.has_manual_access(user)
+                else:
+                    raise
         payload_name = f"{job}.json"
         payload_path = self.media.path(f"{user}/{payload_name}")
         if not payload_path.exists() and self.store.job(job)["status"] == "queued":

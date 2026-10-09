@@ -36,7 +36,9 @@ class Store:
                     trial_used INTEGER NOT NULL DEFAULT 0 CHECK(trial_used>=0 AND trial_used<=3),
                     trial_reserved INTEGER NOT NULL DEFAULT 0
                         CHECK(trial_reserved>=0 AND trial_reserved<=3-trial_used),
-                    username TEXT, first_seen REAL, last_seen REAL);
+                    username TEXT, first_seen REAL, last_seen REAL,
+                    manual_access INTEGER NOT NULL DEFAULT 0 CHECK(manual_access IN (0,1)),
+                    channel_bonus INTEGER NOT NULL DEFAULT 0 CHECK(channel_bonus IN (0,1)));
                 CREATE TABLE IF NOT EXISTS invoices (
                     id TEXT PRIMARY KEY, user_id INTEGER NOT NULL, pack TEXT NOT NULL,
                     amount INTEGER NOT NULL CHECK(amount>0), credits INTEGER NOT NULL CHECK(credits>0),
@@ -78,6 +80,12 @@ class Store:
             for name, definition in {"username": "TEXT", "first_seen": "REAL", "last_seen": "REAL"}.items():
                 if name not in user_columns:
                     c.execute(f"ALTER TABLE users ADD COLUMN {name} {definition}")
+            if "manual_access" not in user_columns:
+                c.execute("ALTER TABLE users ADD COLUMN manual_access INTEGER NOT NULL DEFAULT 0 "
+                          "CHECK(manual_access IN (0,1))")
+            if "channel_bonus" not in user_columns:
+                c.execute("ALTER TABLE users ADD COLUMN channel_bonus INTEGER NOT NULL DEFAULT 0 "
+                          "CHECK(channel_bonus IN (0,1))")
             payment_columns = {row["name"] for row in c.execute("PRAGMA table_info(payments)")}
             if "is_test" not in payment_columns:
                 c.execute(
@@ -191,11 +199,76 @@ class Store:
     def wallet(self, user, *, trial=False):
         with self.tx() as c:
             u = self._user(c, user)
-            if trial:
+            if trial and not u["manual_access"]:
                 # Keep legacy reservations visible while clamping exhausted availability to zero.
                 total = max(u["trial_reserved"], TRIAL_LIMIT - u["trial_used"]) if u["trial_granted"] else 0
                 return total, u["trial_reserved"]
             return u["balance"], u["reserved"]
+
+    def has_manual_access(self, user):
+        with self.tx() as c:
+            return bool(self._user(c, user)["manual_access"])
+
+    def has_channel_bonus(self, user):
+        with self.tx() as c:
+            return bool(self._user(c, user)["channel_bonus"])
+
+    def claim_channel_bonus_offer(self, user, job):
+        with self.tx() as c:
+            u = self._user(c, user)
+            j = c.execute("SELECT * FROM jobs WHERE id=? AND user_id=?", (job, user)).fetchone()
+            if (j is None or j["status"] != "delivered" or not j["trial"] or j["quota_exempt"]
+                    or not u["consent"] or u["manual_access"] or u["channel_bonus"]
+                    or u["trial_used"] != TRIAL_LIMIT):
+                return False
+            if c.execute("SELECT 1 FROM events WHERE kind='channel_bonus_offer' AND ref=?",
+                         (str(user),)).fetchone():
+                return False
+            self._event(c, "channel_bonus_offer", str(user))
+            return True
+
+    def grant_channel_bonus(self, user):
+        self._trial_user(user)
+        with self.tx() as c:
+            u = self._user(c, user)
+            if u["channel_bonus"]:
+                return False
+            if not u["consent"]:
+                raise DomainError("consent_required")
+            if u["reserved"] or u["trial_reserved"]:
+                raise DomainError("already_active")
+            base = max(0, TRIAL_LIMIT - u["trial_used"]) if not u["manual_access"] else 0
+            c.execute("UPDATE users SET balance=balance+?,manual_access=1,channel_bonus=1,"
+                      "trial_granted=1,demo_used=1 WHERE id=?", (base + 1, user))
+            self._event(c, "channel_bonus", str(user))
+            return True
+
+    def grant_manual(self, user, amount, grant_id):
+        if type(user) is not int or not 0 < user < 2**52:
+            raise DomainError("invalid_manual_user")
+        if type(amount) is not int or not 1 <= amount <= 10:
+            raise DomainError("invalid_manual_amount")
+        if not isinstance(grant_id, str) or not re.fullmatch(r"[0-9a-f]{32}", grant_id):
+            raise DomainError("invalid_manual_grant")
+        reference = f"{grant_id}:{user}:{amount}"
+        with self.tx() as c:
+            previous = c.execute(
+                "SELECT ref FROM events WHERE kind='manual_grant' AND substr(ref,1,33)=?",
+                (grant_id + ":",),
+            ).fetchone()
+            if previous:
+                if previous["ref"] != reference:
+                    raise DomainError("manual_grant_mismatch")
+                return False
+            u = self._user(c, user)
+            if not u["manual_access"] and (u["reserved"] or u["trial_reserved"]):
+                raise DomainError("already_active")
+            # Allocation can precede first visit; reserve still requires consent.
+            base = max(0, TRIAL_LIMIT - u["trial_used"]) if not u["manual_access"] else 0
+            c.execute("UPDATE users SET balance=balance+?,manual_access=1,trial_granted=1,demo_used=1 WHERE id=?",
+                      (amount + base, user))
+            self._event(c, "manual_grant", reference)
+            return True
 
     @staticmethod
     def _trial_user(user):
@@ -208,7 +281,7 @@ class Store:
             u = self._user(c, user)
             if not u["consent"]:
                 raise DomainError("consent_required")
-            if u["trial_granted"]:
+            if u["trial_granted"] or u["manual_access"]:
                 return False
             c.execute("UPDATE users SET trial_granted=1 WHERE id=?", (user,))
             self._event(c, "trial_grant", str(user))
@@ -335,9 +408,17 @@ class Store:
             u = self._user(c, user)
             old = c.execute("SELECT * FROM jobs WHERE user_id=? AND request_key=?", (user, key)).fetchone()
             if old:
-                if old["preset"] != preset or old["cost"] != cost or bool(old["trial"]) != trial:
+                if old["preset"] != preset or old["cost"] != cost:
+                    raise DomainError("request_mismatch")
+                if bool(old["trial"]) != trial:
+                    if trial and u["manual_access"] and not old["trial"] and not quota_exempt:
+                        raise DomainError("manual_access_required")
                     raise DomainError("request_mismatch")
                 return old["id"]
+            # The unused trial was moved into balance by a concurrent grant.
+            # Choose the funding mode again instead of reserving that same use twice.
+            if trial and u["manual_access"] and not quota_exempt:
+                raise DomainError("manual_access_required")
             if not u["consent"]:
                 raise DomainError("consent_required")
             if (
@@ -373,6 +454,11 @@ class Store:
             if row is None:
                 raise DomainError("unknown_job")
             return dict(row)
+
+    def job_for_request(self, user, key):
+        with self.tx() as c:
+            row = c.execute("SELECT * FROM jobs WHERE user_id=? AND request_key=?", (user, key)).fetchone()
+            return dict(row) if row else None
 
     def jobs(self, user=None):
         with self.tx() as c:

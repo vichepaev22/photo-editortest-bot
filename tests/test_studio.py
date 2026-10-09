@@ -422,6 +422,21 @@ async def trial_studio(tmp_path):
         yield client, settings, store, media, provider, service, app
 
 
+async def test_manual_future_user_consent_preserves_finite_balance(trial_studio):
+    client, _, store, _, provider, _, _ = trial_studio
+    assert store.grant_manual(1, 10, "b" * 32)
+    headers = await auth(client)
+    result = (await client.get("/api/me", headers=headers)).json()
+    assert result["manual_access"] and result["available"] == 11 and not result["consent"]
+    assert not result["unlimited"]
+    assert (await client.post("/api/photos", content=image(), headers=headers)).status_code == 403
+    for _ in range(2):
+        assert (await client.post("/api/consent", json={"accepted": True}, headers=headers)).status_code == 200
+        assert (await client.post("/api/demo-credits", headers=headers)).json() == {"granted": False}
+    assert (await client.get("/api/me", headers=headers)).json()["available"] == 11
+    assert provider.calls == 0
+
+
 async def test_trial_signed_consent_auto_one_no_anonymous_or_repeat_grant(trial_studio):
     client, _, store, _, _, service, _ = trial_studio
     headers = await auth(client)
