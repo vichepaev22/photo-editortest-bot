@@ -2,7 +2,7 @@
 
 Локальный MVP для русскоязычной примерки причёсок, одежды, очков, фона, улучшения и объединения двух фото. OpenAI Image2.5 Flare/Sunburst, атомарные кредиты, повторная доставка, внешний billing sandbox ЮKassa. Реальные продажи отключены; отсутствие ключа не маскируется демо-результатом.
 
-Бот: [@photo_editortest_bot](https://t.me/photo_editortest_bot). Публичный интерфейс: [Образ на GitHub Pages](https://vichepaev22.github.io/photo-editortest-bot/). Исходники: [photo-editortest-bot](https://github.com/vichepaev22/photo-editortest-bot).
+Бот: [@obraz_photo_bot](https://t.me/obraz_photo_bot). Публичный интерфейс: [Образ на GitHub Pages](https://vichepaev22.github.io/photo-editortest-bot/). Исходники: [photo-editortest-bot](https://github.com/vichepaev22/photo-editortest-bot).
 
 Нижняя клавиатура и Mini App со вкладками «Студия / Образы / Результаты / Профиль», загрузкой1–2фото, подтверждением цены, сравнением и скачиванием. Пока обработчик работает локально, Pages показывает предпросмотр без отправки фотографий. Полный локальный DEMO доступен на http://127.0.0.1:8089/ после запуска.
 
@@ -73,4 +73,4 @@ py -3.12 -m venv .venv
 
 ## Готовый локальный запуск
 
-Бот: https://t.me/photo_editortest_bot. Двойной щелчок start-demo.cmd, либо scripts/Start-Bot.ps1 -Mode Demo. Статус/остановка: scripts/Status-Bot.ps1 и scripts/Stop-Bot.ps1. Полный порядок и переход на настоящий OpenAI после пополнения: [local-run.md](docs/local-run.md).
+Бот: https://t.me/obraz_photo_bot. Двойной щелчок start-demo.cmd, либо scripts/Start-Bot.ps1 -Mode Demo. Статус/остановка: scripts/Status-Bot.ps1 и scripts/Stop-Bot.ps1. Полный порядок и переход на настоящий OpenAI после пополнения: [local-run.md](docs/local-run.md).

@@ -807,7 +807,7 @@ def build_dispatcher(settings, store, media, service, *, step_messages=None, pur
         if message.external_reply:
             await message.answer("Ответьте на своё фото в этом чате или загрузите новое фото.")
             return
-        request_key = "telegram-description:" + str(message.message_id)
+        request_key = f"telegram-description:{message.bot.id}:{message.message_id}"
         if trial and any(job["request_key"] == request_key for job in store.jobs(user)):
             await message.answer(
                 "Это сообщение уже обработано. Готовый образ можно скачать в «Мои результаты».",

@@ -204,3 +204,14 @@ CR-014 по process-design-vibecoding и Astra: backend worker владеет с
 После запуска systemd enabled/active/running, User=image-studio, NRestarts=0; runtime ready/OpenAI, PID согласованы. Одна синтетически подписанная Telegram-сессия существующего владельца на живом API подтвердила unlimited=true при сохранении числового available. Это серверная авторизация, не вход через настоящий клиент Telegram. Создание сессии штатно обновляет только посещение владельца; фоновые действия пользователей после старта допустимы. Исключение других ID подтверждено серверной политикой и локальными API-тестами, без создания фиктивного пользователя на VPS.
 
 Публичные HTTPS health/catalog — HTTP200, OpenAI/local_demo=false, trial=true, семь функций. Публичный app.js Pages — HTTP200, побайтово совпал с релизом. Частный результат: data/runtime/owner-testing-public-verification.json; серверный verification.json находится в root-only backup. Платных Image-вызовов, реальных платежей и тестовых сообщений агентами — **0**. Фактическое отображение в Telegram и новый результат модели остаются пользовательской проверкой. Финальная запись меняет документацию, повторный полный CI для неё не запускается.
+
+
+## CR-015: migration to @obraz_photo_bot — 2026-10-09
+
+The existing process-design-vibecoding/Astra workflow was reused. The new token was verified privately through Telegram getMe; username matches, no webhook, pending updates0 at preflight. VPS had9users/12delivered jobs/trial_reserved0 and no active tasks. No secret values or user IDs are published.
+
+Worker changed only the deterministic native description key to include the actual bot ID and added one cross-bot/duplicate/history regression. Two exact focused tests: **2 passed / 17.84s**, Ruff PASS. Launcher PowerShell syntax and private cutover Bash syntax PASS. A single private synthetic trial-refresh smoke confirmed old table/accounting/consent/owner preservation, one-time refresh without regrant after a consumed use, and active-review-job blocking; network0.
+
+Independent static review found an incomplete-backup rollback risk and a repeated-cutover auth-check defect. Restore now requires a successful backup flag plus integrity validation before opening the live destination; a same-token rerun skips the old-signature rejection check. Static re-review PASS. No forced failure/rollback or real-user message was tested on the server.
+
+Publication CI, actual cutover, signed new-token/old-token authentication and public HTTPS acceptance are recorded after completion. No paid Image call or real payment is used for verification. Existing financial drafts remain outside this delivery.

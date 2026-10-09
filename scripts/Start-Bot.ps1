@@ -17,7 +17,6 @@ try {
         IMAGE_PROVIDER = $(if ($Mode -eq 'Demo') { 'mock' } else { 'openai' })
         DATA_DIR = $(if ($Mode -eq 'Demo') { 'data/demo' } else { 'data/live-pilot' })
         ENABLE_DEMO_CREDITS = $(if ($Mode -eq 'Demo') { 'true' } else { 'false' })
-        TELEGRAM_BOT_USERNAME = 'photo_editortest_bot'
         BILLING_ENABLED = 'false'
         PYTHONUTF8 = '1'
     }

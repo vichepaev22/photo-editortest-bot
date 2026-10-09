@@ -94,3 +94,8 @@ Python 3.12+, aiogram 3 (официальный проект aiogram), офиц�
 Безлимит количества генераций включается только для приватно настроенного ID владельца. Не изменяет его баланс и прежние trial-счётчики, сохраняет серверный учёт готовых результатов, согласие, владение медиа, одну активную задачу и идемпотентность. Флаг фиксируется в новой задаче; старые задания завершаются по прежнему учёту. Детали: [owner-testing.md](owner-testing.md).
 
 Реферальные ссылки и схема «две бесплатные плюс одна за подписку на два канала» пока не реализуются. Размер награды после оплаты приглашённым — три или пять генераций — требует расчёта экономики. После подключения и проверки реального платежа напомнить владельцу об этих функциях. Текущий лимит остальных пользователей остаётся три. [Отложенные пожелания](growth-backlog.md).
+
+
+## CR-015: migration to @obraz_photo_bot, 2026-10-09
+
+The owner supplied the new Telegram token privately and authorised cutover on the same VPS/API/Pages. Preserve users, consent, wallet, job/payment history, media TTL, owner admin and unlimited access. Refresh regular-user trial usage once to provide three new free results, with a durable migration event preventing repeated grants. Namespace deterministic native description request keys by actual bot ID. No new billing/referral/channel features or additional broadcasts. Delivery: docs/bot-migration.md; checks: docs/verification.md.

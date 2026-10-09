@@ -4,6 +4,7 @@ import os
 from datetime import datetime, timezone
 
 import pytest
+from aiogram import Bot
 from aiogram.types import CallbackQuery, Chat, Document, Message, PhotoSize, Update, User
 from PIL import Image
 from test_bot_ui import OfflineBot, confirmation
@@ -20,8 +21,10 @@ from image_studio.store import Store
 class TrackedBot(OfflineBot):
     """Telegram-like distinct outbound IDs, including a delayed progress acknowledgement."""
 
-    def __init__(self):
-        super().__init__()
+    def __init__(self, *, bot_id=123456789):
+        Bot.__init__(self, f"{bot_id}:ABCdefghijklmnopqrstuvwxyz123456789")
+        self.sent = []
+        self.sequence = 0
         self.message_sequence = 5000
         self.history = []
         self.before_progress = None
@@ -53,7 +56,7 @@ class TrackedBot(OfflineBot):
         return response
 
 
-def build_ui(tmp_path, *, trial=True, admin_user_id=0, owner_unlimited_testing=False):
+def build_ui(tmp_path, *, trial=True, admin_user_id=0, owner_unlimited_testing=False, bot_id=123456789):
     store, media, provider = Store(tmp_path / "db.sqlite3"), Media(tmp_path), MockProvider()
     store.consent(1)
     if not trial:
@@ -63,7 +66,7 @@ def build_ui(tmp_path, *, trial=True, admin_user_id=0, owner_unlimited_testing=F
     service.wallet(1)
     settings = Settings(image_provider="openai" if trial else "mock", trial_access=trial,
                         admin_user_id=admin_user_id, owner_unlimited_testing=owner_unlimited_testing)
-    return build_dispatcher(settings, store, media, service), TrackedBot(), store, media, service, provider
+    return build_dispatcher(settings, store, media, service), TrackedBot(bot_id=bot_id), store, media, service, provider
 
 
 @pytest.fixture
@@ -140,7 +143,7 @@ async def test_trial_description_auto_queue_once_replay_after_new_draft_and_retr
     assert confirmation(sent) is None and "Шаг 3" in texts(sent) and "Создаём" in texts(sent)
     assert len(store.jobs(1)) == 1 and service.wallet(1) == (3, 1) and provider.calls == 0
     job = store.jobs(1)[0]
-    assert job["request_key"] == "telegram-description:200" and job["id"] not in texts(sent)
+    assert job["request_key"] == f"telegram-description:{flow[1].id}:200" and job["id"] not in texts(sent)
     await feed(flow, "Каре", message_id=200)
     assert len(store.jobs(1)) == 1
     assert await service.process(job["id"])
@@ -151,6 +154,44 @@ async def test_trial_description_auto_queue_once_replay_after_new_draft_and_retr
     assert len(store.jobs(1)) == 1 and service.wallet(1) == (2, 0)
     await feed(flow, "Ещё один вариант", message_id=201)
     assert len(store.jobs(1)) == 2 and service.wallet(1) == (2, 1) and provider.calls == 1
+
+
+async def test_description_keys_separate_bot_ids_and_preserve_legacy_history_and_duplicate_quota(tmp_path):
+    old = build_ui(tmp_path, bot_id=123456789)
+    store = old[2]
+    legacy = store.reserve(1, "telegram-description:200", "hair", 1, trial=True)
+    assert store.claim(legacy)
+    store.finish(legacy, "legacy-result.jpg", {}, None)
+    legacy_history = store.job(legacy)
+    await feed(old, callback="preset:hair")
+    await feed(old, photo=True)
+    await feed(old, "Каре", message_id=200)
+    first = next(job for job in store.jobs(1) if job["status"] == "queued")
+    wallet = old[4].wallet(1)
+    await feed(old, "Каре", message_id=200)
+    assert len(store.jobs(1)) == 2 and old[4].wallet(1) == wallet and old[5].calls == 0
+    assert await old[4].process(first["id"])
+    first_history = store.job(first["id"])
+
+    new = build_ui(tmp_path, bot_id=987654321)
+    assert new[2].path == store.path and new[2].jobs(1) == store.jobs(1)
+    await feed(new, callback="preset:hair")
+    await feed(new, photo=True)
+    await feed(new, "Каре", message_id=200)
+    second = next(job for job in store.jobs(1) if job["status"] == "queued")
+    assert first["id"] != second["id"]
+    assert {job["request_key"] for job in store.jobs(1)} == {
+        "telegram-description:200", f"telegram-description:{old[1].id}:200",
+        f"telegram-description:{new[1].id}:200",
+    }
+    wallet = new[4].wallet(1)
+    await feed(new, "Каре", message_id=200)
+    assert len(store.jobs(1)) == 3 and new[4].wallet(1) == wallet and new[5].calls == 0
+    assert await new[4].process(second["id"])
+    await feed(new, "Каре", message_id=200)
+    assert len(store.jobs(1)) == 3 and new[4].wallet(1) == (0, 0)
+    assert old[5].calls == new[5].calls == 1
+    assert store.job(legacy) == legacy_history and store.job(first["id"]) == first_history
 
 
 async def test_reuse_sources_survive_restart_and_ignore_generated_output(flow, tmp_path):
