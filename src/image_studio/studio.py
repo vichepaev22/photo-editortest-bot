@@ -360,8 +360,9 @@ def create_studio_app(settings, store, media, service):
             raise APIError("photo_limit", 409)
         try:
             normalized = normalize(body)
-        except ValueError:
-            raise APIError("invalid_image") from None
+        except ValueError as exc:
+            code = "image_resolution_limit" if str(exc) == "image_resolution_limit" else "invalid_image"
+            raise APIError(code) from None
         photo = uuid.uuid4().hex
         media.save(user, normalized, photo + ".jpg")
         return {"id": photo}

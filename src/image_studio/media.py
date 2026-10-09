@@ -7,7 +7,7 @@ from pathlib import Path
 from PIL import Image, ImageOps, UnidentifiedImageError
 
 MAX_BYTES = 10_000_000
-MAX_PIXELS = 24_000_000
+MAX_PIXELS = 64_000_000
 
 
 def normalize(data: bytes) -> bytes:
@@ -15,8 +15,10 @@ def normalize(data: bytes) -> bytes:
         raise ValueError("image_size_limit")
     try:
         with Image.open(io.BytesIO(data)) as source:
-            if source.format not in {"JPEG", "PNG", "WEBP"} or source.width * source.height > MAX_PIXELS:
+            if source.format not in {"JPEG", "PNG", "WEBP"}:
                 raise ValueError("invalid_image")
+            if source.width * source.height > MAX_PIXELS:
+                raise ValueError("image_resolution_limit")
             source.load()
             oriented = ImageOps.exif_transpose(source)
             oriented.thumbnail((2048, 2048))
@@ -24,7 +26,9 @@ def normalize(data: bytes) -> bytes:
             result = io.BytesIO()
             image.save(result, "JPEG", quality=92, exif=b"")
             return result.getvalue()
-    except (UnidentifiedImageError, OSError, Image.DecompressionBombError, Image.DecompressionBombWarning):
+    except (Image.DecompressionBombError, Image.DecompressionBombWarning):
+        raise ValueError("image_resolution_limit") from None
+    except (UnidentifiedImageError, OSError):
         raise ValueError("invalid_image") from None
 
 

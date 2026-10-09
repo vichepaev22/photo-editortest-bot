@@ -783,8 +783,15 @@ def build_dispatcher(settings, store, media, service, *, step_messages=None, pur
             data = normalize(buffer.getvalue())
             path = media.save(message.from_user.id, data)
             service.remember_inputs(message.from_user.id, draft.photos + [path])
-        except (ValueError, OSError, DomainError):
-            await message.answer("Не удалось принять фото. Нужен JPEG, PNG или WebP до 10 MB/24 MP.")
+        except (ValueError, OSError, DomainError) as exc:
+            error = (
+                "Разрешение фото слишком большое. Максимум — 64 MP и 10 MB на файл. "
+                "Уменьшите фото или выберите другое."
+                if isinstance(exc, ValueError) and str(exc) == "image_resolution_limit" else
+                "Не удалось принять фото. Нужен JPEG, PNG или WebP до 10 MB и 64 MP. "
+                "Если это HEIC на iPhone, сохраните копию в JPEG."
+            )
+            await message.answer(error)
             return
         draft.photos.append(path)
         draft.photo_messages.add(source.message_id)

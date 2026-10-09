@@ -6,6 +6,7 @@ import os
 import time
 import uuid
 from pathlib import Path
+from unittest.mock import MagicMock
 from urllib.parse import urlencode
 
 import httpx
@@ -186,12 +187,40 @@ async def test_upload_normalizes_limits_and_owner_scoping(studio):
     other = await auth(client, 2)
     assert (await client.get("/api/photos/" + photo, headers=other)).status_code == 404
     assert (await client.get("/api/photos/not-a-uuid", headers=headers)).status_code == 404
-    assert (await client.post("/api/photos", content=b"invalid", headers=headers)).status_code == 400
+    invalid = await client.post("/api/photos", content=b"invalid", headers=headers)
+    assert invalid.status_code == 400 and invalid.json() == {"error": "invalid_image"}
     assert (await client.post("/api/photos", content=b"x" * (MAX_BYTES + 1), headers=headers)).status_code == 413
     assert (await client.post("/api/photos", content=image(), headers=headers | {"Content-Type": "text/plain"}
                               )).status_code == 415
     os.utime(media.path(f"1/{photo}.jpg"), (time.time() - 86401,) * 2)
     assert (await client.get("/api/photos/" + photo, headers=headers)).status_code == 404
+
+
+async def test_upload_accepts_24mp_iphone_jpeg_and_downscales(studio):
+    client, _, _, media, provider, *_ = studio
+    headers, _ = await prepare(studio)
+    buffer = io.BytesIO()
+    with Image.new("RGB", (5712, 4284), "purple") as source:
+        source.save(buffer, "JPEG")
+    payload = buffer.getvalue()
+    assert len(payload) < MAX_BYTES
+    response = await client.post("/api/photos", content=payload, headers=headers)
+    assert response.status_code == 200
+    with Image.open(media.path(f"1/{response.json()['id']}.jpg")) as normalized:
+        assert normalized.format == "JPEG" and max(normalized.size) <= 2048
+    assert provider.calls == 0
+
+
+async def test_upload_resolution_limit_rejects_before_decode(studio, monkeypatch):
+    client, *_ = studio
+    headers, _ = await prepare(studio)
+    source = MagicMock()
+    source.__enter__.return_value = source
+    source.format, source.width, source.height = "JPEG", 8001, 8000
+    monkeypatch.setattr("image_studio.media.Image.open", lambda _: source)
+    response = await client.post("/api/photos", content=b"image-header", headers=headers)
+    assert response.status_code == 400 and response.json() == {"error": "image_resolution_limit"}
+    source.load.assert_not_called()
 
 
 async def test_upload_count_and_stream_limit(studio):
