@@ -12,8 +12,8 @@ from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMar
 PLANS = {"express": ("Express", 160, 5), "base": ("Базовый", 380, 12), "premium": ("Premium", 790, 30)}
 METHODS = {"sbp": "СБП", "crypto": "Крипта"}
 TEST_URL = "https://example.com/?payment-demo=1"
-PRIVACY_URL = "https://telegra.ph/Politika-konfidencialnosti-08-01-83"
-TERMS_URL = "https://telegra.ph/Polzovatelskoe-soglashenie-08-01-39"
+PRIVACY_URL = "https://telegra.ph/Politika-konfidencialnosti-10-09-68"
+TERMS_URL = "https://telegra.ph/Polzovatelskoe-soglashenie-10-09-33"
 TTL_SECONDS = 3600
 MAX_SESSIONS = 1000
 PREFIX = "purchase:"

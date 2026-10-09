@@ -36,7 +36,7 @@ from .catalog import PRESETS
 from .media import MAX_BYTES, Media, normalize
 from .provider import MockProvider, OpenAIProvider
 from .purchase_demo import PREFIX as PURCHASE_PREFIX
-from .purchase_demo import PurchaseDemo
+from .purchase_demo import PRIVACY_URL, TERMS_URL, PurchaseDemo
 from .runtime import RUNTIME_DIR, BotRuntime
 from .service import Service
 from .store import DomainError, Store
@@ -666,7 +666,10 @@ def build_dispatcher(settings, store, media, service, *, step_messages=None, pur
             "полностью одетые образы. Не используйте результат для обмана. "
             + pricing(message.from_user.id) + " Новый вариант — отдельное задание. "
             "При ошибке обработки резерв возвращается. Качество и сходство не гарантированы. "
-            "Оплаты в Telegram сейчас нет; условия продажи будут опубликованы перед запуском."
+            "Оплаты в Telegram сейчас нет; условия продажи будут опубликованы перед запуском.",
+            reply_markup=InlineKeyboardMarkup(inline_keyboard=[[
+                InlineKeyboardButton(text="Пользовательское соглашение", url=TERMS_URL),
+            ]]),
         )
 
     @router.message(Command("privacy"))
@@ -677,7 +680,10 @@ def build_dispatcher(settings, store, media, service, *, step_messages=None, pur
             "Для учёта постоянно храним Telegram ID, публичный username при наличии, даты посещений, "
             "количество готовых обработок и подтверждённые покупки. Статистика доступна только владельцу. "
             "Имена, телефоны и адреса в статистику не записываем. /delete удаляет локальные фото "
-            "и сбрасывает согласие; это не удаляет сообщения Telegram и данные у провайдера."
+            "и сбрасывает согласие; это не удаляет сообщения Telegram и данные у провайдера.",
+            reply_markup=InlineKeyboardMarkup(inline_keyboard=[[
+                InlineKeyboardButton(text="Политика конфиденциальности", url=PRIVACY_URL),
+            ]]),
         )
 
     @router.message(Command("support", "paysupport"))
