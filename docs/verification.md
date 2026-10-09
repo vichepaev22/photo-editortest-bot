@@ -215,3 +215,14 @@ Worker changed only the deterministic native description key to include the actu
 Independent static review found an incomplete-backup rollback risk and a repeated-cutover auth-check defect. Restore now requires a successful backup flag plus integrity validation before opening the live destination; a same-token rerun skips the old-signature rejection check. Static re-review PASS. No forced failure/rollback or real-user message was tested on the server.
 
 Publication CI, actual cutover, signed new-token/old-token authentication and public HTTPS acceptance are recorded after completion. No paid Image call or real payment is used for verification. Existing financial drafts remain outside this delivery.
+
+
+### CR-015 acceptance: deployed
+
+Application release **8f3f1e7a34e8d6034b39ee0ba5a0a9c50877deb2**: [CI and Pages](https://github.com/vichepaev22/photo-editortest-bot/actions/runs/37899351762) success, **325 passed / 21.40s**, Ruff PASS. Publication audit found no actual old/new credentials, owner ID or personal path in staged files; financial drafts were not included.
+
+Cutover completed through pinned SSH. The stopped-runtime backup includes SQLite, the old private environment and media; all previous table rows/columns matched after normalising only authorised regular-user trial_used, plus exactly one new migration event. Owner trial fields, consent, paid wallet, jobs, invoices/payments and history were preserved. Integrity ok, all31media hashes matched before startup. Only Telegram token/username changed in the server environment. The same two fields were mirrored locally after acceptance, with a private prior-env backup; local poller stays stopped.
+
+New @obraz_photo_bot runtime ready/OpenAI, systemd enabled/active/running as image-studio, NRestarts0. One synthetic signed owner session accepted the new token and confirmed unlimited=true; a fresh signature using the old token was rejected401. Startup commands and WebApp studio menu were verified via Telegram API. This is server authentication/configuration evidence, not a real user Telegram WebView or completed new image. No rollback was forced in production.
+
+Public HTTPS health/catalog200, trial=true/seven presets; Pages app.js200 exactly matches release bytes. Private receipts: data/runtime/bot-migration-server-verification.json and bot-migration-public-verification.json. Server backup/receipt remain root-only. Free-trial refresh is one-time and does not extend media TTL; normal post-start user activity may change counters/visits. Agent Image calls, real payments and test messages during cutover:0. The previously authorised one-off announcement is a separate completed operation. Final receipt changes documentation only, so no redundant full CI is triggered for it.
