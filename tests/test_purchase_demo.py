@@ -76,7 +76,7 @@ class Harness:
         self.sequence = 0
 
     def snapshot(self, baseline=None):
-        # Normalize visits in a copy; the source database and all accounting stay intact.
+        # Normalize visit metadata in a copy; finance, jobs and other admin events stay intact.
         with closing(sqlite3.connect(self.store.path)) as source, closing(sqlite3.connect(":memory:")) as copy:
             source.backup(copy)
             copy.row_factory = sqlite3.Row
@@ -88,6 +88,7 @@ class Harness:
                             and all(user[column] == 0 for column in accounting)):
                         copy.execute("DELETE FROM users WHERE id=?", (user["id"],))
             copy.execute("UPDATE users SET username=NULL,first_seen=NULL,last_seen=NULL")
+            copy.execute("DELETE FROM admin_outbox WHERE kind='registration'")
             return {
                 "user_ids": frozenset(row["id"] for row in copy.execute("SELECT id FROM users")),
                 "dump": list(copy.iterdump()),
