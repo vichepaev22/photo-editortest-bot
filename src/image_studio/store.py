@@ -6,11 +6,9 @@ import uuid
 from contextlib import contextmanager
 from pathlib import Path
 
+from .admin_store import AdminStoreMixin, DomainError
+
 TRIAL_LIMIT = 1
-
-
-class DomainError(Exception):
-    pass
 
 
 def validated_username(username):
@@ -19,7 +17,7 @@ def validated_username(username):
     return None
 
 
-class Store:
+class Store(AdminStoreMixin):
     def __init__(self, path: Path):
         self.path = path
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -100,6 +98,7 @@ class Store:
                     "ALTER TABLE jobs ADD COLUMN quota_exempt INTEGER NOT NULL DEFAULT 0 "
                     "CHECK(quota_exempt IN (0,1))"
                 )
+            self._admin_init(c)
 
     def _enable_wal(self):
         # Journal changes need an autocommit connection, outside BEGIN IMMEDIATE.
@@ -149,11 +148,16 @@ class Store:
             return False
         now = time.time()
         with self.tx() as c:
-            self._user(c, user)
+            u = self._user(c, user)
+            first_visit = u["first_seen"] is None
             c.execute(
                 "UPDATE users SET username=?,first_seen=COALESCE(first_seen,?),last_seen=? WHERE id=?",
                 (validated_username(username), now, now, user),
             )
+            if first_visit:
+                self._admin_safe_event(c, f"registration:{user}", "registration",
+                                       {"user_id": user, "username": validated_username(username),
+                                        "created": now, "consent": bool(u["consent"])})
         return True
 
     def admin_stats(self, page=0, page_size=10):
@@ -163,10 +167,14 @@ class Store:
             totals = c.execute("""
                 SELECT
                     (SELECT COUNT(*) FROM users WHERE id>0 AND id<4503599627370496) AS total_users,
+                    (SELECT COUNT(*) FROM users WHERE id>0 AND id<4503599627370496
+                        AND first_seen IS NOT NULL) AS visited_users,
                     (SELECT COUNT(DISTINCT user_id) FROM payments WHERE is_test=0 AND user_id IN
                         (SELECT id FROM users WHERE id>0 AND id<4503599627370496)) AS paying_users,
                     (SELECT COUNT(*) FROM jobs WHERE status IN ('generated','delivered') AND user_id IN
-                        (SELECT id FROM users WHERE id>0 AND id<4503599627370496)) AS generated_count
+                        (SELECT id FROM users WHERE id>0 AND id<4503599627370496)) AS generated_count,
+                    (SELECT COALESCE(SUM(amount),0) FROM payments WHERE is_test=0 AND user_id IN
+                        (SELECT id FROM users WHERE id>0 AND id<4503599627370496)) AS revenue_kopecks
             """).fetchone()
             pages = max(1, (totals["total_users"] + page_size - 1) // page_size)
             page = min(page, pages - 1)
@@ -396,6 +404,11 @@ class Store:
             )
             c.execute("UPDATE users SET balance=balance+? WHERE id=?", (o["credits"], user))
             self._event(c, "payment", order)
+            if not is_test:
+                self._admin_safe_event(c, f"payment:{order}", "payment",
+                                       {"user_id": user, "order_id": order, "amount": amount,
+                                        "currency": currency, "charge_id": charge, "credits": o["credits"],
+                                        "created": time.time()})
             return True
 
     def reserve(self, user, key, preset, cost, *, trial=False, quota_exempt=False):
@@ -470,10 +483,13 @@ class Store:
 
     def claim(self, job):
         with self.tx() as c:
-            return (
+            claimed = (
                 c.execute("UPDATE jobs SET status='running' WHERE id=? AND status='queued'", (job,)).rowcount
                 == 1
             )
+            if claimed:
+                self._admin_generation_event(c, job, "running", "reserved")
+            return claimed
 
     def finish(self, job, result, usage, request_id):
         with self.tx() as c:
@@ -499,6 +515,7 @@ class Store:
                 (result, json.dumps(usage), request_id, job),
             )
             self._event(c, "finish", job)
+            self._admin_generation_event(c, job, "generated", "spent")
 
     def fail(self, job, reason):
         with self.tx() as c:
@@ -511,6 +528,7 @@ class Store:
                 c.execute("UPDATE users SET reserved=reserved-? WHERE id=?", (j["cost"], j["user_id"]))
             c.execute("UPDATE jobs SET status='failed',error=? WHERE id=?", (reason[:60], job))
             self._event(c, "release", job)
+            self._admin_generation_event(c, job, "failed", "released")
 
     def delivered(self, job):
         with self.tx() as c:
@@ -524,7 +542,10 @@ class Store:
 
     def recover(self):
         with self.tx() as c:
+            interrupted = [r["id"] for r in c.execute("SELECT id FROM jobs WHERE status='running'")]
             c.execute("UPDATE jobs SET status='review',error='interrupted_provider' WHERE status='running'")
+            for job in interrupted:
+                self._admin_generation_event(c, job, "review", "retained")
 
     def revoke_consent(self, user):
         with self.tx() as c:
@@ -532,7 +553,8 @@ class Store:
                 "SELECT 1 FROM jobs WHERE user_id=? AND status IN ('queued','running','review')", (user,)
             ).fetchone():
                 raise DomainError("already_active")
-            c.execute("UPDATE users SET consent=0 WHERE id=?", (user,))
+            c.execute("UPDATE users SET consent=0,share_enabled=0 WHERE id=?", (user,))
+            c.execute("DELETE FROM admin_job_shares WHERE user_id=?", (user,))
 
     def begin_refund(self, order):
         with self.tx() as c:

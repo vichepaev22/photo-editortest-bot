@@ -181,6 +181,11 @@ class Service:
             except OSError:
                 self.store.fail(job, "storage_error")
                 raise DomainError("storage_error") from None
+            try:
+                self.store.admin_capture_job(job, user, description)
+            except Exception:
+                # Optional owner monitoring cannot prevent the reserved user job.
+                log.warning("admin_job_capture_failed")
         return job
 
     async def process(self, job):

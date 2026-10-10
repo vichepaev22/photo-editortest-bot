@@ -32,6 +32,7 @@ from aiogram.types import (
 )
 
 from .admin import register_admin
+from .admin_delivery import AdminDelivery
 from .catalog import PRESETS
 from .media import MAX_BYTES, Media, normalize
 from .provider import MockProvider, OpenAIProvider
@@ -150,6 +151,7 @@ COMMANDS = [
         ("delete", "Удалить локальные фото"),
         ("terms", "Условия тестирования"),
         ("privacy", "Обработка фотографий"),
+        ("sharing", "Передача результата владельцу"),
         ("support", "Поддержка"),
         ("buy", "DEMO покупки доступа"),
     ]
@@ -302,7 +304,10 @@ def build_dispatcher(settings, store, media, service, *, step_messages=None, pur
     router = Router()
     router.message.filter(F.chat.type == "private")
     router.callback_query.filter(F.message.chat.type == "private")
-    register_admin(router, store, settings.admin_user_id)
+    admin = register_admin(
+        router, store, settings.admin_user_id, media=media, trial_access=trial,
+        unlimited_user_id=settings.admin_user_id if settings.owner_unlimited_testing else 0,
+    )
     dp = Dispatcher(events_isolation=SimpleEventIsolation())
     drafts = {}
     steps = step_messages if step_messages is not None else StepMessages(store)
@@ -548,7 +553,8 @@ def build_dispatcher(settings, store, media, service, *, step_messages=None, pur
                     else ""
                 )
                 + "Помощь и баланс сохраняют текущую заявку. Главное меню сбрасывает новую заявку; "
-                "уже начатая обработка продолжается.",
+                "уже начатая обработка продолжается.\n"
+                "Передача описания и результата владельцу — отдельный выбор в /sharing.",
                 reply_markup=BACK,
             )
         elif action == "support":
@@ -705,12 +711,49 @@ def build_dispatcher(settings, store, media, service, *, step_messages=None, pur
             "хранятся до разбора поддержкой. В рабочем режиме фото передаются OpenAI. "
             "Для учёта постоянно храним Telegram ID, публичный username при наличии, даты посещений, "
             "количество готовых обработок и подтверждённые покупки. Статистика доступна только владельцу. "
+            "Уведомления о генерациях содержат только метаданные. Через /sharing можно отдельно разрешить "
+            "владельцу просмотр описания и готового результата будущих заданий на 24 часа. "
+            "Исходные фото через админку не передаются. Вопрос вне выбранной функции может быть передан "
+            "владельцу для поддержки; о передаче сообщаем в ответе. "
             "Имена, телефоны и адреса в статистику не записываем. /delete удаляет локальные фото "
-            "и сбрасывает согласие; это не удаляет сообщения Telegram и данные у провайдера.",
+            "и сбрасывает оба согласия; это не удаляет уже отправленные сообщения Telegram и данные у провайдера.",
             reply_markup=InlineKeyboardMarkup(inline_keyboard=[[
                 InlineKeyboardButton(text="Политика конфиденциальности", url=PRIVACY_URL),
             ]]),
         )
+
+    async def sharing_screen(message, user):
+        enabled = store.admin_share_enabled(user)
+        rows = [[("Выключить передачу" if enabled else "Разрешить передачу",
+                  "sharing:off" if enabled else "sharing:on")]] if settings.admin_user_id else []
+        await message.answer(
+            "Передача описания и готового результата владельцу "
+            + ("включена." if enabled else "выключена.")
+            + "\n\nРазрешение действует только на будущие задания. Владелец сможет просматривать "
+            "их описание и результат до 24 часов. Исходные фото не передаются. "
+            "Разрешение можно отозвать здесь или командой /delete; уже отправленные сообщения "
+            "Telegram при этом не удаляются.",
+            reply_markup=buttons(rows + [[("🏠 Главное меню", "nav:home")]]),
+        )
+
+    @router.message(Command("sharing"))
+    async def sharing(message: Message):
+        if message.from_user and not message.from_user.is_bot and message.chat.id == message.from_user.id:
+            await sharing_screen(message, message.from_user.id)
+
+    @router.callback_query(F.data.startswith("sharing:"))
+    async def sharing_callback(callback: CallbackQuery):
+        if (not callback.message or callback.from_user.is_bot
+                or callback.message.chat.id != callback.from_user.id
+                or callback.data not in {"sharing:on", "sharing:off"}):
+            await callback.answer("Недоступно", show_alert=True)
+            return
+        if not settings.admin_user_id:
+            await callback.answer("Передача пока недоступна", show_alert=True)
+            return
+        store.admin_set_sharing(callback.from_user.id, callback.data == "sharing:on")
+        await callback.answer("Настройка сохранена")
+        await sharing_screen(callback.message, callback.from_user.id)
 
     @router.message(Command("support", "paysupport"))
     async def support(message: Message):
@@ -848,10 +891,26 @@ def build_dispatcher(settings, store, media, service, *, step_messages=None, pur
 
     @router.message(F.text)
     async def description(message: Message):
-        if (message.text or "").startswith("/"):
-            await message.answer("Неизвестная команда. Откройте /help или нижнюю панель.")
-            return
         user = message.from_user.id
+        draft = current(user)
+
+        def capture_question():
+            source = message.reply_to_message
+            if (not settings.admin_user_id or draft or admin.active(message)
+                    or user == settings.admin_user_id or message.external_reply
+                    or (source and (source.photo or source.document))):
+                return False
+            try:
+                return store.admin_capture_question(user, message.text, message.message_id, message.chat.id)
+            except Exception:
+                logging.getLogger(__name__).warning("admin_question_capture_failed")
+                return False
+
+        if (message.text or "").startswith("/"):
+            forwarded = capture_question()
+            await message.answer("Неизвестная команда. Откройте /help или нижнюю панель."
+                                 + (" Сообщение передано владельцу для поддержки." if forwarded else ""))
+            return
         if message.external_reply:
             await message.answer("Ответьте на своё фото в этом чате или загрузите новое фото.")
             return
@@ -862,9 +921,10 @@ def build_dispatcher(settings, store, media, service, *, step_messages=None, pur
                 reply_markup=MAIN,
             )
             return
-        draft = current(user)
         if not draft or not store.has_consent(user):
-            await message.answer("Выберите функцию и загрузите фото через /start.")
+            forwarded = capture_question()
+            await message.answer("Выберите функцию и загрузите фото через /start."
+                                 + (" Сообщение передано владельцу для поддержки." if forwarded else ""))
             return
         source = message.reply_to_message
         if source and (source.photo or source.document):
@@ -1060,6 +1120,8 @@ async def run(settings):
                 asyncio.create_task(processing_activity(bot, store)),
                 asyncio.create_task(watch_stop()),
             ])
+            if settings.admin_user_id:
+                tasks.append(asyncio.create_task(AdminDelivery(bot, store, settings.admin_user_id).worker()))
             runtime.ready(identity.username)
             await dp.start_polling(bot, close_bot_session=False)
         finally:
