@@ -49,7 +49,7 @@ async def test_controller_and_card_keep_legacy_entry(expanded):
     assert "В обработке: 0" in text_methods(sent)[0].text
 
 
-@pytest.mark.parametrize("callback", ["admin:user:42", "admin:credit:42:p5", "admin:settings", "admin:events:0", "admin:job:" + "a" * 32, "admin:event:" + "a" * 32])
+@pytest.mark.parametrize("callback", ["admin:user:42", "admin:credit:42:p5", "admin:reason:" + "a" * 32, "admin:settings", "admin:events:0", "admin:job:" + "a" * 32, "admin:event:" + "a" * 32])
 @pytest.mark.parametrize("options", [{"user_id": 99}, {"chat_type": "group", "chat_id": -1}, {"chat_id": 99}])
 async def test_every_new_route_is_owner_private(expanded, callback, options):
     ui, _, _ = expanded
@@ -85,6 +85,44 @@ async def test_credit_reason_preview_confirmation_replay_and_escaping(expanded):
     assert ui[2].wallet(42) == (10, 0)
     sent = await send(ui, callback="admin:audit:42")
     assert "Исправление &lt;b&gt;ошибки&lt;/b&gt;" in text_methods(sent)[0].text
+
+
+async def test_work_buttons_have_native_styles_but_user_cards_are_neutral(expanded):
+    ui, _, _ = expanded
+    sent = await send(ui, "/admin")
+    markup = text_methods(sent)[0].reply_markup
+    styles = {b.callback_data: b.style for row in markup.inline_keyboard for b in row}
+    assert styles["admin:filter:all"] == styles["admin:search"] == "primary"
+    assert styles["admin:filter:visited"] == styles["admin:filter:paying"] == "success"
+    assert all(style is None for data, style in styles.items() if data.startswith("admin:user:"))
+    sent = await send(ui, callback="admin:user:42")
+    styles = {b.callback_data: b.style for row in text_methods(sent)[0].reply_markup.inline_keyboard for b in row}
+    assert styles["admin:credit:42:p5"] == "success"
+    assert styles["admin:credit:42:m1"] == "danger"
+
+
+async def test_default_note_is_bound_to_current_wizard_and_requires_confirmation(expanded):
+    ui, controller, _ = expanded
+    await send(ui, callback="admin:credit:42:p5")
+    old_default = next(b for b in buttons(text_methods(ui[1].sent)[0]) if b.startswith("admin:reason:"))
+    await send(ui, callback="admin:credit:42:p10")
+    default = next(b for b in buttons(text_methods(ui[1].sent)[0]) if b.startswith("admin:reason:"))
+    assert old_default != default
+    await send(ui, callback=old_default)
+    assert ui[2].admin_session(OWNER)["kind"] == "credit_reason"
+    # A process restart keeps the bound default and the original panel.
+    controller.store = Store(ui[2].path)
+    sent = await send(ui, callback=default)
+    preview = text_methods(sent)[0]
+    assert "Пометка: Таков путь" in preview.text and "5 → 15" in preview.text
+    assert ui[2].wallet(42) == (5, 0)
+    confirmation = next(b for b in buttons(preview) if b.startswith("admin:confirm:"))
+    await send(ui, callback=default)
+    assert ui[2].wallet(42) == (5, 0)
+    await send(ui, callback=confirmation)
+    assert ui[2].wallet(42) == (15, 0)
+    notices = [row for row in ui[2].admin_events() if row["kind"] == "credit_grant"]
+    assert len(notices) == 1 and notices[0]["payload"]["reason"] == "Таков путь"
 
 
 async def test_set_balance_requires_bounded_integer_and_reason(expanded):

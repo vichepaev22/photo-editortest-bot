@@ -1,5 +1,6 @@
 import re
 import time
+import uuid
 from datetime import datetime, timedelta, timezone
 from html import escape
 
@@ -17,6 +18,8 @@ _ID = r"[1-9][0-9]{0,15}"
 _UUID = r"[a-f0-9]{32}"
 _PAGE = r"(?:0|[1-9][0-9]{0,8})"
 _CATEGORIES = {"enabled": "Все уведомления", "registration": "Первые посещения", "questions": "Вопросы", "generation": "Генерации", "payment": "Реальные оплаты"}
+_EVENT_NAMES = _CATEGORIES | {"credit_grant": "Начисление пользователю"}
+_DEFAULT_REASON = "Таков путь"
 _TEXT_KINDS = {"search", "credit_value", "credit_reason"}
 _FILTERS = {"all": "Все", "visited": "Заходили", "paying": "Покупали"}
 _LOCAL_TIME = timezone(timedelta(hours=5))
@@ -26,9 +29,23 @@ _JOB_STATUS = {"queued": "в очереди", "running": "обрабатывае
 _RESERVE_ACTION = {"reserved": "зарезервировано", "spent": "списано", "released": "возвращено", "kept": "сохранено"}
 
 
+def _button(text, data):
+    style = None
+    if data in {"admin:filter:paying", "admin:filter:visited"} or data.startswith(("admin:confirm:", "admin:reason:")):
+        style = "success"
+    elif data in {"admin:filter:all", "admin:search", "admin:settings", "admin:home"} or data.startswith("admin:events:"):
+        style = "primary"
+    elif data.startswith("admin:credit:"):
+        action = data.rsplit(":", 1)[-1]
+        style = "success" if action in {"p5", "p10"} else "danger" if action == "m1" else "primary"
+    elif data.startswith("admin:setting:") and data.endswith(":1"):
+        style = "success"
+    return InlineKeyboardButton(text=text, callback_data=data, style=style)
+
+
 def _keyboard(*rows):
     return InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text=text, callback_data=data) for text, data in row]
+        [_button(text, data) for text, data in row]
         for row in rows if row
     ])
 
@@ -127,12 +144,12 @@ def _render(stats, *, listing=False, query="", filter="all"):
         label = f"Открыть @{username}" if username else f"Карточка {user['id']}"
         keyboard.append([InlineKeyboardButton(text=label, callback_data=f"admin:user:{user['id']}")])
     keyboard.extend([
-        [InlineKeyboardButton(text=label, callback_data="admin:filter:" + key) for key, label in _FILTERS.items()],
-        [InlineKeyboardButton(text="🔎 Найти пользователя", callback_data="admin:search")],
-        [InlineKeyboardButton(text="События", callback_data="admin:events:0"), InlineKeyboardButton(text="Уведомления", callback_data="admin:settings")],
+        [_button(label, "admin:filter:" + key) for key, label in _FILTERS.items()],
+        [_button("🔎 Найти пользователя", "admin:search")],
+        [_button("События", "admin:events:0"), _button("Уведомления", "admin:settings")],
     ])
     if listing:
-        keyboard.append([InlineKeyboardButton(text="← Администрирование", callback_data="admin:home")])
+        keyboard.append([_button("← Администрирование", "admin:home")])
     return "\n".join(lines), InlineKeyboardMarkup(inline_keyboard=keyboard)
 
 
@@ -261,31 +278,43 @@ class AdminController:
                 if not re.fullmatch(pattern, text, re.ASCII) or abs(int(text)) > 100000:
                     raise DomainError("invalid_credit_value")
                 data["value"] = int(text)
-                self._session("credit_reason", data)
-                await self._show(message, "Введите причину изменения (1–240 символов).", _keyboard(_home_row()), panel_id=panel_id)
+                await self._reason_prompt(message, data, panel_id=panel_id)
             elif kind == "credit_reason":
-                if data["user_id"] == self.unlimited_user_id:
-                    raise DomainError("owner_unlimited")
                 reason = text.strip()
                 if not 1 <= len(reason) <= 240:
                     raise DomainError("invalid_credit_reason")
-                operation = self.store.admin_prepare_credit(self.admin_user_id, data["user_id"], data["mode"], data["value"], reason, trial=self.trial_access)
-                self._session("credit_preview", {"operation": operation["id"], "user_id": data["user_id"]})
-                preview = (
-                    f"<b>Подтверждение изменения</b>\nПользователь: <code>{data['user_id']}</code>\n"
-                    f"Доступно: {operation['before_available']} → {operation['after_available']}\n"
-                    f"Резерв: {operation['reserved']} → {operation['reserved']}\nПричина: {escape(reason)}\n\n"
-                    "Подтверждение действует 5 минут. При изменении остатка потребуется новое."
-                )
-                await self._show(message, preview, _keyboard([
-                    ("Подтвердить", f"admin:confirm:{operation['id']}"), ("Отменить", f"admin:cancel:{operation['id']}")
-                ]), panel_id=panel_id)
+                await self._credit_preview(message, data, reason)
         except DomainError as error:
             text = "Данные недоступны или недопустимы. Проверьте ввод; отмена — /cancel."
             if str(error) == "already_active":
                 text = "Сейчас выполняется бесплатная генерация. Дождитесь результата и повторите изменение."
             await self._show(message, text, _keyboard(_home_row()), panel_id=panel_id)
         return True
+
+    async def _reason_prompt(self, message, data, *, edit=False, panel_id=None):
+        data = dict(data) | {"reason_key": uuid.uuid4().hex}
+        self._session("credit_reason", data, message=message if edit else None)
+        await self._show(message, "Напишите пометку (1–240 символов) или оставьте «Таков путь».\n"
+                         "При начислении пользователь увидит эту пометку.",
+                         _keyboard([("Таков путь", "admin:reason:" + data["reason_key"])], _home_row()),
+                         edit=edit, panel_id=panel_id)
+
+    async def _credit_preview(self, message, data, reason):
+        if data["user_id"] == self.unlimited_user_id:
+            raise DomainError("owner_unlimited")
+        operation = self.store.admin_prepare_credit(self.admin_user_id, data["user_id"], data["mode"], data["value"], reason, trial=self.trial_access)
+        self._session("credit_preview", {"operation": operation["id"], "user_id": data["user_id"]})
+        preview = (
+            f"<b>Подтверждение изменения</b>\nПользователь: <code>{data['user_id']}</code>\n"
+            f"Доступно: {operation['before_available']} → {operation['after_available']}\n"
+            f"Резерв: {operation['reserved']} → {operation['reserved']}\nПометка: {escape(reason)}\n\n"
+        )
+        if operation["after_available"] > operation["before_available"]:
+            preview += "Пользователь получит уведомление с этой пометкой.\n"
+        preview += "Подтверждение действует 5 минут. При изменении остатка потребуется новое."
+        await self._show(message, preview, _keyboard([
+            ("Подтвердить", f"admin:confirm:{operation['id']}"), ("Отменить", f"admin:cancel:{operation['id']}")
+        ]), panel_id=data.get("_panel_id"))
 
     async def callback(self, callback):
         if not self.owner(callback.message, callback.from_user):
@@ -338,11 +367,13 @@ class AdminController:
                 if action in {"set", "delta"}:
                     self._session("credit_value", data, message=callback.message)
                     prompt = "Введите доступный остаток: целое число 0–100000." if action == "set" else "Введите изменение: целое число от −100000 до +100000."
+                    await self._show(callback.message, prompt, _keyboard(_home_row()), edit=True)
                 else:
                     data["value"] = {"p5": 5, "p10": 10, "m1": -1}[action]
-                    self._session("credit_reason", data, message=callback.message)
-                    prompt = "Введите причину изменения (1–240 символов)."
-                await self._show(callback.message, prompt, _keyboard(_home_row()), edit=True)
+                    await self._reason_prompt(callback.message, data, edit=True)
+            elif match := re.fullmatch(rf"admin:reason:({_UUID})", raw, re.ASCII):
+                data = self._bound("credit_reason", "reason_key", match[1])
+                await self._credit_preview(callback.message, data, _DEFAULT_REASON)
             elif match := re.fullmatch(rf"admin:(confirm|cancel):({_UUID})", raw, re.ASCII):
                 data = self._bound("credit_preview", "operation", match[2])
                 if data["user_id"] == self.unlimited_user_id:
@@ -367,7 +398,7 @@ class AdminController:
                 lines, rows = ["<b>События</b>"], []
                 for event in events:
                     payload = event["payload"]
-                    label = _CATEGORIES.get(event["kind"], "Событие")
+                    label = _EVENT_NAMES.get(event["kind"], "Событие")
                     lines.append(f"{_timestamp(event.get('created'))} · {label} · {_status(event.get('status'), _DELIVERY)}\nПользователь: {escape(_short(payload.get('user_id'), 16))}")
                     if event.get("message_id"):
                         lines.append("Сообщение Telegram: " + escape(_short(event["message_id"], 32)))
@@ -377,6 +408,8 @@ class AdminController:
                         lines.append(f"{_money(payload.get('amount'))} · Начислено: {escape(_short(payload.get('credits'), 16))}")
                     elif event["kind"] == "generation":
                         lines.append(f"{_preset(payload.get('preset'))} · {_status(payload.get('status'), _JOB_STATUS)}")
+                    elif event["kind"] == "credit_grant":
+                        lines.append(f"Дополнительно: +{escape(_short(payload.get('credits'), 16))} ген.")
                     rows.append([("Подробно · " + label, "admin:event:" + event["id"])])
                     job = payload.get("job_id") or payload.get("job")
                     if isinstance(job, str) and re.fullmatch(_UUID, job, re.ASCII):
@@ -408,7 +441,7 @@ class AdminController:
         event = self.store.admin_event_detail(event_id)
         payload, kind = event["payload"], event["kind"]
         lines = [
-            _CATEGORIES.get(kind, "Событие"),
+            _EVENT_NAMES.get(kind, "Событие"),
             f"Событие: {event_id}",
             f"Время: {_timestamp(event.get('created'))}",
             f"Доставка: {_status(event.get('status'), _DELIVERY)} · попыток: {_short(event.get('attempts'), 4)}",
@@ -443,6 +476,10 @@ class AdminController:
         elif kind == "registration":
             lines.append(f"Username: {_short(payload.get('username'), 32)}")
             lines.append(f"Согласие: {_short(payload.get('consent'), 8)}")
+        elif kind == "credit_grant":
+            lines.extend([f"Дополнительно: +{_short(payload.get('credits'), 16)} ген.",
+                          "Получатель уведомления: пользователь", "Пометка администратора:",
+                          _short(payload.get("reason"), 240)])
         await self._show(message, "\n".join(lines), _keyboard(*rows, [("← События", "admin:events:0")], _home_row()), edit=edit, html=False)
 
     async def job(self, message, job_id, *, result=False, edit=False):

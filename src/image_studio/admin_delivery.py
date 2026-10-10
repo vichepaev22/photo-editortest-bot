@@ -1,4 +1,4 @@
-"""Durable admin outbox delivery; never performs quota or generation operations."""
+"""Durable owner events and recipient credit notices; never modifies quota."""
 
 import asyncio
 import html
@@ -17,6 +17,7 @@ from aiogram.exceptions import (
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 
 from .catalog import PRESETS
+from .store import DomainError
 
 log = logging.getLogger(__name__)
 
@@ -151,11 +152,20 @@ class AdminDelivery:
         send_started = False
         try:
             payload = row["payload"]
-            text = notification_text(row["kind"], payload)
-            keyboard = notification_keyboard(row["kind"], payload, event_id)
+            target = self.admin_user_id
+            if row["kind"] == "credit_grant":
+                notice = self.store.admin_credit_notice(event_id, self.admin_user_id)
+                target = notice["user_id"]
+                text = ("🎁 <b>Вам начислены дополнительные генерации</b>\n"
+                        f"Количество: <b>+{notice['credits']}</b>\n\n"
+                        "Пометка администратора:\n" + _value(notice, "reason", 240))
+                keyboard = None
+            else:
+                text = notification_text(row["kind"], payload)
+                keyboard = notification_keyboard(row["kind"], payload, event_id)
             send_started = True
             message = await self.bot.send_message(
-                self.admin_user_id, text, parse_mode="HTML", disable_web_page_preview=True,
+                target, text, parse_mode="HTML", disable_web_page_preview=True,
                 reply_markup=keyboard,
             )
             self.store.admin_finish_event(event_id, message.message_id)
@@ -167,7 +177,7 @@ class AdminDelivery:
             self.store.admin_fail_event(event_id, retry_after=max(1, exc.retry_after))
         except (TelegramForbiddenError, TelegramBadRequest, TelegramUnauthorizedError):
             self.store.admin_fail_event(event_id)
-        except ValueError:
+        except (ValueError, DomainError):
             self.store.admin_fail_event(event_id, uncertain=send_started)
         except (TelegramNetworkError, TimeoutError):
             self.store.admin_fail_event(event_id, uncertain=send_started, retry_after=None if send_started else 30)

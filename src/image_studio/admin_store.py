@@ -185,7 +185,26 @@ class AdminStoreMixin:
             c.execute("UPDATE admin_credit_operations SET status='applied',applied_at=? WHERE id=?",
                       (time.time(), operation))
             self._event(c, "admin_credit", operation)
+            credits = op["after_available"] - op["before_available"]
+            if credits > 0:
+                # Quota and its recipient notice commit together; no retrospective grants.
+                self._admin_enqueue(c, "credit_grant:" + operation, "credit_grant",
+                                    {"user_id": op["user_id"], "credits": credits, "reason": op["reason"]})
             return dict(c.execute("SELECT * FROM admin_credit_operations WHERE id=?", (operation,)).fetchone()) | {"applied": True}
+
+    def admin_credit_notice(self, event_id, actor):
+        """Resolve the recipient and content from the applied operation, never payload targets."""
+        _id(event_id)
+        _actor(actor)
+        with self.tx() as c:
+            op = c.execute("SELECT p.* FROM admin_credit_operations p JOIN admin_outbox o "
+                           "ON o.event_key='credit_grant:' || p.id WHERE o.id=? AND o.kind='credit_grant' "
+                           "AND o.status='running' AND p.status='applied' AND p.actor=?", (event_id, actor)).fetchone()
+            if op is None or op["after_available"] <= op["before_available"] or op["user_id"] == actor:
+                raise DomainError("invalid_credit_notice")
+            _actor(op["user_id"])
+            return {"user_id": op["user_id"], "credits": op["after_available"] - op["before_available"],
+                    "reason": op["reason"]}
 
     def admin_cancel_credit(self, actor, operation):
         _actor(actor)
@@ -241,7 +260,7 @@ class AdminStoreMixin:
         return dict(row) | {"payload": json.loads(row["payload"])}
 
     def _admin_enqueue(self, c, key, kind, payload):
-        if (not isinstance(key, str) or not 1 <= len(key) <= 240 or kind not in CATEGORIES
+        if (not isinstance(key, str) or not 1 <= len(key) <= 240 or kind not in (*CATEGORIES, "credit_grant")
                 or not isinstance(payload, dict)):
             raise DomainError("invalid_admin_event")
         encoded = json.dumps(payload, ensure_ascii=False, allow_nan=False)
@@ -274,6 +293,9 @@ class AdminStoreMixin:
         self._admin_safe_event(c, f"generation:{job}:{status}", "generation", payload)
 
     def admin_event(self, key, kind, payload):
+        # Recipient notices can originate only in an applied credit transaction.
+        if kind not in CATEGORIES:
+            raise DomainError("invalid_admin_event")
         with self.tx() as c:
             return self._admin_enqueue(c, key, kind, payload)
 
@@ -296,9 +318,10 @@ class AdminStoreMixin:
         with self.tx() as c:
             c.execute("DELETE FROM admin_job_shares WHERE expires<=?", (time.time(),))
             row = c.execute("""SELECT o.* FROM admin_outbox o WHERE o.status='pending' AND o.attempts<3
-                AND o.next_attempt<=? AND o.kind IN ('registration','questions','generation','payment') AND
+                AND o.next_attempt<=? AND (o.kind='credit_grant' OR
+                (o.kind IN ('registration','questions','generation','payment') AND
                 (SELECT enabled FROM admin_settings WHERE category='enabled')=1 AND
-                (SELECT enabled FROM admin_settings WHERE category=o.kind)=1
+                (SELECT enabled FROM admin_settings WHERE category=o.kind)=1))
                 ORDER BY o.created,o.rowid LIMIT 1""", (time.time(),)).fetchone()
             if row is None:
                 return None
