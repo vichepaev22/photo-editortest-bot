@@ -247,3 +247,18 @@ aiogram 3.31.0: текущие Context7 resolve/query ведущего аген�
 
 ## CR-MOTION-001 — подготовка концепции, 12.10.2026
 Осмотрены текущие index.html/app.css, основное PRD и существующее ТЗ на assets. Подготовлен welcome-motion-brief.md: storyboard 22с, палитра текущего кабинета, набор слоёв владельцу и будущая приёмка. Применены emil-design-eng для анимационных решений и process-design-vibecoding для фиксации границ/статуса. Изменены только документы. Artwork/video/code/deploy и runtime-проверки не выполнялись; платных вызовов 0. Git diff --check проверяет только формат документов.
+
+### CR-MOTION-001 — готовый ролик, 12.10.2026
+По следующему поручению владельца создан и экспортирован весь фильм в motion/welcome.
+Процедурные SVG, единый персонаж, текущая палитра; кабинет → загрузка → 9 причёсок
+→ 3 оправы → лист 2×2 → документ в руках → кабинет/CTA.
+22с/30fps: 1080×1920 (1 753 749 bytes) и 720×1280 (771 034 bytes),
+H.264/yuv420p, faststart, без звука; poster WebP 32 318 bytes.
+TypeScript без диагностик; still render exit0; полный render VIDEO COMPLETE/exit0;
+finish exit0, ffprobe и полное декодирование финального MP4 без ошибок.
+Ключевые кадры и финальная сцена документа просмотрены. Подробные доказательства:
+[motion/welcome/out/verification.md](../motion/welcome/out/verification.md).
+Применён remotion-best-practices, официальная документация Remotion и локальные типы4.0.529
+(Context7 недоступен). Проверка браузерного воспроизведения/реального iPhone и интеграция
+в Mini App не проводились. Платных Image/vision/Imagegen и Telegram-вызовов0,
+полная suite бота не запускалась: runtime/оплата/приложение не менялись.

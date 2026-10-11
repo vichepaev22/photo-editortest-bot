@@ -1,0 +1,8 @@
+{
+  "name": "obraz-welcome-film",
+  "private": true,
+  "version": "1.0.0",
+  "scripts": {"render": "node scripts/render.mjs", "stills": "node scripts/render.mjs --stills", "check": "tsc --noEmit"},
+  "dependencies": {"remotion": "4.0.529", "@remotion/bundler": "4.0.529", "@remotion/renderer": "4.0.529", "react": "19.2.3", "react-dom": "19.2.3"},
+  "devDependencies": {"typescript": "5.9.3", "@types/react": "19.2.7", "@types/react-dom": "19.2.3"}
+}
