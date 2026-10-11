@@ -19,6 +19,7 @@ class Settings:
     image_provider: str = "mock"
     image_model: str = "gpt-image-2.5-flare-2026-09-08"
     quality: str = "medium"
+    reference_analysis_model: str = "gpt-4.1-mini-2025-04-14"
     bot_token: str = ""
     expected_bot_username: str = ""
     openai_key: str = ""
@@ -76,6 +77,7 @@ class Settings:
             image_provider=os.getenv("IMAGE_PROVIDER", "mock"),
             image_model=os.getenv("IMAGE_MODEL", "gpt-image-2.5-flare-2026-09-08"),
             quality=os.getenv("IMAGE_QUALITY", "medium"),
+            reference_analysis_model=os.getenv("REFERENCE_ANALYSIS_MODEL", "gpt-4.1-mini-2025-04-14"),
             bot_token=os.getenv("TELEGRAM_BOT_TOKEN", ""),
             expected_bot_username=os.getenv("TELEGRAM_BOT_USERNAME", "").lstrip("@"),
             openai_key=os.getenv("OPENAI_API_KEY", ""),

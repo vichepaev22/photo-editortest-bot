@@ -7,6 +7,7 @@ from .catalog import PRESETS, prompt_for
 from .document_photo import DOCUMENT_PRESETS, prepare_document_sheet
 from .media import MAX_BYTES, normalize
 from .provider import ProviderError
+from .reference import staging_prompt
 from .store import DomainError
 
 log = logging.getLogger(__name__)
@@ -195,6 +196,18 @@ class Service:
         try:
             payload = json.loads(self.media.path(f"{j['user_id']}/{job}.json").read_text(encoding="utf-8"))
             inputs = [self.media.path(path) for path in payload["inputs"]]
+            analysis = None
+            if j["preset"] == "reference":
+                if any(self._owned_recent_file(j["user_id"], path, MAX_BYTES) is None
+                       for path in payload["inputs"]):
+                    raise ValueError("expired_reference_input")
+                recipe, analysis = await self.provider.analyze_reference(inputs[1])
+                payload["reference_recipe"] = recipe
+                payload["prompt"] += staging_prompt(
+                    recipe, 2, keep_clothing="Сохранить мою одежду" in payload["prompt"],
+                )
+                self.media.save(j["user_id"], json.dumps(payload, ensure_ascii=False).encode("utf-8"),
+                                f"{job}.json")
             if j["preset"] == "document_original":
                 with inputs[0].open("rb") as source:
                     data = source.read(MAX_BYTES + 1)
@@ -202,6 +215,8 @@ class Service:
             else:
                 result = await self.provider.edit(inputs, payload["prompt"])
                 data, usage, request_id = result.data, result.usage, result.request_id
+                if analysis is not None:
+                    usage = {"image": usage, "reference_analysis": analysis}
             if j["preset"] in DOCUMENT_PRESETS:
                 output = prepare_document_sheet(data)
                 extension = "png"

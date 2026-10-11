@@ -226,3 +226,18 @@ Cutover completed through pinned SSH. The stopped-runtime backup includes SQLite
 New @obraz_photo_bot runtime ready/OpenAI, systemd enabled/active/running as image-studio, NRestarts0. One synthetic signed owner session accepted the new token and confirmed unlimited=true; a fresh signature using the old token was rejected401. Startup commands and WebApp studio menu were verified via Telegram API. This is server authentication/configuration evidence, not a real user Telegram WebView or completed new image. No rollback was forced in production.
 
 Public HTTPS health/catalog200, trial=true/seven presets; Pages app.js200 exactly matches release bytes. Private receipts: data/runtime/bot-migration-server-verification.json and bot-migration-public-verification.json. Server backup/receipt remain root-only. Free-trial refresh is one-time and does not extend media TTL; normal post-start user activity may change counters/visits. Agent Image calls, real payments and test messages during cutover:0. The previously authorised one-off announcement is a separate completed operation. Final receipt changes documentation only, so no redundant full CI is triggered for it.
+
+### CR-018: повторная пользовательская Telegram-доставка, 11.10.2026
+
+Канонический PRD/R05 и контракт RD1-RD7 обновлены до реализации. Добавочный SQLite cache привязан к bot ID, владельцу, job и result path; TTL/consent/owner проверяются перед использованием file_id. Known 429 сохраняет retry_at до следующего явного запроса; неопределённый network outcome не повторяется. Административные функции и store.py не изменены.
+
+Итоговая офлайн команда:
+```
+.venv/Scripts/python.exe -m pytest -q tests/test_result_delivery.py tests/test_bot_ui.py::test_owned_result_button_reuses_file_and_rejects_foreign_owner tests/test_workflow.py::test_duplicate_and_delivery_failure_never_regenerate tests/test_bot_flow.py::test_worker_delivery_cleans_only_steps_even_before_progress_ack tests/test_bot_flow.py::test_result_cleanup_failures_do_not_regenerate_or_change_quota tests/test_bot_flow.py::test_result_list_download_and_support_are_friendly_without_ids
+```
+20 passed / 32.00s. Focused Ruff (bot.py, result_delivery.py, test_result_delivery.py), compileall тех же файлов и git diff --check: PASS. Первый запуск нового поведения против ещё загруженной старой доставки дал 11 failed / 1 passed; новая реализация затем 12 passed, смежные две регрессии 2 passed. После callback/PNG дополнений итог выше.
+
+aiogram 3.31.0: текущие Context7 resolve/query ведущего агента /aiogram/aiogram подтвердили file_id reuse и TelegramRetryAfter.retry_after; установленная сигнатура исключений проверена локально. Ни dependency upgrade, ни смена Image snapshot/quality, ни реальный Telegram/paid API/polling/deployment не выполнялись. Полная suite и admin-тесты не запускались. Это offline verification локального изменения; production этот код ещё не получал. Контракт: result-delivery.md; полный итог: ../context7-project-review-2026-10-11/OBRAZ.md.
+
+## CR-REF-001 — 11.10.2026
+Реализованы Фото по примеру в native bot и Mini App, автоматический private JSON, два варианта переноса, reuse только своего исходника, отдельный vision analysis и usage. Focused offline пакет: 87 passed / 57.26s (service/workflow/native/API, четыре новых reference-сценария); Ruff и node --check PASS. Позднее статически расширена обработка ошибок анализа до OpenAIError. Повторный полный локальный прогон не выполнялся; обязательный GitHub CI фиксируется ниже. Платных API-вызовов 0. Текущее качество/доступ анализа в аккаунте и настоящий iPhone не проверены. SSH preflight: production bb01b99, чистый checkout, active/running, NRestarts=0, API health ok/OpenAI/local_demo=false.

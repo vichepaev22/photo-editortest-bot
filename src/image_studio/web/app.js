@@ -14,6 +14,7 @@
   const bridge = window.Telegram?.WebApp?.initData ? window.Telegram.WebApp : null;
   const supports = version => Boolean(bridge?.isVersionAtLeast?.(version));
   const hints = {
+    reference: ['Первое фото — вы, второе — пример позы, света и фона. Точное повторение не гарантируется.', 'Повторить образ или: сохранить мою одежду; повторить позу, свет и фон', 'Ваш исходник и пример кадра'],
     hair: ['Укажите длину, цвет и укладку.', 'Например: каре до плеч, мягкие волны и натуральный каштановый цвет', 'Портрет до и после изменения причёски'],
     clothes: ['Опишите одежду, цвет и материал.', 'Например: светлый льняной костюм и белая футболка; сохранить позу и лицо', 'Один человек в двух вариантах одежды'],
     glasses: ['Укажите форму, цвет и материал оправы.', 'Например: тонкая круглая оправа тёмного металла с прозрачными линзами', 'Один портрет без очков и с оправой'],
@@ -23,7 +24,7 @@
     document_original: ['4 фото 35×45 мм без ИИ. Нужен исходный снимок анфас на белом фоне; фон и одежду сохраняем.', 'Подготовить 4 одинаковых снимка 35×45 мм без ИИ; лицо и плечи по центру', 'Один PNG с четырьмя копиями для печати'],
     document: ['Фото на документы: 4 одинаковых снимка 35×45 мм. Выберите вариант одежды или подготовку исходника без ИИ.', 'Белый фон, светлая рубашка или деловой костюм; сохранить лицо. Фото на документы', 'Четыре одинаковых портрета для анкеты']
   };
-  const presetIcon = id => `<span class="preset-emoji" aria-hidden="true">${({hair:"✂",clothes:"♧",glasses:"◉",background:"▧",enhance:"✦",merge:"⊞",document_original:"▤",document:"♧"})[id] || "·"}</span>`;
+  const presetIcon = id => `<span class="preset-emoji" aria-hidden="true">${({reference:"🎬",hair:"✂",clothes:"♧",glasses:"◉",background:"▧",enhance:"✦",merge:"⊞",document_original:"▤",document:"♧"})[id] || "·"}</span>`;
   const documentPreset = id => ['document','document_original'].includes(id);
   const hairExamples = {
     single:'Каре до плеч с мягкими волнами. Один образ; сохранить лицо, одежду и фон.',
@@ -168,19 +169,28 @@
     $('presetGrid').innerHTML = state.catalog.map(item => `<button type="button" class="preset-card ${item.id === state.preset ? 'selected' : ''}" data-preset="${escape(item.id)}" aria-pressed="${item.id === state.preset}">${presetIcon(item.id)}<span class="preset-label">${escape(item.label.replace('Объединить два фото','Объединить').replace('Улучшение фото','Улучшение'))}</span><span class="preset-cost">${credits(item.credits)}</span>${item.id === state.preset ? '<span class="selection-mark" aria-hidden="true">✓</span>' : ''}</button>`).join('');
     $('looksGrid').innerHTML = state.catalog.map(item => `<button type="button" class="look-card" data-look="${escape(item.id)}"><div class="look-art-wrap"><span class="asset-slot-label"><strong>${escape(item.label)}</strong><span>${escape(hints[item.id]?.[2] || 'Пример этого изменения')}</span><small>Здесь будет пример владельца студии</small></span></div><div class="look-copy"><strong>${escape(item.label)}</strong><p>${escape(hints[item.id]?.[0] || 'Опишите свою идею в студии.')}</p><span>Попробовать · ${credits(item.credits)} ${icon('arrow')}</span></div></button>`).join('');
     $('description').placeholder = hints[state.preset]?.[1] || 'Опишите, что вы хотите изменить на фото';
+    if (!$('referenceTransfer')) {
+      const select=document.createElement('select');select.id='referenceTransfer';select.setAttribute('aria-label','Что повторить из примера');
+      for(const [value,text] of [['Повторить образ','Повторить образ целиком'],['Сохранить мою одежду; повторить позу, свет и фон','Сохранить мою одежду']]){const option=document.createElement('option');option.value=value;option.textContent=text;select.append(option);}
+      $('description').before(select);select.addEventListener('change',()=>{$('description').value=select.value;updateAction();});
+    }
+    $('referenceTransfer').hidden=state.preset!=='reference';
+    if(state.preset==='reference' && !$('description').value.trim())$('description').value=$('referenceTransfer').value;
     renderDocumentOptions(); updateAction();
   }
   function selectPreset(id) {
     if (state.uploading.size || state.pending) { notify('Завершите загрузку или отправку текущего задания перед сменой образа.'); return; }
-    state.preset = id; if(id === 'document') {$('description').value=documentDescriptions[state.documentMode];} renderPresets(); renderPhotos(); flushPhotos(); haptic();
+    state.preset = id; if(id === 'document') {$('description').value=documentDescriptions[state.documentMode];} if(id==='reference')$('description').value=$('referenceTransfer')?.value || 'Повторить образ'; renderPresets(); renderPhotos(); flushPhotos(); haptic();
   }
   function renderPhotos() {
     const required = currentPreset()?.inputs || 1;
     $('photoSlots').classList.toggle('merge-slots', required === 2);
     $('photoSlots').innerHTML = Array.from({length:required}, (_, index) => {
       const photo = state.photos[index];
-      const preview = photo?.previewUnavailable ? `<div class="upload-label" role="status"><span class="upload-plus">${icon('photo')}</span><strong>${photo.id && !state.preview ? 'Фото загружено' : 'Фото выбрано'}</strong><small>${state.preview ? 'Браузер не показывает этот формат. Предпросмотр доступен после загрузки в рабочей студии.' : photo.id ? 'Предпросмотр пока недоступен. Фото можно использовать для создания.' : 'Предпросмотр появится после загрузки.'}</small></div>` : photo ? `<img src="${escape(photo.url)}" data-photo-preview="${index}" alt="Ваше исходное фото ${index + 1}">` : '';
-      return `<div class="photo-slot">${photo ? `${preview}<div class="photo-overlay"><span>${state.uploading.has(index) ? 'Загружаем…' : photo.error ? 'Загрузка прервалась' : photo.id ? `Фото ${index + 1}` : 'Выбрано в этой вкладке'}</span>${photo.error ? `<button type="button" class="upload-retry" data-retry-upload="${index}">Повторить</button>` : ''}<button type="button" class="icon-button" data-remove="${index}" aria-label="Убрать фото ${index + 1}" ${state.pending || state.uploading.has(index) ? 'disabled' : ''}>${icon('close')}</button></div>` : `<button type="button" class="upload-label" data-pick-photo="${index}" aria-controls="photoPicker${index}" aria-describedby="photoStatus"><span class="upload-plus">${icon('plus')}</span><strong>${required === 2 ? `Добавить фото ${index + 1}` : 'Добавьте своё фото'}</strong><small>${required === 2 ? 'Два фото, один общий кадр' : 'Здесь начинается новый образ'}</small></button>`}</div>`;
+      const label=state.preset==='reference' ? (index===0 ? 'Ваше фото' : 'Пример кадра') : `Фото ${index + 1}`;
+      const uploadHint=state.preset==='reference' ? (index===0 ? 'Лицо и фигуру берём отсюда' : 'Поза, свет, фон и выбранный образ') : required===2 ? 'Два фото, один общий кадр' : 'Здесь начинается новый образ';
+      const preview = photo?.previewUnavailable ? `<div class="upload-label" role="status"><span class="upload-plus">${icon('photo')}</span><strong>${photo.id && !state.preview ? 'Фото загружено' : 'Фото выбрано'}</strong><small>${state.preview ? 'Браузер не показывает этот формат. Предпросмотр доступен после загрузки в рабочей студии.' : photo.id ? 'Предпросмотр пока недоступен. Фото можно использовать для создания.' : 'Предпросмотр появится после загрузки.'}</small></div>` : photo ? `<img src="${escape(photo.url)}" data-photo-preview="${index}" alt="${label}">` : '';
+      return `<div class="photo-slot">${photo ? `${preview}<div class="photo-overlay"><span>${state.uploading.has(index) ? 'Загружаем…' : photo.error ? 'Загрузка прервалась' : photo.id ? label : 'Выбрано в этой вкладке'}</span>${photo.error ? `<button type="button" class="upload-retry" data-retry-upload="${index}">Повторить</button>` : ''}<button type="button" class="icon-button" data-remove="${index}" aria-label="Убрать: ${label}" ${state.pending || state.uploading.has(index) ? 'disabled' : ''}>${icon('close')}</button></div>` : `<button type="button" class="upload-label" data-pick-photo="${index}" aria-controls="photoPicker${index}" aria-describedby="photoStatus"><span class="upload-plus">${icon('plus')}</span><strong>${state.preset==='reference' ? label : required === 2 ? `Добавить фото ${index + 1}` : 'Добавьте своё фото'}</strong><small>${uploadHint}</small></button>`}</div>`;
     }).join('');
     $('photoSlots').querySelectorAll('[data-photo-preview]').forEach(image => {
       const index=Number(image.dataset.photoPreview), selected=state.photos[index];
@@ -489,7 +499,7 @@
     bindEvents(); setupBridge(); renderPhotos(); renderResults();
     if(state.preview){
       state.connection='ready';
-      state.catalog=[{id:'hair',label:'Причёска',inputs:1,credits:1},{id:'clothes',label:'Одежда',inputs:1,credits:1},{id:'glasses',label:'Очки',inputs:1,credits:1},{id:'background',label:'Фон',inputs:1,credits:1},{id:'enhance',label:'Улучшение фото',inputs:1,credits:1},{id:'merge',label:'Объединить два фото',inputs:2,credits:state.trial?1:2},{id:'document',label:'Фото на документы',inputs:1,credits:1}];
+      state.catalog=[{id:'reference',label:'Фото по примеру',inputs:2,credits:1},{id:'hair',label:'Причёска',inputs:1,credits:1},{id:'clothes',label:'Одежда',inputs:1,credits:1},{id:'glasses',label:'Очки',inputs:1,credits:1},{id:'background',label:'Фон',inputs:1,credits:1},{id:'enhance',label:'Улучшение фото',inputs:1,credits:1},{id:'merge',label:'Объединить два фото',inputs:2,credits:state.trial?1:2},{id:'document',label:'Фото на документы',inputs:1,credits:1}];
       $('modeBadge').textContent='Предпросмотр';renderPresets();renderPhotos();renderMe();showEntry();
       document.querySelector('.privacy-note').innerHTML='<span class="privacy-dot"></span>Фото остаются только в вашей вкладке браузера.';
       $('resultsView').querySelector('.fine-print').textContent='Предпросмотр интерфейса: генерация и хранение результатов пока не подключены.';

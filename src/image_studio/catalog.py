@@ -10,6 +10,7 @@ class Preset:
 
 
 PRESETS = {
+    "reference": Preset("Фото по примеру", "Image 1 is the user; image 2 is a staging reference.", 2, 1),
     "hair": Preset("Причёска", "Change only the hairstyle and hair color as requested."),
     "clothes": Preset("Одежда", "Change only the clothing as requested; keep the person fully clothed."),
     "glasses": Preset("Очки", "Add or change eyeglasses as requested, with realistic fit and reflections."),
@@ -45,6 +46,8 @@ def prompt_for(preset: str, description: str) -> str:
         raise ValueError("invalid_prompt")
     if preset == "document":
         return PRESETS[preset].instruction + "\nUser's requested clothing choice: " + description.strip()
+    if preset == "reference":
+        return "Create a natural photographic portrait using the user in Image 1. " + description.strip()
     return (
         "Edit the supplied reference photograph(s). Preserve each person's identity, face geometry, "
         "skin tone, age, body proportions and expression. Preserve everything except the requested changes. "

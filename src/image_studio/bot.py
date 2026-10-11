@@ -19,7 +19,6 @@ from aiogram.types import (
     CallbackQuery,
     CopyTextButton,
     ErrorEvent,
-    FSInputFile,
     InlineKeyboardButton,
     InlineKeyboardMarkup,
     KeyboardButton,
@@ -38,6 +37,7 @@ from .media import MAX_BYTES, Media, normalize
 from .provider import MockProvider, OpenAIProvider
 from .purchase_demo import PREFIX as PURCHASE_PREFIX
 from .purchase_demo import PRIVACY_URL, TERMS_URL, PurchaseDemo
+from .result_delivery import ResultDeliveryDeferred, send_result_document
 from .runtime import RUNTIME_DIR, BotRuntime
 from .service import Service
 from .store import DomainError, Store
@@ -69,9 +69,10 @@ def make_telegram_session():
     return AiohttpSession(proxy=proxy, timeout=20)
 
 
-ICONS = {"hair": "💇", "clothes": "👕", "glasses": "👓", "background": "🌄", "enhance": "✨", "merge": "🧩",
+ICONS = {"reference": "🎬", "hair": "💇", "clothes": "👕", "glasses": "👓", "background": "🌄", "enhance": "✨", "merge": "🧩",
          "document": "👔", "document_original": "📄"}
 EXAMPLES = {
+    "reference": "Повторить образ: поза, свет, фон и одежда; сохранить моё лицо и фигуру",
     "hair": "Каре до плеч с мягкими волнами",
     "clothes": "Бежевый тренч поверх белой футболки",
     "glasses": "Тонкая чёрная оправа с прозрачными линзами",
@@ -260,12 +261,11 @@ class StepMessages:
 async def deliver_result(bot, store, steps, user, job, path, *, demo=False, unlimited=False):
     if user == 0:  # Local browser demo has no Telegram destination.
         return
-    filename, caption = result_presentation(store.job(job))
+    filename, caption = result_presentation(store.result(user, job))
     if demo:
         caption = "DEMO: тестовая копия, ИИ-правка не выполнялась.\n\n" + caption
-    await bot.send_document(
-        user,
-        FSInputFile(path, filename=filename),
+    await send_result_document(
+        bot, store, user, job, path, filename=filename,
         caption=caption,
         reply_markup=buttons([[("📸 Новая правка", "nav:edit"), ("🖼 Мои результаты", "nav:results")]]),
     )
@@ -368,10 +368,10 @@ def build_dispatcher(settings, store, media, service, *, step_messages=None, pur
         draft = drafts[user] = Draft(key)
         steps.begin(user, draft.steps_token)
         choice = PRESETS[key]
-        draft.reusable = service.reusable_inputs(user, choice.inputs)
+        draft.reusable = service.reusable_inputs(user, 1 if key == "reference" else choice.inputs)
         markup = BACK
         if draft.reusable:
-            plural = choice.inputs == 2
+            plural = choice.inputs == 2 and key != "reference"
             markup = buttons([
                 [("Использовать загруженные фото" if plural else "Использовать загруженное фото",
                   "reuse:" + draft.token, "success")],
@@ -381,6 +381,9 @@ def build_dispatcher(settings, store, media, service, *, step_messages=None, pur
         await step_answer(
             message, user, draft,
             f"{ICONS[key]} Шаг 1 из 3 · {choice.label}\n\nЗагрузите {choice.inputs} фото.\n"
+            + ("Сначала своё фото, затем понравившийся кадр — пример позы, света и фона.\n"
+               "Лицо берём из вашего снимка. Точное повторение не гарантируется.\n" if key == "reference" else "")
+            +
             "Для лучшего качества отправьте фото файлом. JPEG/PNG/WebP до 10 MB.\n"
             "Или сфотографируйте себя сейчас — желательно на нейтральном фоне, например у стены."
             + ("\n\n♾ Безлимитное тестирование." if service.is_unlimited(user) else
@@ -395,6 +398,23 @@ def build_dispatcher(settings, store, media, service, *, step_messages=None, pur
         )
 
     async def step_two(message, draft):
+        if draft.preset == "reference":
+            if len(draft.photos) < 2:
+                await step_answer(message, message.chat.id, draft,
+                                  "🎬 Теперь пришлите понравившееся фото — пример кадра.\n"
+                                  "Ваше фото уже принято. Референс задаёт позу, свет и фон.")
+            else:
+                await step_answer(message, message.chat.id, draft,
+                                  "🎬 Шаг 2 из 3 · Что повторить?\n\n"
+                                  "Лицо и фигуру берём из вашего фото.\n"
+                                  "Один результат — 1 попытка. Выбор запускает создание образа."
+                                  if trial else "🎬 Что повторить? Один результат — 1 попытка.",
+                                  reply_markup=buttons([
+                                      [("Повторить образ", f"refopt:{draft.token}:all")],
+                                      [("Сохранить мою одежду", f"refopt:{draft.token}:scene")],
+                                      [("🏠 Главное меню", "nav:home")],
+                                  ]))
+            return
         if len(draft.photos) < PRESETS[draft.preset].inputs:
             await step_answer(message, message.chat.id, draft,
                               "📷 Шаг 1 из 3\n\nПервое фото принято. Отправьте второе с согласия человека.")
@@ -481,8 +501,8 @@ def build_dispatcher(settings, store, media, service, *, step_messages=None, pur
             "DEMO: тестовая копия, ИИ-правка не выполнялась.\n" if settings.image_provider == "mock" else ""
         )
         filename, caption = result_presentation(record)
-        await message.answer_document(
-            FSInputFile(path, filename=filename),
+        await send_result_document(
+            message.bot, store, user, job, path, filename=filename,
             caption=mode + caption + "\n\nХранение — 24 часа.",
             reply_markup=buttons([[("📸 Новая правка", "nav:edit"), ("🖼 Результаты", "nav:results")]]),
         )
@@ -793,6 +813,9 @@ def build_dispatcher(settings, store, media, service, *, step_messages=None, pur
         try:
             job = parts[1].strip()
             await send_result(message, message.from_user.id, job)
+        except ResultDeliveryDeferred:
+            # A rate-limited document stays in history; do not send again during retry_after.
+            return
         except (DomainError, ValueError, IndexError):
             await message.answer("Результат недоступен. Откройте «Мои результаты».")
 
@@ -801,6 +824,8 @@ def build_dispatcher(settings, store, media, service, *, step_messages=None, pur
         try:
             await callback.answer()
             await send_result(callback.message, callback.from_user.id, callback.data.split(":", 1)[1])
+        except ResultDeliveryDeferred:
+            return
         except (DomainError, ValueError, OSError):
             await callback.message.answer("Результат недоступен или срок хранения истёк.", reply_markup=BACK)
 
@@ -826,7 +851,7 @@ def build_dispatcher(settings, store, media, service, *, step_messages=None, pur
             return
         await callback.answer()
         if action == "reuse":
-            inputs = service.reusable_inputs(user, PRESETS[draft.preset].inputs)
+            inputs = service.reusable_inputs(user, 1 if draft.preset == "reference" else PRESETS[draft.preset].inputs)
             if not inputs or inputs != draft.reusable:
                 await callback.message.answer("Это фото уже недоступно. Загрузите новое фото.", reply_markup=BACK)
                 return
@@ -866,7 +891,9 @@ def build_dispatcher(settings, store, media, service, *, step_messages=None, pur
         try:
             data = normalize(buffer.getvalue())
             path = media.save(message.from_user.id, data)
-            service.remember_inputs(message.from_user.id, draft.photos + [path])
+            service.remember_inputs(message.from_user.id,
+                                    (draft.photos + [path])[:1] if draft.preset == "reference"
+                                    else draft.photos + [path])
         except (ValueError, OSError, DomainError) as exc:
             error = (
                 "Разрешение фото слишком большое. Максимум — 64 MP и 10 MB на файл. "
@@ -976,6 +1003,20 @@ def build_dispatcher(settings, store, media, service, *, step_messages=None, pur
         if trial:
             await submit_draft(message, user, draft, request_key)
 
+    @router.callback_query(F.data.startswith("refopt:"))
+    async def reference_option(callback: CallbackQuery):
+        user = callback.from_user.id
+        draft = current(user)
+        parts = callback.data.split(":")
+        if (not callback.message or callback.message.chat.id != user or not store.has_consent(user)
+                or len(parts) != 3 or not draft or draft.preset != "reference"
+                or draft.token != parts[1] or len(draft.photos) != 2 or parts[2] not in {"all", "scene"}):
+            await callback.answer("Выбор устарел. Откройте функцию заново.", show_alert=True)
+            return
+        await callback.answer()
+        text = "Повторить образ" if parts[2] == "all" else "Сохранить мою одежду; повторить позу, свет и фон"
+        await describe_and_submit(callback.message, user, draft, text, "reference:" + parts[1])
+
     @router.callback_query(F.data.startswith("docopt:"))
     async def document_option(callback: CallbackQuery):
         user = callback.from_user.id
@@ -1034,7 +1075,8 @@ async def run(settings):
             provider = (
                 MockProvider()
                 if settings.image_provider == "mock"
-                else OpenAIProvider(settings.openai_key, settings.image_model, settings.quality)
+                else OpenAIProvider(settings.openai_key, settings.image_model, settings.quality,
+                                    analysis_model=settings.reference_analysis_model)
             )
 
             async def deliver(user, job, path):

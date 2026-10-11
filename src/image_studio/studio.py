@@ -31,6 +31,7 @@ SESSION_LIMIT = 1000
 MEDIA_TTL = 86400
 UUID_PATTERN = re.compile(r"(?:[0-9a-fA-F]{32}|[0-9a-fA-F]{8}(?:-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12})")
 SAFE_JOB_ERRORS = {
+    "reference_analysis_failed",
     "provider_connection_or_timeout", "provider_authentication", "provider_quota", "provider_rate_limit",
     "provider_rejected", "provider_unavailable", "invalid_provider_response", "missing_output",
     "processing_error", "storage_error", "interrupted_provider",

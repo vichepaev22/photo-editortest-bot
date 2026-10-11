@@ -5,8 +5,10 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Protocol
 
-from openai import APIConnectionError, APIStatusError, AsyncOpenAI
+from openai import APIConnectionError, APIStatusError, AsyncOpenAI, OpenAIError
 from PIL import Image, ImageDraw
+
+from .reference import ANALYSIS_MODEL, analyze, mock_recipe
 
 
 @dataclass
@@ -26,8 +28,10 @@ class ImageProvider(Protocol):
 
 
 class OpenAIProvider:
-    def __init__(self, key: str, model: str, quality: str = "medium", client=None):
+    def __init__(self, key: str, model: str, quality: str = "medium", client=None,
+                 analysis_model=ANALYSIS_MODEL):
         self.model, self.quality = model, quality
+        self.analysis_model = analysis_model
         self.client = client or AsyncOpenAI(api_key=key, max_retries=0, timeout=180)
 
     async def edit(self, images, prompt):
@@ -61,12 +65,23 @@ class OpenAIProvider:
         except (ValueError, TypeError):
             raise ProviderError("invalid_provider_response") from None
 
+    async def analyze_reference(self, image):
+        try:
+            return await analyze(self.client, image, self.analysis_model)
+        except (OpenAIError, ValueError, TypeError):
+            raise ProviderError("reference_analysis_failed") from None
+
     async def close(self):
         await self.client.close()
 
 
 class MockProvider:
     calls = 0
+    analysis_calls = 0
+
+    async def analyze_reference(self, image):
+        self.analysis_calls += 1
+        return mock_recipe(), {"model": "mock", "usage": {}, "billable": False}
 
     async def edit(self, images, prompt):
         self.calls += 1
