@@ -49,3 +49,6 @@ CR-018, 11.10.2026: повторное использование Telegram docum
 Schema/provider/service → native выбор и reuse → Mini App → shared core в изолированной Примерочной: выполнено, focused offline проверки пройдены. Далее обязательный CI/Pages, безопасный VPS rollout и readiness. Платный PoC не запускать автоматически. Контракт: reference-feature.md.
 
 Итог CR-REF-001: CI/Pages success, VPS c9abb95 запущен, private backup/data preservation и public health/catalog/assets подтверждены. Quality PoC остаётся отдельным пользовательским тестом.
+
+## CR-MOTION-001 — приветствие Mini App, 12.10.2026
+Сценарий и ТЗ на картинки готовы: welcome-motion-brief.md. Дальше: два согласующих кадра владельца → комплект слоёв → сборка мастера 22с (предложение) → веб-версия/poster → первый вход/пропуск/реальная CTA/статичная альтернатива → одна проверка iPhone. Artwork и интеграция pending; код не изменялся. Показ ролика не использует OpenAI или баланс.
