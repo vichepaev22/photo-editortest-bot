@@ -20,3 +20,30 @@ GitHub Pages отдаёт интерфейс, а файл обрабатывае
 На самом iPhone ещё нужны четыре короткие проверки в Telegram: HEIC из галереи, JPEG из галереи, новое фото камеры и скриншот PNG. Фиксируются версия iOS/Telegram и результат загрузки. Синтетический HEIF не доказывает совместимость каждой разновидности Apple HEIC/HDR/Live Photo; принимается основное неподвижное изображение, а не видео Live Photo.
 
 Основание: [WebKit: HEIC в Safari и WKWebView](https://webkit.org/blog/14445/webkit-features-in-safari-17-0/), [pillow-heif: установка](https://pillow-heif.readthedocs.io/en/stable/installation.html), [поворот HEIF](https://pillow-heif.readthedocs.io/en/stable/workaround-orientation.html), [AnyIO: обработка в потоках](https://anyio.readthedocs.io/en/stable/threads.html).
+
+## CR-UPLOAD-002 — повторная ошибка, 12.10.2026
+
+Владелец подтвердил ошибку пока на одном фото. Формат этого исходника неизвестен,
+поэтому причину конкретного файла не приписываем HEIC, MPO, ICC или Pages без доказательств.
+На VPS уже установлены Pillow12.3.0/pillow-heif1.8.0/libheif1.23.4; отката декодера нет.
+
+Воспроизведены два самостоятельных отказа: валидный JPEG с MPF/MPO-контейнером
+отвергался whitelist форматов; HEIF с валидными пикселями и неверным ICC отвергался
+на этапе цветового профиля. Теперь MPO использует основной кадр с исправлением
+ориентации; неисправный необязательный ICC допускает обычное преобразование RGB.
+Метаданные удаляются. Лимиты10MB/64MP, владение, согласие и защита повреждённых файлов сохранены.
+В логах только формат, размер или тип исключения; пиксели, имя файла и ID не пишутся.
+
+После подтверждённого HTTP400/invalid_image клиент может один раз подготовить JPEG
+через Image/Canvas/toBlob, если браузер умеет прочитать распознанный JPEG/PNG/WebP/HEIF.
+Это запасной путь, не обязательная перекодировка каждого фото. При сети/таймауте
+автоматического повторного POST нет; выбор сохраняется и доступен ручной повтор.
+Safari17+ документирует HEIC в WKWebView; конкретную Telegram/iOS реализацию это не доказывает.
+
+Проверки: два новых теста RED → GREEN; 15 focused media/API tests PASS,
+Ruff PASS, JS syntax PASS; локальный Chromium подтвердил invalid_image → один
+JPEG fallback → превью, а затем сетевую ошибку без автоматического повтора.
+Реальных Image-вызовов0. Выпуск и повтор именно проблемного файла на iPhone — отдельно.
+Источники: [Pillow MPO](https://pillow.readthedocs.io/en/stable/handbook/image-file-formats.html#mpo),
+[WebKit HEIC](https://webkit.org/blog/14445/webkit-features-in-safari-17-0/#heic),
+[Canvas toBlob](https://developer.mozilla.org/en-US/docs/Web/API/HTMLCanvasElement/toBlob).

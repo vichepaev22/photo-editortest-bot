@@ -256,7 +256,20 @@
     if (!selected?.file || state.preview || !state.token || !state.me?.consent || state.pending || state.uploading.has(index)) return;
     state.uploading.add(index); renderPhotos();
     try {
-      const photo = await api('/api/photos', {method:'POST',headers:{'Content-Type':'application/octet-stream'},body:selected.file});
+      let photo;
+      try {
+        photo = await api('/api/photos', {method:'POST',headers:{'Content-Type':'application/octet-stream'},body:selected.file});
+      } catch (error) {
+        if (!(error instanceof APIError) || error.code !== 'invalid_image' || error.status !== 400 || !window.ObrazPhotoUpload) throw error;
+        notify('Подготавливаем фото для загрузки…');
+        let jpeg;
+        try { jpeg = await window.ObrazPhotoUpload.jpeg(selected.file); }
+        catch { throw error; }
+        // invalid_image means no photo was saved. Timeouts and network errors never enter here.
+        if (state.photos[index] !== selected) return;
+        selected.file = jpeg;
+        photo = await api('/api/photos', {method:'POST',headers:{'Content-Type':'application/octet-stream'},body:jpeg});
+      }
       if(state.photos[index]===selected) {selected.id=photo.id;selected.file=null;selected.error=null;$('notice').hidden = true;}
     } catch (error) {
       if(state.photos[index]===selected) {
@@ -301,7 +314,7 @@
     if(!state.preview && state.me?.unlimited && state.me.consent) $('createHint').textContent=state.pending ? 'Повтор отправки не создаёт второе задание' : running ? 'Сначала завершите текущее задание' : !ready ? 'Добавьте фото и описание' : 'Безлимитное тестирование';
     updatePhotoStatus();
     try {
-      if (state.tab === 'studio' && !state.pending && ready && hasCredits && !running && !$('confirmDialog').open) {
+      if (state.tab === 'studio' && !window.ObrazWelcome?.isOpen() && !state.pending && ready && hasCredits && !running && !$('confirmDialog').open) {
         if(supports('6.0')) {const colors=getComputedStyle(document.documentElement);bridge?.MainButton?.setParams({text:state.preview ? 'Предпросмотр · подтверждение' : state.me?.unlimited ? 'Создать · безлимит' : `Создать · ${credits(preset.credits)}`,color:colors.getPropertyValue('--accent').trim(),text_color:colors.getPropertyValue('--accent-ink').trim(),is_active:true}); bridge?.MainButton?.show();}
       } else if(supports('6.0')) bridge?.MainButton?.hide();
     } catch {}
@@ -439,6 +452,17 @@
     applyTheme();
   }
   function bindEvents() {
+    window.addEventListener('obraz:welcome-open',() => {try{bridge?.MainButton?.hide();bridge?.BackButton?.hide();}catch{}});
+    window.addEventListener('obraz:welcome-complete',() => {
+      showTab('studio',true);
+      if (!$('entryPanel').hidden) $('entryConsent').focus({preventScroll:true});
+      else $('photoSlots').querySelector('[data-pick-photo]')?.focus({preventScroll:true});
+    });
+    if(window.ObrazWelcome){
+      const replay=document.createElement('button');replay.id='welcomeReplay';replay.type='button';replay.className='secondary-button';replay.textContent='Знакомство со студией';
+      replay.addEventListener('click',() => window.ObrazWelcome.open(true));
+      document.querySelector('.profile-info').insertBefore(replay,document.querySelector('.delete-block'));
+    }
     document.querySelectorAll('[data-tab]').forEach(button => button.addEventListener('click',() => showTab(button.dataset.tab,true)));
     $('balanceButton').addEventListener('click',() => showTab('profile',true));
     document.querySelector('.wordmark').addEventListener('click',event => {event.preventDefault();showTab('studio',true);});
@@ -497,6 +521,7 @@
   }
   async function init() {
     bindEvents(); setupBridge(); renderPhotos(); renderResults();
+    window.ObrazWelcome?.open();
     if(state.preview){
       state.connection='ready';
       state.catalog=[{id:'reference',label:'Фото по примеру',inputs:2,credits:1},{id:'hair',label:'Причёска',inputs:1,credits:1},{id:'clothes',label:'Одежда',inputs:1,credits:1},{id:'glasses',label:'Очки',inputs:1,credits:1},{id:'background',label:'Фон',inputs:1,credits:1},{id:'enhance',label:'Улучшение фото',inputs:1,credits:1},{id:'merge',label:'Объединить два фото',inputs:2,credits:state.trial?1:2},{id:'document',label:'Фото на документы',inputs:1,credits:1}];

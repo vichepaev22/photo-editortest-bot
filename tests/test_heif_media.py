@@ -101,3 +101,27 @@ def test_existing_jpeg_exif_rotation_is_preserved():
     with Image.open(io.BytesIO(media.normalize(data.getvalue()))) as result:
         result.load()
         assert result.size == (80, 120) and not result.getexif()
+
+
+def test_jpeg_mpo_accepts_only_primary_picture_and_removes_metadata():
+    data = io.BytesIO()
+    with Image.new("RGB", (120, 80), "red") as main, Image.new("RGB", (60, 40), "blue") as extra:
+        exif = main.getexif()
+        exif[0x0112] = 6
+        exif[0x010E] = "private synthetic metadata"
+        main.save(data, "MPO", save_all=True, append_images=[extra], exif=exif)
+    assert Image.open(io.BytesIO(data.getvalue())).format == "MPO"
+    with Image.open(io.BytesIO(media.normalize(data.getvalue()))) as result:
+        assert result.format == "JPEG" and result.size == (80, 120)
+        assert result.getpixel((40, 60))[0] > 240
+        assert not result.getexif()
+
+
+def test_heif_invalid_icc_does_not_discard_decodable_pixels():
+    data = io.BytesIO()
+    with Image.new("RGB", (64, 80), "red") as source:
+        source.save(data, "HEIF", icc_profile=b"invalid synthetic profile", quality=90)
+    with Image.open(io.BytesIO(media.normalize(data.getvalue()))) as result:
+        assert result.format == "JPEG" and result.size == (64, 80)
+        assert result.getpixel((32, 40))[0] > 240
+        assert not result.getexif() and "icc_profile" not in result.info

@@ -7,10 +7,13 @@
   <meta name="theme-color" content="#f6f5f3">
   <link rel="icon" href="data:,">
   <title>Образ — ваша фотостудия</title>
-  <link rel="stylesheet" href="./app.css">
+  <link rel="stylesheet" href="./app.css?v=20261012">
+  <link rel="stylesheet" href="./welcome.css?v=20261012">
   <script src="https://telegram.org/js/telegram-web-app.js" defer></script>
   <script src="./config.js" defer></script>
-  <script src="./app.js?v=20261009-heic" defer></script>
+  <script src="./photo-upload.js?v=20261012" defer></script>
+  <script src="./welcome.js?v=20261012" defer></script>
+  <script src="./app.js?v=20261012" defer></script>
 </head>
 <body>
   <div class="app-shell">
@@ -52,5 +55,9 @@
   </div>
   <dialog id="confirmDialog" aria-labelledby="confirmHeading"><div class="dialog-content"><div class="dialog-top"><span class="eyebrow">Последний штрих</span><button class="icon-button" id="closeConfirm" type="button" aria-label="Закрыть подтверждение"><span class="ui-icon" aria-hidden="true">×</span></button></div><h2 id="confirmHeading">Всё готово к созданию?</h2><dl id="confirmSummary"></dl><p id="confirmMode" class="dialog-note"></p><p id="submitError" role="alert" hidden></p><button id="confirmSubmit" class="primary-button" type="button">Подтвердить и создать</button><button id="editDraft" class="text-button" type="button">Вернуться к редактированию</button></div></dialog>
   <dialog id="deleteDialog" aria-labelledby="deleteHeading"><div class="dialog-content"><span class="eyebrow">Удаление данных</span><h2 id="deleteHeading">Удалить ваши фото?</h2><p>Фото, описания и результаты будут удалены, вход в студию завершится. Это действие нельзя отменить.</p><p id="deleteError" role="alert" hidden></p><button id="confirmDelete" class="danger-button" type="button">Да, удалить мои данные</button><button id="cancelDelete" class="secondary-button" type="button">Сохранить и вернуться</button></div></dialog>
+  <dialog id="welcomeDialog" class="welcome-dialog" aria-label="Знакомство с фотостудией Образ">
+    <div id="welcomeStage" class="welcome-stage" role="img" aria-label="Загрузите своё фото, примеряйте причёски и очки, подготовьте четыре фото на документы"></div>
+    <div class="welcome-actions"><button id="welcomeStart" class="welcome-start" type="button">Начать пользоваться →</button><button id="welcomeSkip" class="welcome-skip" type="button">Пропустить</button><p class="welcome-note">Показано на иллюстрациях</p></div>
+  </dialog>
 </body>
 </html>

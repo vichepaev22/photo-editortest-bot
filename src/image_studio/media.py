@@ -1,4 +1,5 @@
 import io
+import logging
 import shutil
 import time
 import uuid
@@ -9,6 +10,7 @@ from pillow_heif import register_heif_opener
 
 MAX_BYTES = 10_000_000
 MAX_PIXELS = 64_000_000
+logger = logging.getLogger(__name__)
 
 register_heif_opener(thumbnails=False, depth_images=False, aux_images=False, decode_threads=1)
 
@@ -18,7 +20,8 @@ def normalize(data: bytes) -> bytes:
         raise ValueError("image_size_limit")
     try:
         with Image.open(io.BytesIO(data)) as source:
-            if source.format not in {"JPEG", "PNG", "WEBP", "HEIF"}:
+            if source.format not in {"JPEG", "MPO", "PNG", "WEBP", "HEIF"}:
+                logger.warning("photo_decode_rejected format=%s bytes=%d", source.format, len(data))
                 raise ValueError("invalid_image")
             if source.width * source.height > MAX_PIXELS:
                 raise ValueError("image_resolution_limit")
@@ -29,12 +32,17 @@ def normalize(data: bytes) -> bytes:
             oriented = source if source.format == "HEIF" else ImageOps.exif_transpose(source)
             oriented.thumbnail((2048, 2048))
             if source.format == "HEIF" and oriented.info.get("icc_profile"):
-                image = ImageCms.profileToProfile(
-                    oriented,
-                    ImageCms.ImageCmsProfile(io.BytesIO(oriented.info["icc_profile"])),
-                    ImageCms.createProfile("sRGB"),
-                    outputMode="RGB",
-                )
+                try:
+                    image = ImageCms.profileToProfile(
+                        oriented,
+                        ImageCms.ImageCmsProfile(io.BytesIO(oriented.info["icc_profile"])),
+                        ImageCms.createProfile("sRGB"),
+                        outputMode="RGB",
+                    )
+                except (ImageCms.PyCMSError, OSError, ValueError):
+                    # Valid pixels remain usable when only optional colour metadata is invalid.
+                    logger.warning("photo_icc_profile_ignored format=HEIF")
+                    image = oriented.convert("RGB")
             else:
                 image = oriented.convert("RGB")
             image.info.clear()
@@ -43,7 +51,8 @@ def normalize(data: bytes) -> bytes:
             return result.getvalue()
     except (Image.DecompressionBombError, Image.DecompressionBombWarning):
         raise ValueError("image_resolution_limit") from None
-    except (UnidentifiedImageError, OSError, SyntaxError, EOFError, RuntimeError, ImageCms.PyCMSError):
+    except (UnidentifiedImageError, OSError, SyntaxError, EOFError, RuntimeError, ImageCms.PyCMSError) as exc:
+        logger.warning("photo_decode_failed error=%s bytes=%d", type(exc).__name__, len(data))
         raise ValueError("invalid_image") from None
     except ValueError as exc:
         if str(exc) in {"invalid_image", "image_resolution_limit"}:

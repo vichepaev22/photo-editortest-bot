@@ -32,10 +32,29 @@ node scripts/render.mjs
 node scripts/finish.mjs
 ```
 
-Источник и финальные файлы остаются отдельно от src/image_studio/web;
-существующее приложение не получает новый autoplay до отдельной интеграции.
-Нарисованная CTA внутри MP4 — часть фильма. В Mini App понадобится настоящая
-кнопка интерфейса и пропуск, как описано в docs/welcome-motion-brief.md.
+## Живое приветствие Mini App
+
+По уточнению владельца MP4 не является интерактивным приветствием. Scene.tsx — чистый
+React/SVG/DOM без Remotion runtime; Film.tsx использует его для видео, а Native.tsx
+анимирует его через requestAnimationFrame в отдельном Shadow DOM. Изоляция сохраняет
+SVG от общих правил студии. Системные кнопки снаружи рисунка: настоящее начало/пропуск,
+replay в профиле, память закрытия, reduced motion, пауза в фоне и safe areas.
+Ни ролик, ни живое приветствие не вызывают Image и не расходуют генерацию.
+
+```powershell
+node scripts/build-native.mjs
+node node_modules/typescript/bin/tsc --noEmit
+```
+
+Выход: src/image_studio/web/welcome.js, 226594 bytes (включает React19.2.3).
+В установленном пакете отсутствуют типы react-dom/client: локальная узкая декларация
+содержит только документированные createRoot/render/unmount и используемые options.
+Браузерная проверка: первый вход → весь сценарий → реальная CTA, reload без приветствия,
+replay/пропуск, 320×568/reduced motion; 0 video элементов, 0 page errors, 0 job POST.
+Команда/receipt: data/runtime/verify-welcome-upload-1012.cjs и welcome-upload-browser-1012.json.
+Это локальный Chromium; настоящий iPhone не тестировался. Выпуск pending.
+API/консенсусы студии продолжают действовать после настоящей CTA; картинка внутри MP4
+остаётся частью отдельного медиаэкспорта.
 
 ## Документация
 
