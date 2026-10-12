@@ -43,7 +43,9 @@ Safari17+ документирует HEIC в WKWebView; конкретную Tel
 Проверки: два новых теста RED → GREEN; 15 focused media/API tests PASS,
 Ruff PASS, JS syntax PASS; локальный Chromium подтвердил invalid_image → один
 JPEG fallback → превью, а затем сетевую ошибку без автоматического повтора.
-Реальных Image-вызовов0. Выпуск и повтор именно проблемного файла на iPhone — отдельно.
+Реальных Image-вызовов0. Выпуск4bd5d9f опубликован на Pages/VPS: assets совпадают,
+authenticated synthetic MPO → upload200 → JPEG preview200, тестовый файл удалён.
+Повтор именно проблемного файла на iPhone остаётся пользовательской проверкой.
 Источники: [Pillow MPO](https://pillow.readthedocs.io/en/stable/handbook/image-file-formats.html#mpo),
 [WebKit HEIC](https://webkit.org/blog/14445/webkit-features-in-safari-17-0/#heic),
 [Canvas toBlob](https://developer.mozilla.org/en-US/docs/Web/API/HTMLCanvasElement/toBlob).

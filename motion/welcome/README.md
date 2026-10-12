@@ -52,7 +52,8 @@ node node_modules/typescript/bin/tsc --noEmit
 Браузерная проверка: первый вход → весь сценарий → реальная CTA, reload без приветствия,
 replay/пропуск, 320×568/reduced motion; 0 video элементов, 0 page errors, 0 job POST.
 Команда/receipt: data/runtime/verify-welcome-upload-1012.cjs и welcome-upload-browser-1012.json.
-Это локальный Chromium; настоящий iPhone не тестировался. Выпуск pending.
+Это локальный Chromium; настоящий iPhone не тестировался. Выпуск4bd5d9f опубликован
+на GitHub Pages/VPS; публичные assets совпали, служба ready/NRestarts0.
 API/консенсусы студии продолжают действовать после настоящей CTA; картинка внутри MP4
 остаётся частью отдельного медиаэкспорта.
 

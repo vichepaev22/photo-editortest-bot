@@ -262,3 +262,58 @@ finish exit0, ffprobe и полное декодирование финальн�
 (Context7 недоступен). Проверка браузерного воспроизведения/реального iPhone и интеграция
 в Mini App не проводились. Платных Image/vision/Imagegen и Telegram-вызовов0,
 полная suite бота не запускалась: runtime/оплата/приложение не менялись.
+
+## CR-MOTION-001 native + CR-UPLOAD-002 — выпуск 12.10.2026
+
+Основное PRD обновлено до реализации. Владельцу нужен интерактивный экран,
+самостоятельный MP4 не выполняет этот пункт. Scene.tsx переиспользован как живой
+React/SVG/DOM в Native.tsx, без video или Remotion player. Настоящие CTA/пропуск,
+память закрытия, повтор из профиля, reduced motion и пауза в фоне реализованы.
+Shadow DOM устранил найденное влияние общего `svg{width:24px;...}` на рисунки.
+Браузерный bundle226594bytes; React19.2.3, no dependency upgrade.
+
+Ошибка загрузки подтверждена пользователем пока на одном фото неизвестного формата.
+Воспроизведены и исправлены независимые MPO-whitelist и invalid-ICC отказы;
+client Image/Canvas fallback только после HTTP400/invalid_image. Network/timeout
+не запускает повтор POST. Новая диагностика не сохраняет пиксели/имя файла/ID.
+
+Локально: два новых regression tests RED → GREEN; `pytest -q tests/test_heif_media.py
+tests/test_studio.py::test_upload_normalizes_limits_and_owner_scoping
+tests/test_studio.py::test_heic_upload_with_inaccurate_mime_returns_normalized_jpeg
+tests/test_studio.py::test_upload_cannot_save_when_consent_revoked_during_decode`:
+15 passed /6.16s; focused Ruff и JS syntax PASS, native build и TypeScript PASS.
+В установленном react-dom нет типов client: узкая локальная декларация только
+документированных createRoot/render/unmount/options; API проверен по официальным
+React docs и локальному19.2.3. Context7 недоступен; официальные React/MDN/WebKit/
+Pillow источники использованы, не заявляется Context7-проверка.
+
+Один полный Chromium-сценарий: first entry/timeline22s/настоящая CTA/reload/replay/
+skip/reduced motion320×568; затем invalid_image → один JPEG fallback → preview,
+network failure без второго POST. 0 video, 0 page errors, 0 job POST, внешние API
+перехвачены. Первый прогон выявил CSS-конфликт и ошибочный текстовый критерий
+«Ваше фото» вместо «Фото1» в тесте; после исправлений итоговый прогон PASS.
+Receipt и screenshots: data/runtime/welcome-upload-browser-1012.json.
+
+Код4bd5d9f5ff88e0a8c144f72f96fa9ac154f3ecdf:
+[CI/Pages](https://github.com/vichepaev22/photo-editortest-bot/actions/runs/38217349153)
+success, **506 passed /31.26s**, Ruff PASS. Дополнительной локальной полной suite нет.
+
+VPS: idle before stop; root-only backup SQLite/env/media hashes, все старые строки
+и единственный остававшийся media-файл совпали до старта; env неизменен.
+Установка сначала откатывалась: первая контрольная проверка ожидала неверный
+вложенный health.runtime.ready вместо flat health.ok; быстрые повторные старты
+достигли StartLimitBurst3/5min. Была восстановлена прежняя служба, затем исправлены
+health/runtime-PID проверки, сброшен временный start-limit; добавлена ограниченная
+проверка освобождения порта перед стартом. Промежуточный OSError в журнале не
+содержал errno, точная причина того события не установлена; её не приписываем
+TIME_WAIT как доказанный факт. Финальная установка: target4bd5d9f, runtime ready,
+PID74471 совпал с systemd MainPID, active/running, NRestarts0.
+
+Публичная проверка: HTTPS health200/OpenAI/no demo; SHA256 index.html/app.js/
+welcome.js/welcome.css/photo-upload.js на Pages совпали с release. Подписанная
+owner-session, один synthetic red MPO → photo POST200 → JPEG preview200 (64×80),
+затем удалён только этот тестовый UUID после проверки пикселей. Служба продолжает
+active/running/NRestarts0. User credits/payments не менялись. Receipt:
+data/runtime/welcome-upload-public-1012.json. Image/vision calls и job POST агента0.
+Настоящий iPhone и тот конкретный проблемный файл не проверены; синтетический
+MPO и Chromium не выдаются за такую проверку. Публикация в каналах остаётся отложена.
