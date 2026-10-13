@@ -7,6 +7,7 @@ import time
 import uuid
 from dataclasses import dataclass, field
 from datetime import datetime
+from pathlib import Path
 from urllib.request import getproxies, proxy_bypass
 
 import uvicorn
@@ -19,6 +20,7 @@ from aiogram.types import (
     CallbackQuery,
     CopyTextButton,
     ErrorEvent,
+    FSInputFile,
     InlineKeyboardButton,
     InlineKeyboardMarkup,
     KeyboardButton,
@@ -559,24 +561,29 @@ def build_dispatcher(settings, store, media, service, *, step_messages=None, pur
                 reply_markup=buttons(rows) if rows else BACK,
             )
         elif action == "help":
-            await message.answer(
-                "Как пользоваться\n1. Выберите функцию.\n2. Отправьте своё фото (для объединения — два).\n"
-                "3. Опишите желаемое изменение.\n"
-                + ("4. Создание начнётся сразу после описания.\n" if trial else
-                   "4. Проверьте цену и нажмите «Создать».\n")
-                +
-                "5. Получите файл и сохраните его.\n\n"
-                + pricing(user) + " Новый вариант — отдельное задание.\n"
-                + (
-                    "Сейчас демо: вы получите тестовую копию без ИИ-правки.\n"
-                    if settings.image_provider == "mock"
-                    else ""
-                )
-                + "Помощь и баланс сохраняют текущую заявку. Главное меню сбрасывает новую заявку; "
-                "уже начатая обработка продолжается.\n"
-                "Передача описания и результата владельцу — отдельный выбор в /sharing.",
-                reply_markup=BACK,
+            await message.answer_video(
+                FSInputFile(Path(__file__).parent / "assets" / "how-to-use.mp4",
+                            filename="obraz-how-to-use.mp4"),
+                duration=22, width=1080, height=1920, supports_streaming=True,
+                caption="🎬 Как пользоваться «Образ ·»\n\n"
+                        "22 секунды: загрузка фото, причёски, очки и фото на документы.\n"
+                        "Примеры показаны на иллюстрациях."
+                        + ("\nСейчас тестовый режим: результат — копия исходника без ИИ."
+                           if settings.image_provider == "mock" else ""),
+                reply_markup=buttons([[("Продолжить →", "nav:continue_help")]]),
             )
+        elif action == "continue_help":
+            if not store.has_consent(user):
+                await message.answer("Подтвердите условия и согласие на фотографии.", reply_markup=CONSENT)
+                return
+            draft = drafts.get(user)
+            text = "Продолжим. Выберите действие на нижней панели."
+            if draft:
+                text = f"Продолжим: {PRESETS[draft.preset].label}. " + (
+                    "Отправьте своё фото." if len(draft.photos) < PRESETS[draft.preset].inputs
+                    else "Напишите желаемое изменение. Загруженное фото сохранено."
+                )
+            await message.answer(text, reply_markup=MAIN)
         elif action == "support":
             await message.answer(
                 "Нужна помощь? Напишите в поддержку и опишите, что произошло.",
@@ -600,7 +607,7 @@ def build_dispatcher(settings, store, media, service, *, step_messages=None, pur
             await purchases.open_callback(callback)
             return
         await callback.answer()
-        if action in {*NAV, "home"}:
+        if action in {*NAV, "home", "continue_help"}:
             await navigate(callback.message, callback.from_user.id, action)
 
     @router.message(CommandStart())

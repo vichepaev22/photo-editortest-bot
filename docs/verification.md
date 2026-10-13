@@ -317,3 +317,41 @@ active/running/NRestarts0. User credits/payments не менялись. Receipt:
 data/runtime/welcome-upload-public-1012.json. Image/vision calls и job POST агента0.
 Настоящий iPhone и тот конкретный проблемный файл не проверены; синтетический
 MPO и Chromium не выдаются за такую проверку. Публикация в каналах остаётся отложена.
+
+## CR-HELP-MOTION-002 — помощь и салют, 13.10.2026
+
+ТЗ/план/приёмка обновлены до реализации. Нижняя «Как пользоваться» и /help →
+Message.answer_video(FSInputFile) с упакованным исходным MP4 и Continue; callback
+сохраняет Draft.photos/token, возвращает MAIN/согласие и не создаёт задание.
+Видео22с/1080×1920/30fps, H.264/yuv420p/faststart, 1753749bytes; SHA256 копии
+src/image_studio/assets/how-to-use.mp4 равен ранее проверенному исходнику:
+cc8f17a85020b175e84951eca9ac4f43d2bebd7ceeeaa578baee302de32b3116.
+Asset включён в setuptools package-data. Повторное кодирование видео не выполнялось.
+
+Салют: Canvas2D48 частиц, верх160px, 1.4с, pointer-events:none; только terminal
+generated/delivered+has_result после успешного img.decode, один раз на job за
+sessionStorage-сессию (64 ID максимум). Ручной просмотр истории не празднуется.
+Reduced motion/скрытие/удаление данных снимают canvas и RAF; приветствие откладывает
+показ до закрытия. Возврат из bfcache проверяет завершение наблюдавшегося active job.
+Приветствие остаётся однократным после закрытия; повтор доступен из профиля.
+
+`pytest -q tests/test_bot_ui.py -k 'help_sends_motion or help_continue or navigation_does_not'
+--tb=short`: **4 passed /46.63s**, focused Ruff и node --check app.js/celebration.js PASS.
+Три новых теста сначала RED (не было SendVideo/Continue), затем GREEN. Full local suite нет.
+Один Chromium-сценарий с mock API: новый submit/result/decode → один canvas с видимыми
+пикселями, сверху0px/160px и pointer-events:none; автоматическая очистка; repeat/history,
+failed, invalid image и reduced motion без эффекта; 0 page errors/реальных API.
+Первый прогон остановился на ошибке mock списка (он продолжал возвращать queued),
+после исправления mock итог PASS. Receipt/screenshot: data/runtime/celebration-browser-1013.json
+и success-celebration-1013.png. Реальные Image/Telegram-тестовые сообщения0.
+
+Context7: resolve aiogram → /websites/aiogram_dev_en_v3_31_0, query FSInputFile,
+answer_video/inline callback; установлен aiogram3.31.0, используемые параметры
+приняты офлайн SDK. MDN: resolve → /mdn/content, отдельные queries RAF/Canvas/
+reduced motion/cleanup и HTMLImageElement.decode. Sources:
+[aiogram SendVideo](https://docs.aiogram.dev/en/v3.31.0/api/methods/send_video.html),
+[FSInputFile](https://docs.aiogram.dev/en/v3.31.0/api/upload_file.html),
+[MDN decode](https://developer.mozilla.org/en-US/docs/Web/API/HTMLImageElement/decode),
+[MDN RAF](https://developer.mozilla.org/en-US/docs/Web/API/Window/requestAnimationFrame).
+Использованы process-design-vibecoding и emil-design-eng. Реальные Telegram/iPhone
+доставка/анимация пока не проверены; публикация pending.

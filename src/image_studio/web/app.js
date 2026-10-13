@@ -60,7 +60,7 @@
     if (state.photos.some(photo => photo?.url===url) || state.pending?.source===url || [...state.sourceURLs.values(),...state.resultURLs.values()].includes(url)) return;
     releaseURL(url);
   }
-  function resetMedia() { for (const url of state.liveURLs) URL.revokeObjectURL(url); state.liveURLs.clear(); state.photos = []; state.resultURLs.clear(); state.sourceURLs.clear(); state.pickerOpen=false; document.querySelectorAll('[data-upload]').forEach(input => {input.value='';}); }
+  function resetMedia() { window.ObrazCelebration?.clear(); for (const url of state.liveURLs) URL.revokeObjectURL(url); state.liveURLs.clear(); state.photos = []; state.resultURLs.clear(); state.sourceURLs.clear(); state.pickerOpen=false; document.querySelectorAll('[data-upload]').forEach(input => {input.value='';}); }
   class APIError extends Error { constructor(code, status) { super(errors[code] || 'Не удалось выполнить действие. Попробуйте позже или обратитесь в поддержку.'); this.code = code; this.status = status; } }
   async function api(path, options = {}) {
     if (state.preview) throw new APIError('demo_unavailable',403);
@@ -387,7 +387,7 @@
       state.job = await api(`/api/jobs/${encodeURIComponent(id)}`); renderJob();
       if (!activeStatuses.has(state.job.status)) {
         await loadJobs(); await loadMe();
-        if (state.job.has_result) { $('resultDot').hidden = state.tab === 'results'; await openResult(state.job.id); }
+        if (state.job.has_result) { $('resultDot').hidden = state.tab === 'results'; await openResult(state.job.id,{celebrate:['generated','delivered'].includes(state.job.status)}); }
         return;
       }
       state.polling = setTimeout(() => pollJob(id),1800);
@@ -408,7 +408,7 @@
       return `<article class="result-row"><div><strong>${escape(job.label)}</strong><p>${escape(formatted)} · ${escape(statusText[job.status] || job.status)} · ${credits(job.cost)}</p></div>${job.has_result ? `<button type="button" class="secondary-button" data-result="${escape(job.id)}">Посмотреть ${icon('arrow')}</button>` : ''}</article>`;
     }).join('');
   }
-  async function openResult(id) {
+  async function openResult(id,{celebrate=false}={}) {
     $('resultDetail').hidden = false; $('resultDetail').innerHTML = '<div class="skeleton" role="status" aria-label="Загружаем готовое фото"></div>';
     try {
       let url = state.resultURLs.get(id);
@@ -418,6 +418,10 @@
       const before = documents ? null : state.sourceURLs.get(id);
       $('resultDetail').innerHTML = `<section class="result-viewer"><div class="viewer-title"><h2>${escape(job?.label || 'Ваш образ')}</h2>${state.mode === 'mock' ? '<span class="mode-badge">Тестовая копия · без ИИ</span>' : ''}</div><div class="compare-frame${documents ? ' document-sheet' : ''}"><img src="${escape(url)}" alt="${state.mode === 'mock' ? 'Тестовая копия исходного фото, без ИИ-правки' : 'Готовый результат'}">${before ? `<img class="compare-before" src="${escape(before)}" alt="Исходное фото"><div class="compare-divider"></div><input class="compare-range" type="range" min="0" max="100" value="50" aria-label="Сравнение исходного фото и результата" aria-valuetext="50 процентов исходного фото">` : ''}</div><div class="compare-labels"><span>${before ? 'Исходное фото' : 'Готовый файл'}</span><span>${state.mode === 'mock' ? 'Тестовая копия' : before ? 'Новый образ' : ''}</span></div><div class="viewer-actions"><p>${documents ? (job?.preset === 'document' ? 'Портрет создан ИИ и не подходит для паспорта РФ. ' : 'Исходное фото подготовлено без ИИ; фон и одежда сохранены. ') + '4 фото 35×45 мм · PNG · 300 DPI. Печатайте 100%, без подгонки; проверьте размер после печати.' : state.mode === 'mock' ? 'В тестовом режиме фото не меняется. Здесь можно проверить сравнение и скачивание.' : before ? 'Двигайте разделитель, чтобы сравнить. Скачайте готовый JPEG в исходном качестве.' : 'Сравнение доступно для фото, загруженного в этой сессии. Готовый JPEG можно скачать.'}</p><button class="primary-button" type="button" data-download="${escape(id)}">${icon('download')}Скачать фото</button></div></section>`;
       $('resultDot').hidden = true;
+      if(celebrate){
+        const image=$('resultDetail').querySelector('.compare-frame>img');
+        try{await image?.decode();if(image?.isConnected&&image.naturalWidth>0)window.ObrazCelebration?.play(id);}catch{}
+      }
     } catch (error) { $('resultDetail').innerHTML = `<div class="notice error" role="alert">${escape(error instanceof APIError ? error.message : 'Не удалось загрузить результат. Попробуйте открыть его снова.')}</div>`; }
   }
   function download(id) { const url = state.resultURLs.get(id); if (!url) return; const link = document.createElement('a'); link.href = url; link.download = `obraz-${id}.${documentPreset((state.jobs.find(item => item.id === id) || state.job)?.preset) ? 'png' : 'jpg'}`; document.body.append(link); link.click(); link.remove(); }
@@ -507,12 +511,14 @@
       renderPhotos();updateAction();
       if(state.preview || !state.token) return;
       try {
+        const wasProcessing=activeStatuses.has(state.job?.status);
         await loadMe();
         await loadJobs();
         if(state.job) {
           state.job=state.jobs.find(job=>job.id===state.job.id) || state.job;
           renderJob();
           if(activeStatuses.has(state.job.status)) pollJob(state.job.id);
+          else if(wasProcessing&&state.job.has_result)await openResult(state.job.id,{celebrate:['generated','delivered'].includes(state.job.status)});
         }
       } catch(error) {
         if(state.token) notify(error instanceof APIError ? error.message : 'Не удалось восстановить соединение. Обновите результаты перед новым созданием.',true);

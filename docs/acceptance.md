@@ -67,6 +67,12 @@ A1–A15: тесты домена и контрактов SDK, offline-PoC; по
 Своё фото первым, пример вторым; варианты переноса и сохранения одежды; один job/резерв/результат; до выбора нет API; повтор без анализа; отказ анализа без Image и с возвратом резерва; собственное фото остаётся для других функций; приватный JSON под TTL. Offline подтверждение: tests/test_reference_feature.py и tests/test_reference_ui.py; визуальная точность отдельно.
 
 ## CR-MOTION-001 — ролик готов, интеграция отдельно
+CR-HELP-MOTION-002 accepted/implemented/verified offline, publication pending: help-keyboard и /help → SendVideo/FSInputFile,
+22с/H.264 с caption и Continue; callback не сбрасывает выбранное фото/заявку,
+не резервирует и не запускает генерацию. Активная обработка продолжает работу.
+Studio: новый успешный result → image decode → один верхний pointer-events:none
+салют; повторный запрос/старый файл/failed/review/неудачный decode не празднуются.
+Reduced motion отключает движение; hidden/bfcache не оставляют canvas/RAF.
 Уточнение 12.10 accepted/implemented/verified/published: при первом входе живые SVG/DOM-сцены без video;
 нажатие настоящей CTA/пропуска (и Escape) открывает студию без создания задания;
 после закрытия и reload приветствие не мешает; профиль позволяет повторить;

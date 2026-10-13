@@ -136,6 +136,28 @@ async def test_navigation_does_not_become_description_and_home_expires_confirmat
     assert ui[2].jobs(1) == [] and ui[5].calls == 0
 
 
+@pytest.mark.parametrize("text", ["/help", "❓ Как пользоваться"])
+async def test_help_sends_motion_video_with_continue_without_spending(ui, text):
+    before = ui[4].wallet(1)
+    sent = await send(ui, text)
+    video = next((method for method in sent if method.__api_method__ == "sendVideo"), None)
+    assert video is not None and video.supports_streaming and video.duration == 22
+    assert "Как пользоваться" in video.caption
+    assert video.reply_markup.inline_keyboard[0][0].text == "Продолжить →"
+    assert video.reply_markup.inline_keyboard[0][0].callback_data == "nav:continue_help"
+    assert ui[4].wallet(1) == before and ui[2].jobs(1) == [] and ui[5].calls == 0
+
+
+async def test_help_continue_preserves_selected_photo_and_description_flow(ui):
+    await send(ui, callback="preset:hair")
+    await send(ui, photo=True)
+    await send(ui, "/help")
+    sent = await send(ui, callback="nav:continue_help")
+    assert any(isinstance(getattr(method, "reply_markup", None), ReplyKeyboardMarkup) for method in sent)
+    assert confirmation(await send(ui, "Каре до плеч")) is not None
+    assert ui[2].jobs(1) == [] and ui[5].calls == 0
+
+
 async def test_merge_shortcut_requires_two_distinct_photos(ui):
     await send(ui, "🧩 Объединить фото")
     await send(ui, photo=True)
