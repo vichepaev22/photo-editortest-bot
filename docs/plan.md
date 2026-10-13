@@ -51,12 +51,14 @@ Schema/provider/service → native выбор и reuse → Mini App → shared c
 Итог CR-REF-001: CI/Pages success, VPS c9abb95 запущен, private backup/data preservation и public health/catalog/assets подтверждены. Quality PoC остаётся отдельным пользовательским тестом.
 
 ## CR-MOTION-001 — приветствие Mini App, 12.10.2026
-CR-HELP-MOTION-002 accepted/implemented/verified offline, publication pending,13.10: упакованный MP4 в help и
+CR-HELP-MOTION-002 accepted/implemented/verified/published (a03be96),13.10: упакованный MP4 в help и
 сохраняющий заявку Continue; добавить короткое празднование после успешного
 декодированного результата. Две focused проверки help/navigation и одна
 браузерная проверка ready/error/repeat/reduced-motion, без платной генерации;
 затем обязательный CI/Pages и idle VPS update с backup. aiogram3.31.0 FSInputFile/
 answer_video подтверждены текущим Context7; браузерные API — /mdn/content.
+Итог: CI/Pages success,509tests; VPS готов/NRestarts0, MP4 accessible, публичные
+assets совпали. Не проводились реальная доставка видео в Telegram или платная генерация.
 Следующее поручение accepted/implemented/verified/published: живой интерактивный экран вместо отдельного
 MP4; переиспользовать арт/сцены, добавить реальные CTA/пропуск, повтор из профиля,
 reduced motion и фоновые паузы. Затем одна браузерная проверка действий и выпуск.

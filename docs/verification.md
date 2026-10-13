@@ -354,4 +354,21 @@ reduced motion/cleanup и HTMLImageElement.decode. Sources:
 [MDN decode](https://developer.mozilla.org/en-US/docs/Web/API/HTMLImageElement/decode),
 [MDN RAF](https://developer.mozilla.org/en-US/docs/Web/API/Window/requestAnimationFrame).
 Использованы process-design-vibecoding и emil-design-eng. Реальные Telegram/iPhone
-доставка/анимация пока не проверены; публикация pending.
+доставка/анимация пока не проверены.
+
+### Выпуск CR-HELP-MOTION-002
+
+Кодa03be964325aa5089bb88200938eeb59eeecd10c:
+[CI/Pages](https://github.com/vichepaev22/photo-editortest-bot/actions/runs/38347416177)
+success, **509 passed /29.47s**, Ruff PASS. Код не менялся после этих проверок.
+VPS: отсутствие active/review/reservations до остановки; приватный backup SQLite/env/
+media-hashes; все предыдущие строки БД и 4media совпали до старта, integrity ok,
+env неизменен. `/usr/bin/test -r` от имени image-studio подтвердил доступ к MP4;
+его SHA/1753749bytes совпали с предыдущим экспортом. Обновление с первого запуска
+прошло штатную проверку порта/ready; PID87682 совпал с MainPID, active/running,
+NRestarts0, HTTPS API health200/OpenAI/no demo. Хэши опубликованных index.html/
+app.js/celebration.js совпали с точным релизом; новый JS имеет version20261013.
+Receipt: data/runtime/help-celebration-public-verification-1013.json; серверный
+verification.json в root-only backup. Реальные Image/vision-вызовы и Telegram
+тестовые сообщения0. Доставка видео настоящему пользователю и физический iPhone
+не выдаются за автоматическое доказательство. Публикации в каналах не выполнялись.
