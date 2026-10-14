@@ -327,6 +327,7 @@ def create_studio_app(settings, store, media, service):
         balance, reserved = service.wallet(user["id"])
         return {"user": user, "consent": store.has_consent(user["id"]),
                 "available": balance - reserved, "reserved": reserved, "mode": settings.image_provider,
+                "recurring_free": store.free_info(user["id"]),
                 "trial_access": service.trial_access, "unlimited": service.is_unlimited(user["id"]),
                 "manual_access": store.has_manual_access(user["id"])}
 
@@ -404,7 +405,9 @@ def create_studio_app(settings, store, media, service):
         # Replays return the existing ledger job even after input TTL cleanup, without resubmission.
         for record in store.jobs(user):
             if record["request_key"] == key:
-                if (record["preset"] != preset or bool(record["trial"]) != service.trial_access
+                if (record["preset"] != preset
+                        or (bool(record["trial"]) != service.trial_access
+                            and not (service.trial_access and store.has_manual_access(user) and not record["trial"]))
                         or record["cost"] != service.cost(preset)):
                     raise APIError("request_mismatch", 409)
                 return {"id": record["id"], "status": record["status"]}

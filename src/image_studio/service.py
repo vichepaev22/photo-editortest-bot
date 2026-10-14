@@ -18,12 +18,15 @@ INPUT_RECORD_LIMIT = 16384
 
 class Service:
     def __init__(
-        self, store, media, provider, deliver=None, notify=None, *, trial_access=False, unlimited_user_id=0,
+        self, store, media, provider, deliver=None, notify=None, *, trial_access=False, unlimited_user_id=0, recurring_free=False,
     ):
         self.store, self.media, self.provider = store, media, provider
         self.deliver, self.notify = deliver, notify
         self.trial_access = trial_access
         self.unlimited_user_id = unlimited_user_id
+        self.recurring_free = recurring_free
+        if recurring_free:
+            store.enable_recurring_free(trial=trial_access, exempt=unlimited_user_id)
 
     def is_unlimited(self, user):
         return (
@@ -40,6 +43,8 @@ class Service:
         return 1 if self.trial_access else choice.credits
 
     def wallet(self, user):
+        if self.recurring_free:
+            self.store.advance_free_due()
         use_trial = self.trial_access and not self.store.has_manual_access(user)
         if use_trial and not self.is_unlimited(user) and self.store.has_consent(user):
             self.store.grant_trial(user)
@@ -143,6 +148,8 @@ class Service:
         return checked if len(checked) == count else []
 
     def submit(self, user, key, preset, inputs, description):
+        if self.recurring_free:
+            self.store.advance_free_due()
         choice = PRESETS.get(preset)
         if choice is None or len(inputs) != choice.inputs:
             raise DomainError("invalid_inputs")

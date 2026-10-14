@@ -39,6 +39,7 @@ from .media import MAX_BYTES, Media, normalize
 from .provider import MockProvider, OpenAIProvider
 from .purchase_demo import PREFIX as PURCHASE_PREFIX
 from .purchase_demo import PRIVACY_URL, TERMS_URL, PurchaseDemo
+from .recurring_free import RULE_TEXT, balance_text
 from .result_delivery import ResultDeliveryDeferred, send_result_document
 from .runtime import RUNTIME_DIR, BotRuntime
 from .service import Service
@@ -50,6 +51,7 @@ from .subscriptions import (
     subscription_eligible,
     subscription_hint,
 )
+from .telegram_free import telegram_free_delivery
 
 
 def buttons(rows):
@@ -324,6 +326,8 @@ def build_dispatcher(settings, store, media, service, *, step_messages=None, pur
     def pricing(user=None):
         if service.is_unlimited(user):
             return "Для вашего аккаунта включено безлимитное тестирование."
+        if service.recurring_free:
+            return "Любая функция — 1 генерация. Каждые 5 дней — +1 бесплатно, запас до 3."
         if store.has_manual_access(user):
             return "Любая функция — 1 генерация из назначенного остатка. Бесплатного автопродления нет."
         if trial:
@@ -340,6 +344,12 @@ def build_dispatcher(settings, store, media, service, *, step_messages=None, pur
                          reply_markup=BACK if edit else MAIN)
             return
         total, reserved = service.wallet(user)
+        if service.recurring_free:
+            await answer(balance_text(store.free_info(user)) + f"\nВ обработке: {reserved}."
+                         + ("\n\n" + status if status else subscription_hint(store, service, user)),
+                         reply_markup=(SUBSCRIPTION_KEYBOARD if trial and subscription_eligible(store, service, user)
+                                       else BACK if edit else MAIN))
+            return
         await answer(
             ("🎁 Генерации с бонусом за подписку\n" if store.has_channel_bonus(user) else
              "🎁 Дополнительные генерации\n" if store.has_manual_access(user) else
@@ -471,7 +481,7 @@ def build_dispatcher(settings, store, media, service, *, step_messages=None, pur
         return {
             "insufficient_credits": "Недостаточно попыток. Откройте «Мои попытки».",
             "already_active": "Ваш образ уже создаётся. Подождите немного.",
-            "trial_exhausted": "Бесплатная генерация уже использована. Новые бесплатные попытки не выдаются.",
+            "trial_exhausted": "Бесплатные генерации закончились. Каждые 5 дней начисляется одна новая; запас до 3. Можно также купить пакет.",
             "trial_not_granted": "Сначала подтвердите условия и согласие в /start.",
             "consent_required": "Сначала подтвердите условия и согласие в /start.",
             "invalid_inputs": "Фото больше недоступно. Выберите функцию и загрузите новое фото.",
@@ -624,6 +634,8 @@ def build_dispatcher(settings, store, media, service, *, step_messages=None, pur
             else "\nВсего 1 бесплатная успешная генерация OpenAI после согласия. Любая функция — 1 генерация."
             if trial else ""
         )
+        if service.recurring_free and not service.is_unlimited(message.from_user.id):
+            mode = f"\nДоступно генераций: {total - reserved}.\n" + RULE_TEXT
         await message.answer(
             "Образ · ваша фотостудия ✨\n\n"
             "💇 Примерьте причёску, одежду или очки, смените фон.\n"
@@ -650,6 +662,7 @@ def build_dispatcher(settings, store, media, service, *, step_messages=None, pur
             + (
                 "♾ Для вашего аккаунта включено безлимитное тестирование."
                 if service.is_unlimited(callback.from_user.id)
+                else balance_text(store.free_info(callback.from_user.id)) if service.recurring_free
                 else f"🎁 Доступно генераций: {total - reserved}. Любая функция — 1 генерация. "
                 "Бесплатного автопродления нет."
                 if store.has_manual_access(callback.from_user.id)
@@ -1106,7 +1119,8 @@ async def run(settings):
                 )
 
             service = Service(store, media, provider, deliver, notify, trial_access=settings.trial_access,
-                              unlimited_user_id=settings.admin_user_id if settings.owner_unlimited_testing else 0)
+                              unlimited_user_id=settings.admin_user_id if settings.owner_unlimited_testing else 0,
+                              recurring_free=True)
             dp = build_dispatcher(settings, store, media, service, step_messages=steps)
             await bot.set_my_commands([
                 command.model_copy(update={"description": {
@@ -1166,6 +1180,7 @@ async def run(settings):
                     await asyncio.sleep(0.05)
             tasks.extend([
                 asyncio.create_task(service.worker()),
+                asyncio.create_task(telegram_free_delivery(bot, store, MAIN).worker()),
                 asyncio.create_task(processing_activity(bot, store)),
                 asyncio.create_task(watch_stop()),
             ])

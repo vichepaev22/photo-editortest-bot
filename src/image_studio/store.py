@@ -7,6 +7,7 @@ from contextlib import contextmanager
 from pathlib import Path
 
 from .admin_store import AdminStoreMixin, DomainError
+from .recurring_free import FreeStoreMixin
 
 TRIAL_LIMIT = 1
 
@@ -17,7 +18,7 @@ def validated_username(username):
     return None
 
 
-class Store(AdminStoreMixin):
+class Store(AdminStoreMixin, FreeStoreMixin):
     def __init__(self, path: Path):
         self.path = path
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -99,6 +100,7 @@ class Store(AdminStoreMixin):
                     "CHECK(quota_exempt IN (0,1))"
                 )
             self._admin_init(c)
+            self._free_init(c)
 
     def _enable_wal(self):
         # Journal changes need an autocommit connection, outside BEGIN IMMEDIATE.
@@ -150,6 +152,8 @@ class Store(AdminStoreMixin):
         with self.tx() as c:
             u = self._user(c, user)
             first_visit = u["first_seen"] is None
+            self._free_enroll(c, u, now)
+            c.execute("UPDATE users SET free_blocked=0 WHERE id=?", (user,))
             c.execute(
                 "UPDATE users SET username=?,first_seen=COALESCE(first_seen,?),last_seen=? WHERE id=?",
                 (validated_username(username), now, now, user),
@@ -197,7 +201,8 @@ class Store(AdminStoreMixin):
 
     def consent(self, user):
         with self.tx() as c:
-            self._user(c, user)
+            u = self._user(c, user)
+            self._free_consent(c, u, time.time())
             c.execute("UPDATE users SET consent=1 WHERE id=?", (user,))
 
     def has_consent(self, user):
@@ -210,8 +215,8 @@ class Store(AdminStoreMixin):
             if trial and not u["manual_access"]:
                 # Keep legacy reservations visible while clamping exhausted availability to zero.
                 total = max(u["trial_reserved"], TRIAL_LIMIT - u["trial_used"]) if u["trial_granted"] else 0
-                return total, u["trial_reserved"]
-            return u["balance"], u["reserved"]
+                return total + u["free_balance"], u["trial_reserved"] + u["free_reserved"]
+            return u["balance"] + u["free_balance"], u["reserved"] + u["free_reserved"]
 
     def has_manual_access(self, user):
         with self.tx() as c:
@@ -225,7 +230,7 @@ class Store(AdminStoreMixin):
         with self.tx() as c:
             u = self._user(c, user)
             j = c.execute("SELECT * FROM jobs WHERE id=? AND user_id=?", (job, user)).fetchone()
-            if (j is None or j["status"] != "delivered" or not j["trial"] or j["quota_exempt"]
+            if (j is None or j["status"] != "delivered" or not j["trial"] or j["free_credit"] or j["quota_exempt"]
                     or not u["consent"] or u["manual_access"] or u["channel_bonus"]
                     or u["trial_used"] != TRIAL_LIMIT):
                 return False
@@ -441,7 +446,12 @@ class Store(AdminStoreMixin):
                 ).fetchone()
             ):
                 raise DomainError("already_active")
-            if not quota_exempt and trial:
+            # Spend the original first use first, then renewable free units, then paid/manual funds.
+            free_credit = (not quota_exempt and cost == 1 and u["free_balance"] > u["free_reserved"]
+                           and (not trial or TRIAL_LIMIT - u["trial_used"] - u["trial_reserved"] <= 0))
+            if free_credit:
+                pass
+            elif not quota_exempt and trial:
                 if not u["trial_granted"]:
                     raise DomainError("trial_not_granted")
                 if TRIAL_LIMIT - u["trial_used"] - u["trial_reserved"] < 1:
@@ -449,14 +459,16 @@ class Store(AdminStoreMixin):
             elif not quota_exempt and u["balance"] - u["reserved"] < cost:
                 raise DomainError("insufficient_credits")
             job = uuid.uuid4().hex
-            if not quota_exempt and trial:
+            if free_credit:
+                c.execute("UPDATE users SET free_reserved=free_reserved+1 WHERE id=?", (user,))
+            elif not quota_exempt and trial:
                 c.execute("UPDATE users SET trial_reserved=trial_reserved+1 WHERE id=?", (user,))
             elif not quota_exempt:
                 c.execute("UPDATE users SET reserved=reserved+? WHERE id=?", (cost, user))
             c.execute(
-                "INSERT INTO jobs(id,user_id,request_key,preset,cost,created,trial,quota_exempt) "
-                "VALUES(?,?,?,?,?,?,?,?)",
-                (job, user, key, preset, cost, time.time(), int(trial), int(quota_exempt)),
+                "INSERT INTO jobs(id,user_id,request_key,preset,cost,created,trial,quota_exempt,free_credit) "
+                "VALUES(?,?,?,?,?,?,?,?,?)",
+                (job, user, key, preset, cost, time.time(), int(trial), int(quota_exempt), int(free_credit)),
             )
             self._event(c, "reserve", job)
             return job
@@ -500,7 +512,10 @@ class Store(AdminStoreMixin):
                 return
             if j["status"] != "running":
                 raise DomainError("invalid_job_state")
-            if not j["quota_exempt"] and j["trial"]:
+            if j["free_credit"]:
+                c.execute("UPDATE users SET free_balance=free_balance-1,free_reserved=free_reserved-1 WHERE id=?",
+                          (j["user_id"],))
+            elif not j["quota_exempt"] and j["trial"]:
                 c.execute(
                     "UPDATE users SET trial_reserved=trial_reserved-1,trial_used=trial_used+1 WHERE id=?",
                     (j["user_id"],),
@@ -522,7 +537,9 @@ class Store(AdminStoreMixin):
             j = c.execute("SELECT * FROM jobs WHERE id=?", (job,)).fetchone()
             if j is None or j["status"] not in {"queued", "running", "review"}:
                 return
-            if not j["quota_exempt"] and j["trial"]:
+            if j["free_credit"]:
+                c.execute("UPDATE users SET free_reserved=free_reserved-1 WHERE id=?", (j["user_id"],))
+            elif not j["quota_exempt"] and j["trial"]:
                 c.execute("UPDATE users SET trial_reserved=trial_reserved-1 WHERE id=?", (j["user_id"],))
             elif not j["quota_exempt"]:
                 c.execute("UPDATE users SET reserved=reserved-? WHERE id=?", (j["cost"], j["user_id"]))
@@ -553,8 +570,9 @@ class Store(AdminStoreMixin):
                 "SELECT 1 FROM jobs WHERE user_id=? AND status IN ('queued','running','review')", (user,)
             ).fetchone():
                 raise DomainError("already_active")
-            c.execute("UPDATE users SET consent=0,share_enabled=0 WHERE id=?", (user,))
+            c.execute("UPDATE users SET consent=0,share_enabled=0,free_active=0 WHERE id=?", (user,))
             c.execute("DELETE FROM admin_job_shares WHERE user_id=?", (user,))
+            c.execute("UPDATE free_notices SET status='skipped' WHERE user_id=? AND status='queued'", (user,))
 
     def begin_refund(self, order):
         with self.tx() as c:

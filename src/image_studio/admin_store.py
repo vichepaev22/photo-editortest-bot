@@ -14,7 +14,7 @@ class DomainError(Exception):
 CATEGORIES = ("registration", "questions", "generation", "payment")
 SNAPSHOT_FIELDS = (
     "balance", "reserved", "trial_granted", "trial_used", "trial_reserved",
-    "manual_access", "refund_lock", "channel_bonus",
+    "manual_access", "refund_lock", "channel_bonus", "free_balance", "free_reserved",
 )
 
 
@@ -70,7 +70,8 @@ class AdminStoreMixin:
             available = u["balance"] - u["reserved"] + total - u["trial_reserved"]
         else:
             available = u["balance"] - u["reserved"]
-        reserved = u["reserved"] + u["trial_reserved"]
+        available += u["free_balance"] - u["free_reserved"]
+        reserved = u["reserved"] + u["trial_reserved"] + u["free_reserved"]
         return available, reserved
 
     def admin_user(self, user, *, trial=False):
@@ -95,7 +96,8 @@ class AdminStoreMixin:
                               "paid_balance": u["balance"], "paid_available": u["balance"] - u["reserved"],
                               "paid_reserved": u["reserved"], "base_available": base,
                               "trial_remaining": base,
-                              "active_available": base if trial and not u["manual_access"] else available,
+                              "active_available": (base + u["free_balance"] - u["free_reserved"]
+                                                   if trial and not u["manual_access"] else available),
                               "share_enabled": bool(u["share_enabled"])}
 
     def admin_search(self, query="", page=0, *, filter="all"):
@@ -179,9 +181,11 @@ class AdminStoreMixin:
                 raise DomainError("stale_admin_confirmation")
             if u["trial_reserved"]:
                 raise DomainError("already_active")
-            # Convert free availability only; paid reservations remain untouched.
-            c.execute("UPDATE users SET balance=reserved+?,manual_access=1,trial_granted=1,demo_used=1 WHERE id=?",
-                      (op["after_available"], op["user_id"]))
+            # Keep the renewable pool separate; lowering the total may reduce its available part.
+            free = min(u["free_balance"] - u["free_reserved"], op["after_available"])
+            c.execute("UPDATE users SET balance=reserved+?,free_balance=free_reserved+?,"
+                      "manual_access=1,trial_granted=1,demo_used=1 WHERE id=?",
+                      (op["after_available"] - free, free, op["user_id"]))
             c.execute("UPDATE admin_credit_operations SET status='applied',applied_at=? WHERE id=?",
                       (time.time(), operation))
             self._event(c, "admin_credit", operation)

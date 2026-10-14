@@ -5,13 +5,14 @@ from aiogram.exceptions import TelegramAPIError, TelegramBadRequest
 from aiogram.filters import Command
 from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, Message
 
+from .recurring_free import RULE_TEXT
 from .store import DomainError
 
 CHANNELS = ("@FutureDarkSide", "@nofuturenews")
 CHECK_CALLBACK = "subscription:check"
-OFFER_TEXT = ("Ваша бесплатная генерация закончилась.\n\n"
+OFFER_TEXT = ("Первая бесплатная генерация использована.\n\n"
               "🎁 Хотите ещё одну? Подпишитесь на оба канала и нажмите «Проверить подписку».\n\n"
-              "За подписку — одна генерация, только один раз. Дальше — платные пакеты.")
+              "За подписку — одна генерация, только один раз.\n\n" + RULE_TEXT)
 SUBSCRIPTION_KEYBOARD = InlineKeyboardMarkup(inline_keyboard=[
     [InlineKeyboardButton(text=channel, url="https://t.me/" + channel[1:]) for channel in CHANNELS],
     [InlineKeyboardButton(text="✅ Проверить подписку · +1 генерация", callback_data=CHECK_CALLBACK)],
