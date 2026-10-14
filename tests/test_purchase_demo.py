@@ -85,7 +85,8 @@ class Harness:
             if baseline is not None:
                 for user in copy.execute("SELECT * FROM users").fetchall():
                     if (user["id"] not in baseline["user_ids"] and 0 < user["id"] < 2**52
-                            and all(user[column] == 0 for column in accounting)):
+                            and all(user[column] == (None if column == "free_next_due" else 0)
+                                    for column in accounting)):
                         copy.execute("DELETE FROM users WHERE id=?", (user["id"],))
             copy.execute("UPDATE users SET username=NULL,first_seen=NULL,last_seen=NULL")
             copy.execute("DELETE FROM admin_outbox WHERE kind='registration'")
@@ -346,6 +347,10 @@ def test_snapshot_excludes_only_visits_and_new_zero_accounting_users(ui):
     for column in columns:
         mutation = "balance=1,reserved=1" if column == "reserved" else f"{column}=1"
         reset = "balance=0,reserved=0" if column == "reserved" else f"{column}=0"
+        if column == "free_reserved":
+            mutation, reset = "free_balance=1,free_reserved=1", "free_reserved=0,free_balance=0"
+        elif column == "free_next_due":
+            reset = "free_next_due=NULL"
         with ui.store.tx() as connection:
             connection.execute(f"UPDATE users SET {mutation} WHERE id=2")
         assert ui.snapshot(before) != before, column

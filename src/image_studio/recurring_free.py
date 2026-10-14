@@ -59,6 +59,8 @@ class FreeStoreMixin:
                       (now + INTERVAL, int(bool(u['consent'])), u['id']))
 
     def _free_consent(self, c, u, now):
+        if c.execute('SELECT 1 FROM free_policy WHERE id=1').fetchone() is None:
+            return
         self._free_enroll(c, u, now)
         if not u['consent']:
             # First consent keeps the future first-visit date. Reactivation cannot catch up a pause.

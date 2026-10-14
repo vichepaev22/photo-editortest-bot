@@ -380,3 +380,5 @@ verification.json в root-only backup. Реальные Image/vision-вызов�
 
 
 CR-FREE-005 local: 15.10.2026. Telegram: предметный набор 149 passed / 1 failed (защита funding-mode); проверка показала слишком широкий replay, gate восстановлен с исключением только для ранее ручного доступа. Повтор этого сценария и новых правил: 11 passed / 5.87 s. MAX staged: 111 passed / 50.06 s. Ruff обоих исходников и node --check обоих app.js PASS. Новый owner-exclusion проверяется отдельно. Платных Image/реальных переводов/рассылок для теста нет. Deployment pending.
+
+CI e8daf6b (38633368923): 517 passed / 3 failed. Два сбоя были в snapshot-эталоне: новый nullable free_next_due должен иметь default NULL, резерв требует соответствующего free_balance. Проверка всех учётных полей сохранена. Текст exhausted оставлен прежним для отключённого feature-флага; production включает новый вариант. _free_consent не меняет free_active при выключенной политике. Три упавших сценария и новые правила после исправления: 14 passed / 16.75 s. Следующая CI необходима из-за исправлений.
