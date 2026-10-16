@@ -36,6 +36,8 @@ from .admin import register_admin
 from .admin_delivery import AdminDelivery
 from .catalog import PRESETS
 from .media import MAX_BYTES, Media, normalize
+from .platega import PlategaClient, install_platega_routes
+from .platega_checkout import PlategaCheckout
 from .provider import MockProvider, OpenAIProvider
 from .purchase_demo import PREFIX as PURCHASE_PREFIX
 from .purchase_demo import PRIVACY_URL, TERMS_URL, PurchaseDemo
@@ -1083,6 +1085,7 @@ async def run(settings):
     with BotRuntime(RUNTIME_DIR, settings.image_provider) as runtime:
         bot = Bot(settings.bot_token, session=make_telegram_session())
         tasks, provider, studio_server, studio_socket = [], None, None, None
+        platega = None
         try:
             identity = await bot.get_me()
             if settings.expected_bot_username and (
@@ -1122,7 +1125,10 @@ async def run(settings):
             service = Service(store, media, provider, deliver, notify, trial_access=settings.trial_access,
                               unlimited_user_id=settings.admin_user_id if settings.owner_unlimited_testing else 0,
                               recurring_free=True)
-            dp = build_dispatcher(settings, store, media, service, step_messages=steps)
+            platega = PlategaClient(settings, store) if settings.platega_enabled else None
+            live_checkout = PlategaCheckout(store, platega) if platega else None
+            dp = build_dispatcher(settings, store, media, service, step_messages=steps,
+                                  purchase_demo=live_checkout)
             await bot.set_my_commands([
                 command.model_copy(update={"description": {
                     "demo": "Мои бесплатные генерации", "id": "Мой Telegram ID",
@@ -1161,9 +1167,12 @@ async def run(settings):
                 # Bind before worker/polling readiness: an occupied port cannot hide a wrong preview.
                 studio_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
                 studio_socket.bind(("127.0.0.1", settings.studio_port))
+                studio_app = create_studio_app(settings, store, media, service)
+                if platega:
+                    install_platega_routes(studio_app, settings, platega)
                 studio_server = StudioServer(
                     uvicorn.Config(
-                        create_studio_app(settings, store, media, service),
+                        studio_app,
                         host="127.0.0.1",
                         port=settings.studio_port,
                         access_log=False,
@@ -1187,6 +1196,10 @@ async def run(settings):
             ])
             if settings.admin_user_id:
                 tasks.append(asyncio.create_task(AdminDelivery(bot, store, settings.admin_user_id).worker()))
+            if platega:
+                async def paid_notice(order):
+                    await live_checkout.notify(bot, order)
+                tasks.append(asyncio.create_task(platega.worker(paid_notice)))
             runtime.ready(identity.username)
             await dp.start_polling(bot, close_bot_session=False)
         finally:
@@ -1199,6 +1212,8 @@ async def run(settings):
             for task in tasks:
                 task.cancel()
             await asyncio.gather(*tasks, return_exceptions=True)
+            if platega:
+                await platega.close()
             if provider:
                 await provider.close()
             await bot.session.close()

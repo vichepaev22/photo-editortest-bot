@@ -1,0 +1,232 @@
+import uuid
+from types import SimpleNamespace
+
+import httpx
+import pytest
+
+from image_studio.platega import PlategaClient, PlategaError, install_platega_routes
+from image_studio.store import Store
+
+MERCHANT = str(uuid.uuid4())
+SECRET = "test-only-secret-never-real"
+
+
+@pytest.fixture
+def setup(tmp_path):
+    store = Store(tmp_path / "ledger.sqlite3")
+    store.record_visit(11)
+    store.consent(11)
+    store.grant_trial(11)
+    settings = SimpleNamespace(
+        platega_merchant_id=MERCHANT, platega_secret=SECRET, platega_return_url="https://example.com/return"
+    )
+    return store, settings
+
+
+def canonical(order, tx=None, status="CONFIRMED"):
+    return {
+        "id": tx or str(uuid.uuid4()),
+        "status": status,
+        "mechantId": MERCHANT,
+        "paymentDetails": {"amount": 160, "currency": "RUB"},
+        "payload": order,
+    }
+
+
+@pytest.mark.asyncio
+async def test_verified_payment_once_and_start_preserved(setup):
+    store, settings = setup
+    order = store.platega_order(11, "express", "sbp")
+    result = canonical(order["id"])
+
+    async def handler(request):
+        assert request.method == "GET"
+        return httpx.Response(200, json=result)
+
+    gateway = PlategaClient(settings, store, httpx.AsyncClient(transport=httpx.MockTransport(handler)))
+    assert await gateway.reconcile(result["id"], order["id"])
+    assert not await gateway.reconcile(result["id"], order["id"])
+    assert store.wallet(11, trial=True) == (6, 0)
+    assert store.has_manual_access(11)
+    assert store.admin_stats()["revenue_kopecks"] == 16000
+    with store.tx() as c:
+        assert c.execute("SELECT COUNT(*) FROM platega_notices").fetchone()[0] == 1
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "field,value", [("amount", 159), ("currency", "USD"), ("merchant", "bad"), ("payload", "wrong")]
+)
+async def test_identity_mismatch_never_credits(setup, field, value):
+    store, settings = setup
+    order = store.platega_order(11, "express", "sbp")
+    result = canonical(order["id"])
+    if field in {"amount", "currency"}:
+        result["paymentDetails"][field] = value
+    else:
+        result["mechantId" if field == "merchant" else field] = value
+    gateway = PlategaClient(
+        settings,
+        store,
+        httpx.AsyncClient(transport=httpx.MockTransport(lambda request: httpx.Response(200, json=result))),
+    )
+    with pytest.raises(PlategaError):
+        await gateway.reconcile(result["id"], order["id"])
+    assert store.wallet(11, trial=True) == (1, 0)
+
+
+@pytest.mark.asyncio
+async def test_unknown_create_is_not_replayed(setup):
+    store, settings = setup
+    order = store.platega_order(11, "express", "sbp")
+    calls = []
+
+    def handler(request):
+        calls.append(request.method)
+        raise httpx.ReadTimeout("uncertain")
+
+    gateway = PlategaClient(settings, store, httpx.AsyncClient(transport=httpx.MockTransport(handler)))
+    for _ in range(2):
+        with pytest.raises(PlategaError):
+            await gateway.create(order["id"])
+    assert calls == ["POST"]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("fail", [False, True])
+async def test_buy_during_original_trial_retains_reserve_and_refund(setup, fail):
+    store, settings = setup
+    job = store.reserve(11, "initial", "hair", 1, trial=True)
+    store.claim(job)
+    order = store.platega_order(11, "express", "sbp")
+    result = canonical(order["id"])
+    gateway = PlategaClient(
+        settings,
+        store,
+        httpx.AsyncClient(transport=httpx.MockTransport(lambda request: httpx.Response(200, json=result))),
+    )
+    await gateway.reconcile(result["id"], order["id"])
+    assert store.wallet(11, trial=True) == (6, 1)
+    if fail:
+        store.fail(job, "failed")
+    else:
+        store.finish(job, "x.jpg", {}, "test")
+    assert store.wallet(11, trial=True) == (6 if fail else 5, 0)
+
+
+@pytest.mark.asyncio
+async def test_chargeback_does_not_credit_again(setup):
+    store, settings = setup
+    order = store.platega_order(11, "express", "sbp")
+    result = canonical(order["id"])
+    gateway = PlategaClient(
+        settings,
+        store,
+        httpx.AsyncClient(transport=httpx.MockTransport(lambda request: httpx.Response(200, json=result))),
+    )
+    await gateway.reconcile(result["id"], order["id"])
+    result["status"] = "CHARGEBACKED"
+    await gateway.reconcile(result["id"], order["id"])
+    with store.tx() as c:
+        assert c.execute("SELECT refund_lock FROM users WHERE id=11").fetchone()[0] == 1
+    result["status"] = "CONFIRMED"
+    with pytest.raises(PlategaError):
+        await gateway.reconcile(result["id"], order["id"])
+    assert store.wallet(11, trial=True)[0] == 6
+
+
+@pytest.mark.asyncio
+async def test_callback_auth_and_duplicate_confirmation(setup):
+    from fastapi import FastAPI
+
+    store, settings = setup
+    order = store.platega_order(11, "express", "sbp")
+    result = canonical(order["id"])
+    gateway = PlategaClient(
+        settings,
+        store,
+        httpx.AsyncClient(transport=httpx.MockTransport(lambda request: httpx.Response(200, json=result))),
+    )
+    app = FastAPI()
+    install_platega_routes(app, settings, gateway)
+    body = {"id": result["id"], "amount": 160, "currency": "RUB", "status": "CONFIRMED"}
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="https://local") as api:
+        assert (await api.post("/api/payments/platega/callback", json=body)).status_code == 404
+        assert store.wallet(11, trial=True) == (1, 0)
+        headers = {"X-MerchantId": MERCHANT, "X-Secret": SECRET}
+        for _ in range(2):
+            assert (
+                await api.post("/api/payments/platega/callback", json=body, headers=headers)
+            ).status_code == 200
+        assert store.wallet(11, trial=True) == (6, 0)
+        assert (await api.get("/api/payments/platega/result")).status_code == 200
+        assert store.wallet(11, trial=True) == (6, 0)
+
+
+@pytest.mark.asyncio
+async def test_checkout_one_message_and_restart(setup):
+    from datetime import datetime, timezone
+
+    from aiogram.types import CallbackQuery, Chat, Message, User
+    from test_purchase_demo import OfflineBot
+
+    from image_studio.platega_checkout import PlategaCheckout
+
+    store, settings = setup
+    bot = OfflineBot()
+    tx = str(uuid.uuid4())
+    posted = []
+
+    def handler(request):
+        posted.append(request.method)
+        return httpx.Response(
+            200,
+            json={
+                "transactionId": tx,
+                "status": "PENDING",
+                "merchantId": MERCHANT,
+                "redirect": "https://pay.platega.io/test",
+                "expiresIn": "00:15:00",
+            },
+        )
+
+    gateway = PlategaClient(settings, store, httpx.AsyncClient(transport=httpx.MockTransport(handler)))
+    checkout = PlategaCheckout(store, gateway)
+    incoming = Message(message_id=1, date=datetime.now(timezone.utc), chat=Chat(id=11, type="private")).as_(
+        bot
+    )
+    await checkout.open(incoming, 11)
+    first = store.platega_session(11)
+
+    async def click(action, actor=11):
+        s = store.platega_session(11)
+        message = Message(
+            message_id=s["message_id"], date=datetime.now(timezone.utc), chat=Chat(id=11, type="private")
+        ).as_(bot)
+        callback = CallbackQuery(
+            id=str(uuid.uuid4()),
+            from_user=User(id=actor, is_bot=False, first_name="Test"),
+            chat_instance="test",
+            message=message,
+            data=f"purchase:{s['token']}:{s['revision']}:{action}",
+        ).as_(bot)
+        await checkout.handle(callback)
+
+    await click("plan:express", actor=22)
+    assert store.platega_session(11)["stage"] == "plans"
+    await click("plan:express")
+    await click("method:sbp")
+    assert posted == ["POST"]
+    s = store.platega_session(11)
+    assert s["message_id"] == first["message_id"]
+    before = posted.copy()
+    await PlategaCheckout(store, gateway).open(incoming, 11)
+    assert posted == before
+    assert len([m for m in bot.sent if m.__api_method__ == "sendMessage"]) == 1
+    assert store.wallet(11, trial=True) == (1, 0)
+    text, markup = checkout.render(s)
+    assert "Stars" not in text and "Оплачивая" in text
+    assert all(
+        len(b.callback_data.encode()) <= 64 for row in markup.inline_keyboard for b in row if b.callback_data
+    )
+    await bot.session.close()

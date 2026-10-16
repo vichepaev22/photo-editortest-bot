@@ -181,7 +181,7 @@ async def test_single_message_flow_back_cancel_and_no_ledger(ui, plan, label, pr
     assert "DEMO" in result.text and "деньги не списываются" in result.text
     assert "Сервис: Platega · демо" in result.text
     assert "доступ и генерации не начисляются" in result.text
-    assert "а не срок действия ссылки" in result.text and "Telegram Stars" in result.text
+    assert "а не срок действия ссылки" in result.text and "после подключения платёжного сервиса" in result.text
     assert "Оплачивая услугу после подключения платежей" in result.text
     urls = {b.url: b.text for row in result.reply_markup.inline_keyboard for b in row if b.url}
     assert urls == {TEST_URL: "🔗 Тестовая ссылка", PRIVACY_URL: "Политика конфиденциальности",

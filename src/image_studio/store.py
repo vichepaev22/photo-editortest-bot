@@ -7,6 +7,7 @@ from contextlib import contextmanager
 from pathlib import Path
 
 from .admin_store import AdminStoreMixin, DomainError
+from .platega import PlategaStoreMixin
 from .recurring_free import FreeStoreMixin
 
 TRIAL_LIMIT = 1
@@ -18,7 +19,7 @@ def validated_username(username):
     return None
 
 
-class Store(AdminStoreMixin, FreeStoreMixin):
+class Store(AdminStoreMixin, FreeStoreMixin, PlategaStoreMixin):
     def __init__(self, path: Path):
         self.path = path
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -101,6 +102,7 @@ class Store(AdminStoreMixin, FreeStoreMixin):
                 )
             self._admin_init(c)
             self._free_init(c)
+            self._platega_init(c)
 
     def _enable_wal(self):
         # Journal changes need an autocommit connection, outside BEGIN IMMEDIATE.
@@ -215,7 +217,9 @@ class Store(AdminStoreMixin, FreeStoreMixin):
             if trial and not u["manual_access"]:
                 # Keep legacy reservations visible while clamping exhausted availability to zero.
                 total = max(u["trial_reserved"], TRIAL_LIMIT - u["trial_used"]) if u["trial_granted"] else 0
-                return total + u["free_balance"], u["trial_reserved"] + u["free_reserved"]
+                paid = u["balance"] if c.execute(
+                    "SELECT 1 FROM platega_orders WHERE user_id=? AND state='paid'", (user,)).fetchone() else 0
+                return total + u["free_balance"] + paid, u["trial_reserved"] + u["free_reserved"]
             return u["balance"] + u["free_balance"], u["reserved"] + u["free_reserved"]
 
     def has_manual_access(self, user):
@@ -408,6 +412,8 @@ class Store(AdminStoreMixin, FreeStoreMixin):
                 (charge, u["spent"], order),
             )
             c.execute("UPDATE users SET balance=balance+? WHERE id=?", (o["credits"], user))
+            if not is_test:
+                self.platega_paid(c, order, charge)
             self._event(c, "payment", order)
             if not is_test:
                 self._admin_safe_event(c, f"payment:{order}", "payment",
@@ -530,6 +536,7 @@ class Store(AdminStoreMixin, FreeStoreMixin):
                 (result, json.dumps(usage), request_id, job),
             )
             self._event(c, "finish", job)
+            self.platega_promote(c, j["user_id"])
             self._admin_generation_event(c, job, "generated", "spent")
 
     def fail(self, job, reason):
@@ -545,6 +552,7 @@ class Store(AdminStoreMixin, FreeStoreMixin):
                 c.execute("UPDATE users SET reserved=reserved-? WHERE id=?", (j["cost"], j["user_id"]))
             c.execute("UPDATE jobs SET status='failed',error=? WHERE id=?", (reason[:60], job))
             self._event(c, "release", job)
+            self.platega_promote(c, j["user_id"])
             self._admin_generation_event(c, job, "failed", "released")
 
     def delivered(self, job):

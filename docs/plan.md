@@ -87,3 +87,8 @@ CR-FREE-005: учёт, outbox, оба runtime и баланс реализова
 VPS: обе службы active/running, NRestarts=0; старые строки всех таблиц, финансовые остатки, env и хеши медиа совпали после аддитивной миграции. SQLite quick_check=ok; source SHA MAX совпал с release manifest. Публичные index/app.js обеих студий совпадают с исходниками; оба HTTPS health=200/OpenAI. Backup создан до изменения. Telegram: 15 расписаний с согласием (без unlimited-владельца); MAX: 2. Первый срок 20.10.2026 около 09:21 Asia/Yekaterinburg. Сейчас новых начислений и рассылок 0; paid Image/реальных переводов агента 0.
 
 Сообщение после первой стартовой генерации Telegram включает оба канала, проверку подписки и правило +1/5 дней с пределом 3. В MAX сохраняется отсутствие стартового подарка и Telegram-подписок; работает новая регулярная выдача. Реальную доставку первого пятидневного уведомления нельзя считать уже проверенной; её срок указан выше.
+
+
+CR-PLATEGA-001, accepted/pending: документировать контракт Platega; добавить ledger/outbox, HTTP-клиент, постоянный checkout, callback и резервную сверку; проверить офлайн ошибки/конкурентность; после CI перенести Telegram с backup. Реальный пользовательский платёж проверяется отдельно. MAX/Stars/автосписания не входят.
+
+CR-PLATEGA-001 local implemented: 121 passed / 64.22 s (Platega, trial, recurring free, purchase UI). Ruff src/tests PASS. Проверены live-screen без реального POST, ownership, повторное открытие после создания, callback auth/дубликат, несоответствие суммы/валюты/магазина/payload, uncertain POST без повтора, paid во время trial finish/fail и chargeback. Платежей/платных Image для проверки 0. VPS preflight: no active jobs/reservations; Telegram и MAX active/running, NRestarts0. CI и deployment pending.

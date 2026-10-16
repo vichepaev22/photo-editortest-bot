@@ -1,5 +1,5 @@
 import os
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from urllib.parse import urlsplit
 
@@ -37,8 +37,24 @@ class Settings:
     studio_enabled: bool = True
     studio_port: int = 8089
     mini_app_url: str = ""
+    platega_enabled: bool = False
+    platega_merchant_id: str = field(default="", repr=False)
+    platega_secret: str = field(default="", repr=False)
+    platega_return_url: str = "https://31.76.80.185/api/payments/platega/result"
 
     def validate(self):
+        if self.platega_enabled:
+            import uuid
+            try:
+                uuid.UUID(self.platega_merchant_id)
+            except (ValueError, TypeError, AttributeError):
+                raise ValueError("platega_credentials_required") from None
+            if (not self.platega_secret or any(c in self.platega_secret for c in '\r\n')
+                    or self.billing_enabled or not self.studio_enabled):
+                raise ValueError("invalid_platega_configuration")
+            url = urlsplit(self.platega_return_url)
+            if url.scheme != "https" or not url.hostname or url.username or url.password:
+                raise ValueError("https_platega_return_required")
         if type(self.admin_user_id) is not int or not 0 <= self.admin_user_id < 2**52:
             raise ValueError("invalid_admin_user_id")
         if type(self.owner_unlimited_testing) is not bool:
@@ -95,4 +111,8 @@ class Settings:
             studio_enabled=os.getenv("STUDIO_ENABLED", "true").lower() == "true",
             studio_port=int(os.getenv("STUDIO_PORT", "8089")),
             mini_app_url=os.getenv("MINI_APP_URL", ""),
+            platega_enabled=os.getenv("PLATEGA_ENABLED", "false").lower() == "true",
+            platega_merchant_id=os.getenv("PLATEGA_MERCHANT_ID", ""),
+            platega_secret=os.getenv("PLATEGA_SECRET", ""),
+            platega_return_url=os.getenv("PLATEGA_RETURN_URL", "https://31.76.80.185/api/payments/platega/result"),
         ).validate()
