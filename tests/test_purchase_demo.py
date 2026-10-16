@@ -321,7 +321,7 @@ async def test_purchase_preserves_loaded_photo_active_job_and_step_tracking(ui):
     assert len(ui.store.jobs(1)) == 1  # Choosing a layout must not create a second active job.
     after = await ui.send(data=data(after, "1"))
     if ui.settings.trial_access:
-        assert any("уже создаётся" in m.text for m in after if hasattr(m, "text"))
+        assert any("уже создаётся" in (m.text or "") for m in after if hasattr(m, "text"))
     else:
         assert any(b.callback_data.startswith("confirm:") for row in content(after).reply_markup.inline_keyboard
                    for b in row if b.callback_data)
