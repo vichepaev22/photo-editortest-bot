@@ -1,0 +1,163 @@
+{
+  "brand": "образ.",
+  "version": "1.0",
+  "date": "2026-10-16",
+  "purpose": "Reusable visual brief; assets created by the owner",
+  "references": {
+    "brief": "docs/welcome-motion-brief.md",
+    "poster": "motion/welcome/out/obraz-welcome-poster.webp",
+    "scene": "motion/welcome/src/Scene.tsx",
+    "art": "motion/welcome/src/art.tsx"
+  },
+  "visual_language": {
+    "style": "adult editorial 2D illustration",
+    "mood": [
+      "calm",
+      "friendly",
+      "clear"
+    ],
+    "background": "warm off-white",
+    "character_consistency": "same adult face and pose inside each transformation story"
+  },
+  "palette": {
+    "background": "#F6F5F3",
+    "card": "#FFFFFF",
+    "text": "#29343B",
+    "accent": "#176B5B",
+    "mint": "#E6F1EB",
+    "border": "#DCE0DF",
+    "muted": "#687972",
+    "warm_wash": "#EEE4D7"
+  },
+  "typography": {
+    "reference_family": "Segoe UI",
+    "fallback": "Arial",
+    "headline_px_at_1080_width": [
+      64,
+      88
+    ],
+    "body_px": [
+      34,
+      42
+    ],
+    "minimum_caption_px": 24,
+    "headline_words": [
+      3,
+      7
+    ],
+    "text_added_as_editable_layer": true
+  },
+  "shapes": {
+    "radius_px": [
+      28,
+      40
+    ],
+    "border_px": [
+      1,
+      2
+    ],
+    "shadow": "0 24px 68px rgba(39,61,50,0.10)"
+  },
+  "layout": {
+    "groups": [
+      "headline",
+      "one main demonstration",
+      "one next action"
+    ],
+    "maximum_groups": 3,
+    "space": "generous",
+    "logo": "lowercase graphite word with green dot"
+  },
+  "formats": {
+    "story": {
+      "width": 1080,
+      "height": 1920,
+      "ratio": "9:16",
+      "proposed_safe_box": {
+        "x": 72,
+        "y": 250,
+        "width": 936,
+        "height": 1350
+      }
+    },
+    "carousel": {
+      "width": 1080,
+      "height": 1350,
+      "ratio": "4:5",
+      "padding": 72,
+      "one_slide_one_file": true
+    },
+    "square": {
+      "width": 1080,
+      "height": 1080
+    },
+    "wide": {
+      "width": 1600,
+      "height": 900
+    }
+  },
+  "function_visuals": {
+    "hair": "same portrait, several hairstyles",
+    "glasses": "same portrait, 2-3 frames",
+    "clothes": "same adult, two outfits",
+    "background": "same portrait, changed surroundings",
+    "enhance": "small before/after detail",
+    "merge": "two photo cards become one composition",
+    "reference": "small reference and large adapted portrait",
+    "document": "one portrait becomes a 2x2 sheet of four identical photos"
+  },
+  "motion": {
+    "scene_seconds": [
+      3,
+      4
+    ],
+    "transition_seconds": [
+      0.4,
+      0.7
+    ],
+    "easing": "smooth ease-in-out",
+    "background_motion": "subtle, almost still on result",
+    "sound_required": false
+  },
+  "carousel_example": [
+    "Один снимок. Разные образы.",
+    "Загрузите своё фото",
+    "Примерьте причёску",
+    "Подберите очки и образ",
+    "Объедините фотографии",
+    "Фото на документы",
+    "Теперь ваша очередь"
+  ],
+  "avoid": [
+    "neon",
+    "dominant blue buttons",
+    "glossy 3D",
+    "childlike proportions",
+    "dense paragraphs",
+    "multiple unrelated scenes on one slide",
+    "claims of guaranteed document acceptance",
+    "claims of exact clothing fit"
+  ],
+  "publishing": {
+    "illustrations_label": "Иллюстрация возможностей",
+    "real_links_added_at_publication": true,
+    "variable_prices_not_embedded_in_base_template": true,
+    "export_profile": "sRGB",
+    "editable_layers": [
+      "background",
+      "character",
+      "cards",
+      "text",
+      "CTA"
+    ]
+  },
+  "task_template": {
+    "format": "story",
+    "function": "hair",
+    "headline": "Найдите свою причёску",
+    "supporting_text": "Начните со своего фото.",
+    "cta": "Открыть Образ",
+    "main_visual": "same adult portrait with three hairstyle variants",
+    "brand_wordmark": "образ."
+  }
+}

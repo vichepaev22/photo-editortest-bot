@@ -169,3 +169,6 @@ obraz-welcome-miniapp.mp4 (720×1280, 0.77 MB), оба 22с/30fps/H.264, без 
 ## CR-015: migration to @obraz_photo_bot, 2026-10-09
 
 The owner supplied the new Telegram token privately and authorised cutover on the same VPS/API/Pages. Preserve users, consent, wallet, job/payment history, media TTL, owner admin and unlimited access. Refresh regular-user trial usage once to provide three new free results, with a durable migration event preventing repeated grants. Namespace deterministic native description request keys by actual bot ID. No new billing/referral/channel features or additional broadcasts. Delivery: docs/bot-migration.md; checks: docs/verification.md.
+
+
+CR-BRAND-001 (16.10.2026, accepted/delivered brief): единое ТЗ для самостоятельного создания владельцем сторис, каруселей и анонсов по действующей приветственной motion-графике; docs/obraz-social-style-guide.md и .json. Палитра и иллюстративный язык взяты из существующих исходников и просмотренного постера. Новые изображения/видео не генерируются и не публикуются; одна карточка карусели — отдельное изображение. Готовность рекламных материалов и публикации не утверждается.
