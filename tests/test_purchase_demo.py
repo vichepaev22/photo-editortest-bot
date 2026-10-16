@@ -317,6 +317,9 @@ async def test_purchase_preserves_loaded_photo_active_job_and_step_tracking(ui):
     assert list(ui.dp["step_messages"].scopes) == scopes_before
     assert {path: path.read_bytes() for path in ui.media.root.rglob("*") if path.is_file()} == files_before
     after = await ui.send("Сохрани лицо, добавь каре")
+    assert "Сколько вариантов" in content(after).text
+    assert len(ui.store.jobs(1)) == 1  # Choosing a layout must not create a second active job.
+    after = await ui.send(data=data(after, "1"))
     if ui.settings.trial_access:
         assert any("уже создаётся" in m.text for m in after if hasattr(m, "text"))
     else:
