@@ -212,26 +212,22 @@ async def test_callback_auth_and_duplicate_confirmation(setup):
         assert store.wallet(11, trial=True) == (6, 0)
 
 
-def test_payment_test_is_owner_only(setup):
+def test_payment_test_is_retired_for_everyone(setup):
     from image_studio.platega_checkout import PlategaCheckout
     from image_studio.store import DomainError
 
-    store, settings = setup
-    assert "payment_test" not in store.platega_plans(11)
+    store, _ = setup
     store = Store(store.path, payment_test_owner_id=11)
-    assert store.platega_plans(11)["payment_test"] == ("Проверка оплаты", 1, 1)
-    assert "payment_test" not in store.platega_plans(22)
     checkout = PlategaCheckout(store, SimpleNamespace())
-    assert "1 ₽ (1 генерация)" in str(checkout.render(store.platega_session(11))[1])
-    assert "payment_test" not in str(checkout.render(store.platega_session(22))[1])
-    with pytest.raises(DomainError):
-        store.platega_order(22, "payment_test", "sbp")
-    with pytest.raises(DomainError):
-        Store(store.path).platega_order(11, "payment_test", "sbp")
+    for user in (11, 22):
+        assert set(store.platega_plans(user)) == {"express", "base", "premium"}
+        assert "1 ₽ (1 генерация)" not in str(checkout.render(store.platega_session(user))[1])
+        with pytest.raises(DomainError):
+            store.platega_order(user, "payment_test", "sbp")
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("pack", ["express", "payment_test"])
+@pytest.mark.parametrize("pack", ["express", "base", "premium"])
 async def test_checkout_one_message_and_restart(setup, pack):
     from datetime import datetime, timezone
 
@@ -251,7 +247,7 @@ async def test_checkout_one_message_and_restart(setup, pack):
 
         posted.append(request.method)
         assert json.loads(request.content)["paymentDetails"] == {
-            "amount": 1 if pack == "payment_test" else 160,
+            "amount": {"express": 160, "base": 380, "premium": 790}[pack],
             "currency": "RUB",
         }
         return httpx.Response(
@@ -309,17 +305,24 @@ async def test_checkout_one_message_and_restart(setup, pack):
     assert all(
         len(b.callback_data.encode()) <= 64 for row in markup.inline_keyboard for b in row if b.callback_data
     )
-    if pack == "payment_test":
-        result = canonical(s["order_id"], tx)
-        result["paymentDetails"]["amount"] = 1.09
-        result.update(comission=0.09, comissionType=0)
-        await gateway.close()
-        gateway.client = httpx.AsyncClient(
-            transport=httpx.MockTransport(lambda request: httpx.Response(200, json=result))
-        )
-        assert await gateway.reconcile(tx, s["order_id"])
-        assert not await gateway.reconcile(tx, s["order_id"])
-        assert store.wallet(11, trial=True) == (2, 0)
-        assert store.admin_stats()["revenue_kopecks"] == 100
-        await gateway.close()
+    await gateway.close()
     await bot.session.close()
+
+
+@pytest.mark.asyncio
+async def test_historical_one_ruble_payment_still_settles_once(setup):
+    store, settings = setup
+    order = store.platega_order(11, "express", "sbp")
+    with store.tx() as c:
+        c.execute("UPDATE invoices SET pack='payment_test',amount=100,credits=1 WHERE id=?", (order["id"],))
+    tx = str(uuid.uuid4())
+    result = canonical(order["id"], tx)
+    result["paymentDetails"]["amount"] = 1.09
+    result.update(comission=0.09, comissionType=0)
+    gateway = PlategaClient(settings, store, httpx.AsyncClient(
+        transport=httpx.MockTransport(lambda request: httpx.Response(200, json=result))))
+    assert await gateway.reconcile(tx, order["id"])
+    assert not await gateway.reconcile(tx, order["id"])
+    assert store.wallet(11, trial=True) == (2, 0)
+    assert store.admin_stats()["revenue_kopecks"] == 100
+    await gateway.close()

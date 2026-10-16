@@ -45,6 +45,12 @@ class PlategaCheckout:
                     [InlineKeyboardButton(text="🏠 Главное меню", callback_data="nav:home")],
                 ]
             )
+        # A retired package can still settle through the ledger, but cannot be sold again.
+        if s["pack"] and s["pack"] not in plans:
+            text += "Проверка оплаты завершена. Выберите обычный пакет в покупке."
+            return text, InlineKeyboardMarkup(inline_keyboard=[
+                [InlineKeyboardButton(text="Выбрать пакет", callback_data="nav:buy")]
+            ])
         if s["stage"] == "cancelled":
             return (
                 text
@@ -128,7 +134,7 @@ class PlategaCheckout:
         async with self.locks[user % len(self.locks)]:
             s = self.store.platega_session(user)
             previous_message = s["message_id"]
-            if s["stage"] == "cancelled" or (
+            if s["stage"] == "cancelled" or s["pack"] not in {None, *self.store.platega_plans(user)} or (
                 s["order_id"] and self.store.platega_get(s["order_id"])["state"] == "paid"
             ):
                 if s["stage"] != "cancelled":
@@ -167,6 +173,9 @@ class PlategaCheckout:
                 await self.answer(callback, "Этот шаг устарел. Откройте покупку заново.")
                 return
             action, value = parts[3], parts[4] if len(parts) == 5 else None
+            if s["pack"] and s["pack"] not in self.store.platega_plans(user):
+                await self.answer(callback, "Проверка оплаты завершена. Откройте покупку заново.")
+                return
             create = check = False
             if action == "plan" and s["stage"] == "plans" and value in self.store.platega_plans(user):
                 s.update(pack=value, stage="methods")

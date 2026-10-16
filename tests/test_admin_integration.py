@@ -43,7 +43,7 @@ async def test_sharing_explicit_default_off_and_no_retrospective_capture(tmp_pat
     await feed(ui, photo=True)
     await feed(ui, "Каре без чёлки", message_id=300)
     job = ui[2].jobs(1)[0]["id"]
-    assert ui[2].admin_job_detail(job)["description"] == "Каре без чёлки"
+    assert ui[2].admin_job_detail(job)["description"].startswith("Каре без чёлки\n\nИтоговый выбор: ровно 1")
     await feed(ui, callback="sharing:off")
     assert "description" not in ui[2].admin_job_detail(job)
     await feed(ui, callback="sharing:on")

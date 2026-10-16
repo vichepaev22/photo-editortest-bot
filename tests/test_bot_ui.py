@@ -44,7 +44,7 @@ def ui(tmp_path):
     return dp, bot, store, media, service, provider
 
 
-async def send(ui, text=None, callback=None, user_id=1, photo=False):
+async def send(ui, text=None, callback=None, user_id=1, photo=False, variant_count=1):
     dp, bot, *_ = ui
     user = User(id=user_id, is_bot=False, first_name="Тест")
     bot.sequence += 1
@@ -74,7 +74,16 @@ async def send(ui, text=None, callback=None, user_id=1, photo=False):
     )
     bot.sent.clear()
     await dp.feed_update(bot, update)
-    return bot.sent
+    sent = list(bot.sent)
+    # Existing journey tests select one portrait; dedicated tests leave this step pending.
+    for method in sent:
+        for row in getattr(getattr(method, "reply_markup", None), "inline_keyboard", []):
+            for button in row:
+                if (variant_count is not None and button.callback_data
+                        and button.callback_data.startswith("variants:")
+                        and button.callback_data.endswith(":" + str(variant_count))):
+                    return sent + await send(ui, callback=button.callback_data, user_id=user_id, variant_count=None)
+    return sent
 
 
 def confirmation(sent):

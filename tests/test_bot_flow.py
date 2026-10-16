@@ -83,7 +83,7 @@ def own_photo(user=1, chat=None, *, document=False, message_id=50):
                    from_user=User(id=user, first_name="Тест", is_bot=False), **fields)
 
 
-async def feed(ui, text=None, *, callback=None, photo=False, reply=None, message_id=None, user=1):
+async def feed(ui, text=None, *, callback=None, photo=False, reply=None, message_id=None, user=1, variant_count=1):
     dp, bot, *_ = ui
     bot.sequence += 1
     mid = message_id or 1000 + bot.sequence
@@ -96,7 +96,16 @@ async def feed(ui, text=None, *, callback=None, photo=False, reply=None, message
         from_user=message.from_user, chat_instance="offline", message=message, data=callback))
     bot.sent.clear()
     await dp.feed_update(bot, update)
-    return list(bot.sent)
+    sent = list(bot.sent)
+    # Follow the new user choice in existing flows; None allows testing the waiting screen.
+    for method in sent:
+        for row in getattr(getattr(method, "reply_markup", None), "inline_keyboard", []):
+            for button in row:
+                if (variant_count is not None and button.callback_data
+                        and button.callback_data.startswith("variants:")
+                        and button.callback_data.endswith(":" + str(variant_count))):
+                    return sent + await feed(ui, callback=button.callback_data, user=user, variant_count=None)
+    return sent
 
 
 def texts(sent):
@@ -318,7 +327,7 @@ def deleted_ids(bot):
 def step_ids(bot):
     return {response.message_id for method, response in bot.history
             if method.__api_method__ == "sendMessage"
-            and any(text in method.text for text in ["Шаг 1", "Шаг 2", "Шаг 3", "Создаём ваш образ"])}
+            and any(text in method.text for text in ["Шаг 1", "Шаг 2", "Шаг 3", "Шаг 4", "Создаём ваш образ"])}
 
 
 async def test_worker_delivery_cleans_only_steps_even_before_progress_ack(flow):
@@ -408,11 +417,12 @@ async def test_step_two_example_is_specific_and_copy_does_not_submit(flow, prese
     assert copy[0].style is None and flow[2].jobs(1) == [] and flow[5].calls == 0
     assert flow[4].wallet(1) == (1, 0)
     if preset == "hair":
-        assert "от 1 до 12" in texts(sent) and "Коллаж — 1 попытка" in texts(sent)
-        assert "может отклониться" in texts(sent)
+        assert "1, 3, 6, 9 или 12" in texts(sent) and "Один лист — 1 генерация" in texts(sent)
+        assert "модель может не соблюсти" in texts(sent)
         assert "сетка 3×3 из 9" in copy[1].copy_text.text
         assert "сетка 3×4 из 12" in copy[2].copy_text.text
         assert all(button.callback_data is None and button.style is None for button in copy)
+    assert all(1 <= len(button.copy_text.text) <= 256 for button in copy)
 
 
 async def test_processing_activity_terminal_filter_failures_and_cancellation():

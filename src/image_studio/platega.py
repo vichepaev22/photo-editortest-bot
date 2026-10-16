@@ -45,10 +45,7 @@ def amount_kopecks(value, *, allow_zero=False):
 
 class PlategaStoreMixin:
     def platega_plans(self, user):
-        plans = dict(PLANS)
-        if self.payment_test_owner_id and user == self.payment_test_owner_id:
-            plans["payment_test"] = ("Проверка оплаты", 1, 1)
-        return plans
+        return dict(PLANS)
 
     def _platega_init(self, c):
         c.execute("""CREATE TABLE IF NOT EXISTS platega_orders(

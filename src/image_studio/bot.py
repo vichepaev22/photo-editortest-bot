@@ -95,12 +95,11 @@ DOCUMENT_OPTIONS = {
     "shirt": EXAMPLES["document"],
 }
 HAIR_EXAMPLES = {
-    9: "Одно изображение: сетка 3×3 из 9 разных причёсок — каре, боб, пикси, каскад, "
-       "прямые длинные волосы, волны, кудри, чёлка, собранные волосы. "
-       "В каждой ячейке человек с моего фото. Сохрани лицо, возраст, ракурс, одежду и фон; без текста.",
-    12: "Одно изображение: сетка 3×4 из 12 разных причёсок — каре, боб, пикси, каскад, "
-        "прямые длинные волосы, волны, кудри, чёлка, хвост, пучок, коса, короткая стрижка. "
-        "В каждой ячейке человек с моего фото. Сохрани лицо, возраст, ракурс, одежду и фон; без текста.",
+    9: "Одно изображение: сетка 3×3 из 9 причёсок — каре, боб, пикси, каскад, длинные прямые, "
+       "волны, кудри, чёлка, собранные волосы. Везде моё лицо, возраст и ракурс. Одежда и фон прежние; без текста.",
+    12: "Одно изображение: сетка 3×4 из 12 причёсок — каре, боб, пикси, каскад, прямые, волны, "
+        "кудри, чёлка, хвост, пучок, коса, короткая стрижка. Везде моё лицо, возраст и ракурс. "
+        "Одежда и фон прежние; без текста.",
 }
 RESULT_FILENAME = "Образ · результат.jpg"
 
@@ -173,6 +172,9 @@ class Draft:
     photos: list[str] = field(default_factory=list)
     photo_messages: set[int] = field(default_factory=set)
     description: str = ""
+    variants_pending: bool = False
+    description_key: str = ""
+    variant_count: int | None = None
     reusable: list[str] = field(default_factory=list)
     steps_token: str = field(default_factory=lambda: uuid.uuid4().hex)
 
@@ -394,14 +396,14 @@ def build_dispatcher(settings, store, media, service, *, step_messages=None, pur
             ])
         await step_answer(
             message, user, draft,
-            f"{ICONS[key]} Шаг 1 из 3 · {choice.label}\n\nЗагрузите {choice.inputs} фото.\n"
+            f"{ICONS[key]} Шаг 1 из {4 if key in {'hair', 'glasses'} else 3} · {choice.label}\n\nЗагрузите {choice.inputs} фото.\n"
             + ("Сначала своё фото, затем понравившийся кадр — пример позы, света и фона.\n"
                "Лицо берём из вашего снимка. Точное повторение не гарантируется.\n" if key == "reference" else "")
             +
             "Для лучшего качества отправьте фото файлом. JPEG/PNG/WebP до 10 MB.\n"
             "Или сфотографируйте себя сейчас — желательно на нейтральном фоне, например у стены."
             + ("\n\n♾ Безлимитное тестирование." if service.is_unlimited(user) else
-               "\n\nОтправка описания — 1 бесплатная генерация."
+               "\n\nОдин готовый результат — 1 генерация."
                if trial else "")
             + ("\n\nДля документов: анфас, глаза открыты, рот закрыт, вся голова в кадре. "
                "Исходное фото — на ровном белом фоне, в подходящей одежде; фон и одежда не меняются."
@@ -457,10 +459,9 @@ def build_dispatcher(settings, store, media, service, *, step_messages=None, pur
             )
             return
         hair_hint = (
-            "\n\n💇 Рекомендуем запрашивать от 1 до 12 причёсок на одном изображении: "
-            "один образ или коллаж из 9/12 вариантов. Коллаж — 1 попытка.\n"
-            "В коллаже портреты мельче; модель может отклониться от числа вариантов."
-            if draft.preset == "hair" else ""
+            "\n\nКоличество вариантов выберете следующим шагом: 1, 3, 6, 9 или 12 на одном изображении. "
+            "Один лист — 1 генерация. В коллаже портреты мельче; точное число модель может не соблюсти."
+            if draft.preset in {"hair", "glasses"} else ""
         )
         collage_buttons = [
             [InlineKeyboardButton(text=f"📋 Пример · {count} причёсок", copy_text=CopyTextButton(text=text))]
@@ -468,10 +469,11 @@ def build_dispatcher(settings, store, media, service, *, step_messages=None, pur
         ] if draft.preset == "hair" else []
         await step_answer(
             message, message.chat.id, draft,
-            f"✍️ Шаг 2 из 3 · Опишите изменение\n\nНапример: «{example}»."
+            f"✍️ Шаг 2 из {4 if draft.preset in {'hair', 'glasses'} else 3} · Опишите изменение\n\nНапример: «{example}»."
+            + "\n\nНажмите «Скопировать пример», вставьте его в поле сообщения, измените по желанию и отправьте."
             + hair_hint
             + ("\n\n♾ Безлимитное тестирование." if service.is_unlimited(message.chat.id) else
-               "\n\nОтправка описания — 1 бесплатная генерация." if trial else ""),
+               "\n\nОдин готовый результат — 1 генерация." if trial else ""),
             reply_markup=InlineKeyboardMarkup(inline_keyboard=[
                 [InlineKeyboardButton(text="📋 Скопировать пример", copy_text=CopyTextButton(text=example))],
                 *collage_buttons,
@@ -883,6 +885,7 @@ def build_dispatcher(settings, store, media, service, *, step_messages=None, pur
             draft.photos.clear()
         draft.photo_messages.clear()
         draft.description = ""
+        draft.variants_pending = False
         draft.reusable.clear()
         draft.token = uuid.uuid4().hex
         if action == "reuse":
@@ -902,6 +905,12 @@ def build_dispatcher(settings, store, media, service, *, step_messages=None, pur
         choice = PRESETS[draft.preset]
         if source.message_id in draft.photo_messages:
             return
+        if draft.variants_pending:
+            draft.photos.clear()
+            draft.photo_messages.clear()
+            draft.description = ""
+            draft.variants_pending = False
+            draft.token = uuid.uuid4().hex
         if len(draft.photos) >= choice.inputs:
             await message.answer("Фото уже загружены. Напишите, какой образ хотите, или /cancel.")
             return
@@ -986,6 +995,7 @@ def build_dispatcher(settings, store, media, service, *, step_messages=None, pur
                 draft.photos.clear()
                 draft.photo_messages.clear()
                 draft.description = ""
+                draft.variants_pending = False
                 draft.token = uuid.uuid4().hex
             # Replying selects the attachment. It never spends a generation by itself.
             await accept_photo(message, draft, source)
@@ -1004,17 +1014,41 @@ def build_dispatcher(settings, store, media, service, *, step_messages=None, pur
             return
         await describe_and_submit(message, user, draft, message.text.strip(), request_key)
 
-    async def describe_and_submit(message, user, draft, description, request_key):
+    async def describe_and_submit(message, user, draft, description, request_key, *, variant_count=None, summary=None):
         draft.description = description
+        if draft.preset in {"hair", "glasses"} and variant_count is None:
+            if len(description) > 1150:
+                await message.answer("Для выбора вариантов сократите описание до 1150 символов.")
+                return
+            draft.token = uuid.uuid4().hex
+            draft.variants_pending = True
+            draft.description_key = request_key
+            draft.variant_count = None
+            await step_answer(message, user, draft,
+                "🔢 Шаг 3 из 4 · Сколько вариантов на одном изображении?\n\n"
+                "1 — отдельный портрет. 3, 6, 9 или 12 — коллаж.\n"
+                "Один лист использует 1 генерацию. Чем больше вариантов, тем мельче каждый портрет. "
+                "Точное число вариантов не гарантируется.\n\nВыберите число — и продолжим.",
+                reply_markup=buttons([
+                    [(str(count), f"variants:{draft.token}:{count}") for count in (1, 3, 6)],
+                    [(str(count), f"variants:{draft.token}:{count}") for count in (9, 12)],
+                    [("🏠 Главное меню", "nav:home")],
+                ]))
+            return
+        draft.variants_pending = False
+        draft.variant_count = variant_count
         if not trial:
             draft.token = uuid.uuid4().hex
         choice = PRESETS[draft.preset]
         cost = service.cost(draft.preset)
         unit = "бесплатная генерация" if trial else "попытка(и)"
         spend = "♾ Безлимитное тестирование · один результат." if service.is_unlimited(user) else f"{cost} {unit} · один результат."
+        display = summary if summary is not None else draft.description
+        if variant_count:
+            display += f"\n\n🧩 Вариантов на одном изображении: {variant_count}"
         await step_answer(
             message, user, draft,
-            f"✨ Шаг 3 из 3 · {choice.label}\n\n{draft.description}\n\n"
+            f"✨ Шаг {4 if variant_count else 3} из {4 if variant_count else 3} · {choice.label}\n\n{display}\n\n"
             + spend,
             reply_markup=BACK if trial else buttons(
                 [
@@ -1025,6 +1059,35 @@ def build_dispatcher(settings, store, media, service, *, step_messages=None, pur
         )
         if trial:
             await submit_draft(message, user, draft, request_key)
+
+    @router.callback_query(F.data.startswith("variants:"))
+    async def choose_variants(callback: CallbackQuery):
+        user = callback.from_user.id
+        draft = current(user)
+        parts = callback.data.split(":")
+        if (not callback.message or callback.message.chat.type != "private" or callback.message.chat.id != user
+                or not store.has_consent(user) or len(parts) != 3 or not draft
+                or draft.preset not in {"hair", "glasses"} or draft.token != parts[1]
+                or not draft.variants_pending or len(draft.photos) != 1
+                or parts[2] not in {"1", "3", "6", "9", "12"}):
+            await callback.answer("Выбор устарел. Отправьте описание заново.", show_alert=True)
+            return
+        draft.variants_pending = False
+        count = int(parts[2])
+        key, token, summary = draft.description_key, draft.token, draft.description
+        layout = "один портрет, без коллажа" if count == 1 else {
+            3: "сетка 1×3", 6: "сетка 2×3", 9: "сетка 3×3", 12: "сетка 3×4"
+        }[count]
+        target = "причёску" if draft.preset == "hair" else "очки"
+        description = (draft.description + f"\n\nИтоговый выбор: ровно {count} вариантов на одном изображении, {layout}. "
+                       "Этот выбор числа имеет приоритет над числом в примере. "
+                       "В каждой ячейке один и тот же человек с исходного фото, одинаковый ракурс. "
+                       f"Менять только {target}.")
+        await callback.answer()
+        if current(user) is not draft or draft.token != token or draft.variants_pending:
+            return
+        await describe_and_submit(callback.message, user, draft, description,
+                                  key, variant_count=count, summary=summary)
 
     @router.callback_query(F.data.startswith("refopt:"))
     async def reference_option(callback: CallbackQuery):

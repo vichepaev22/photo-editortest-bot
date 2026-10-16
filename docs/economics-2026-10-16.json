@@ -1,0 +1,298 @@
+{
+  "date": "2026-10-16",
+  "status": "proposed_not_implemented",
+  "fx_rub_per_usd": 100,
+  "fx_note": "planning rate, not CBR or actual funding quote",
+  "server_rub_per_month": 300,
+  "api_reserve_medium_per_result": 4,
+  "observed_usage": {
+    "with_usage": 34,
+    "missing": 5,
+    "mean_usd_repriced_at_current_rates": 0.024569382352941177,
+    "mean_rub_at_100": 2.4569382352941176,
+    "by_platform": {
+      "telegram": {
+        "all_jobs": 34,
+        "with_usage": 29,
+        "missing_usage": 5,
+        "rates": {
+          "text": 5,
+          "image": 8,
+          "output": 30
+        },
+        "usd_mean": 0.02465748275862069,
+        "usd_median": 0.025226,
+        "usd_max": 0.031462,
+        "usd_p95": 0.026049,
+        "output_tokens_median": 439
+      },
+      "max": {
+        "all_jobs": 5,
+        "with_usage": 5,
+        "missing_usage": 0,
+        "rates": {
+          "text": 5,
+          "image": 8,
+          "output": 30
+        },
+        "usd_mean": 0.0240584,
+        "usd_median": 0.025261,
+        "usd_max": 0.025601,
+        "usd_p95": 0.025601,
+        "output_tokens_median": 439
+      }
+    }
+  },
+  "scenario_note": "500 text + 1000 image input tokens per request for cross-model comparison; actual tokenization differs. No optional generated text output charged in this scenario. Additional text output, reference analysis and paid failures add costs.",
+  "models": [
+    {
+      "model": "gpt-image-1-mini",
+      "quality": "low",
+      "size": "1024x1024",
+      "assumed_text_tokens": 500,
+      "assumed_image_tokens": 1000,
+      "output_usd": 0.005,
+      "input_usd": 0.0035,
+      "total_usd": 0.0085,
+      "total_rub_at_100": 0.85
+    },
+    {
+      "model": "gpt-image-1-mini",
+      "quality": "medium",
+      "size": "1024x1024",
+      "assumed_text_tokens": 500,
+      "assumed_image_tokens": 1000,
+      "output_usd": 0.011,
+      "input_usd": 0.0035,
+      "total_usd": 0.0145,
+      "total_rub_at_100": 1.45
+    },
+    {
+      "model": "gpt-image-1-mini",
+      "quality": "high",
+      "size": "1024x1024",
+      "assumed_text_tokens": 500,
+      "assumed_image_tokens": 1000,
+      "output_usd": 0.036,
+      "input_usd": 0.0035,
+      "total_usd": 0.0395,
+      "total_rub_at_100": 3.95
+    },
+    {
+      "model": "gpt-image-1.5",
+      "quality": "low",
+      "size": "1024x1024",
+      "assumed_text_tokens": 500,
+      "assumed_image_tokens": 1000,
+      "output_usd": 0.009,
+      "input_usd": 0.0105,
+      "total_usd": 0.0195,
+      "total_rub_at_100": 1.95
+    },
+    {
+      "model": "gpt-image-1.5",
+      "quality": "medium",
+      "size": "1024x1024",
+      "assumed_text_tokens": 500,
+      "assumed_image_tokens": 1000,
+      "output_usd": 0.034,
+      "input_usd": 0.0105,
+      "total_usd": 0.0445,
+      "total_rub_at_100": 4.45
+    },
+    {
+      "model": "gpt-image-1.5",
+      "quality": "high",
+      "size": "1024x1024",
+      "assumed_text_tokens": 500,
+      "assumed_image_tokens": 1000,
+      "output_usd": 0.133,
+      "input_usd": 0.0105,
+      "total_usd": 0.1435,
+      "total_rub_at_100": 14.35
+    },
+    {
+      "model": "gpt-image-2.5-flare",
+      "quality": "low",
+      "size": "1024x1024",
+      "assumed_text_tokens": 500,
+      "assumed_image_tokens": 1000,
+      "output_usd": 0.00588,
+      "input_usd": 0.0105,
+      "total_usd": 0.01638,
+      "total_rub_at_100": 1.638
+    },
+    {
+      "model": "gpt-image-2.5-flare",
+      "quality": "medium",
+      "size": "1024x1024",
+      "assumed_text_tokens": 500,
+      "assumed_image_tokens": 1000,
+      "output_usd": 0.01317,
+      "input_usd": 0.0105,
+      "total_usd": 0.02367,
+      "total_rub_at_100": 2.367
+    },
+    {
+      "model": "gpt-image-2.5-flare",
+      "quality": "high",
+      "size": "1024x1024",
+      "assumed_text_tokens": 500,
+      "assumed_image_tokens": 1000,
+      "output_usd": 0.05268,
+      "input_usd": 0.0105,
+      "total_usd": 0.06318,
+      "total_rub_at_100": 6.318
+    },
+    {
+      "model": "gpt-image-2.5-flare",
+      "quality": "xhigh",
+      "size": "1024x1024",
+      "assumed_text_tokens": 500,
+      "assumed_image_tokens": 1000,
+      "output_usd": 0.09366,
+      "input_usd": 0.0105,
+      "total_usd": 0.10416,
+      "total_rub_at_100": 10.416
+    },
+    {
+      "model": "gpt-image-2.5-flare",
+      "quality": "max",
+      "size": "1024x1024",
+      "assumed_text_tokens": 500,
+      "assumed_image_tokens": 1000,
+      "output_usd": 0.21072,
+      "input_usd": 0.0105,
+      "total_usd": 0.22122,
+      "total_rub_at_100": 22.122
+    },
+    {
+      "model": "gpt-image-2.5-sunburst",
+      "quality": "low",
+      "size": "1024x1024",
+      "assumed_text_tokens": 500,
+      "assumed_image_tokens": 1000,
+      "output_usd": 0.00588,
+      "input_usd": 0.0105,
+      "total_usd": 0.01638,
+      "total_rub_at_100": 1.638
+    },
+    {
+      "model": "gpt-image-2.5-sunburst",
+      "quality": "medium",
+      "size": "1024x1024",
+      "assumed_text_tokens": 500,
+      "assumed_image_tokens": 1000,
+      "output_usd": 0.01317,
+      "input_usd": 0.0105,
+      "total_usd": 0.02367,
+      "total_rub_at_100": 2.367
+    },
+    {
+      "model": "gpt-image-2.5-sunburst",
+      "quality": "high",
+      "size": "1024x1024",
+      "assumed_text_tokens": 500,
+      "assumed_image_tokens": 1000,
+      "output_usd": 0.05268,
+      "input_usd": 0.0105,
+      "total_usd": 0.06318,
+      "total_rub_at_100": 6.318
+    },
+    {
+      "model": "gpt-image-2.5-sunburst",
+      "quality": "xhigh",
+      "size": "1024x1024",
+      "assumed_text_tokens": 500,
+      "assumed_image_tokens": 1000,
+      "output_usd": 0.09366,
+      "input_usd": 0.0105,
+      "total_usd": 0.10416,
+      "total_rub_at_100": 10.416
+    },
+    {
+      "model": "gpt-image-2.5-sunburst",
+      "quality": "max",
+      "size": "1024x1024",
+      "assumed_text_tokens": 500,
+      "assumed_image_tokens": 1000,
+      "output_usd": 0.21072,
+      "input_usd": 0.0105,
+      "total_usd": 0.22122,
+      "total_rub_at_100": 22.122
+    }
+  ],
+  "packages": [
+    {
+      "plan": "single_proposed",
+      "price_rub": 39,
+      "generations": 1,
+      "price_each": 39.0,
+      "api_budget_rub": 4,
+      "assumed_other_deductions_rub": 11.7,
+      "contribution_before_server_free_and_ads": 23.3,
+      "purchases_for_10000_after_300_server_excluding_free_ads": 443,
+      "purchases_for_10000_after_300_server_and_2400_free_excluding_ads": 546
+    },
+    {
+      "plan": "three_proposed",
+      "price_rub": 99,
+      "generations": 3,
+      "price_each": 33.0,
+      "api_budget_rub": 12,
+      "assumed_other_deductions_rub": 29.7,
+      "contribution_before_server_free_and_ads": 57.3,
+      "purchases_for_10000_after_300_server_excluding_free_ads": 180,
+      "purchases_for_10000_after_300_server_and_2400_free_excluding_ads": 222
+    },
+    {
+      "plan": "express_current",
+      "price_rub": 160,
+      "generations": 5,
+      "price_each": 32.0,
+      "api_budget_rub": 20,
+      "assumed_other_deductions_rub": 48.0,
+      "contribution_before_server_free_and_ads": 92.0,
+      "purchases_for_10000_after_300_server_excluding_free_ads": 112,
+      "purchases_for_10000_after_300_server_and_2400_free_excluding_ads": 139
+    },
+    {
+      "plan": "ten_proposed",
+      "price_rub": 290,
+      "generations": 10,
+      "price_each": 29.0,
+      "api_budget_rub": 40,
+      "assumed_other_deductions_rub": 87.0,
+      "contribution_before_server_free_and_ads": 163.0,
+      "purchases_for_10000_after_300_server_excluding_free_ads": 64,
+      "purchases_for_10000_after_300_server_and_2400_free_excluding_ads": 78
+    },
+    {
+      "plan": "base_current",
+      "price_rub": 380,
+      "generations": 12,
+      "price_each": 31.67,
+      "api_budget_rub": 48,
+      "assumed_other_deductions_rub": 114.0,
+      "contribution_before_server_free_and_ads": 218.0,
+      "purchases_for_10000_after_300_server_excluding_free_ads": 48,
+      "purchases_for_10000_after_300_server_and_2400_free_excluding_ads": 59
+    },
+    {
+      "plan": "premium_current",
+      "price_rub": 790,
+      "generations": 30,
+      "price_each": 26.33,
+      "api_budget_rub": 120,
+      "assumed_other_deductions_rub": 237.0,
+      "contribution_before_server_free_and_ads": 433.0,
+      "purchases_for_10000_after_300_server_excluding_free_ads": 24,
+      "purchases_for_10000_after_300_server_and_2400_free_excluding_ads": 30
+    }
+  ],
+  "sources": [
+    "https://developers.openai.com/api/docs/pricing#image-generation",
+    "https://developers.openai.com/api/docs/guides/image-generation#cost-and-latency"
+  ],
+  "calculator_source_sha256": "fb7eff867396c57cf7696aa963a42ade95d0d9e8e16c0919fd0580f82b2913ba"
+}
