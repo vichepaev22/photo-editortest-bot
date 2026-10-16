@@ -1094,7 +1094,8 @@ async def run(settings):
                 raise ValueError("unexpected_telegram_bot")
             if (await bot.get_webhook_info()).url:
                 raise ValueError("telegram_webhook_already_configured")
-            store, media = Store(settings.data_dir / "db.sqlite3"), Media(settings.data_dir)
+            store = Store(settings.data_dir / "db.sqlite3", payment_test_owner_id=settings.admin_user_id)
+            media = Media(settings.data_dir)
             steps = StepMessages(store)
             provider = (
                 MockProvider()

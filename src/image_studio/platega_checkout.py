@@ -9,7 +9,7 @@ from aiogram.exceptions import TelegramBadRequest
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup, Message
 
 from .platega import PlategaError
-from .purchase_demo import METHODS, PLANS, _legal_footer
+from .purchase_demo import METHODS, _legal_footer
 from .store import DomainError
 
 
@@ -35,6 +35,7 @@ class PlategaCheckout:
 
         text = "Образ · Покупка генераций\n\n"
         rows = []
+        plans = self.store.platega_plans(s["user_id"])
         order = self.store.platega_get(s["order_id"]) if s["order_id"] else None
         if order and order["state"] == "paid":
             text += f"✅ Оплата подтверждена\nНачислено генераций: {order['credits']}.\nСпасибо за покупку!"
@@ -53,11 +54,16 @@ class PlategaCheckout:
         if s["stage"] == "plans":
             text += "Выберите пакет. Любая правка или новый вариант — одна генерация."
             rows = [
-                [button(f"{name} · {price} ₽ ({count} генераций)", "plan:" + key)]
-                for key, (name, price, count) in PLANS.items()
+                [
+                    button(
+                        f"{name} · {price} ₽ ({count} {'генерация' if count == 1 else 'генераций'})",
+                        "plan:" + key,
+                    )
+                ]
+                for key, (name, price, count) in plans.items()
             ]
         else:
-            name, price, count = PLANS[s["pack"]]
+            name, price, count = plans[s["pack"]]
             text += f"Пакет: {name}\nСтоимость: {price} ₽\nГенераций: {count}\n\n"
             if s["stage"] == "methods":
                 text += "Выберите способ оплаты через Platega."
@@ -159,7 +165,7 @@ class PlategaCheckout:
                 return
             action, value = parts[3], parts[4] if len(parts) == 5 else None
             create = check = False
-            if action == "plan" and s["stage"] == "plans" and value in PLANS:
+            if action == "plan" and s["stage"] == "plans" and value in self.store.platega_plans(user):
                 s.update(pack=value, stage="methods")
             elif action == "method" and s["stage"] == "methods" and value in METHODS:
                 try:
@@ -203,6 +209,6 @@ class PlategaCheckout:
                     raise
         await bot.send_message(
             order["user_id"],
-            f"✅ Оплата подтверждена. Вам начислено {order['credits']} генераций.\n"
+            f"✅ Оплата подтверждена. Начислено генераций: {order['credits']}.\n"
             "Откройте «Мои попытки» или выберите новую правку.",
         )

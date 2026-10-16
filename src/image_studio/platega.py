@@ -39,6 +39,12 @@ def amount_kopecks(value):
 
 
 class PlategaStoreMixin:
+    def platega_plans(self, user):
+        plans = dict(PLANS)
+        if self.payment_test_owner_id and user == self.payment_test_owner_id:
+            plans["payment_test"] = ("Проверка оплаты", 1, 1)
+        return plans
+
     def _platega_init(self, c):
         c.execute("""CREATE TABLE IF NOT EXISTS platega_orders(
             id TEXT PRIMARY KEY,user_id INTEGER NOT NULL,method TEXT NOT NULL,
@@ -54,14 +60,15 @@ class PlategaStoreMixin:
             attempts INTEGER NOT NULL DEFAULT 0,next_attempt REAL NOT NULL DEFAULT 0)""")
 
     def platega_order(self, user, pack, method):
+        plans = self.platega_plans(user)
         if (
-            pack not in PLANS
+            pack not in plans
             or method not in {"sbp", "crypto"}
             or type(user) is not int
             or not 0 < user < 2**52
         ):
             raise DomainError("invalid_invoice")
-        _, price, count = PLANS[pack]
+        _, price, count = plans[pack]
         with self.tx() as c:
             u = self._user(c, user)
             if not u["consent"] or u["refund_lock"]:

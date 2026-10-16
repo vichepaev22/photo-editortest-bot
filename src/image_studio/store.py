@@ -20,7 +20,10 @@ def validated_username(username):
 
 
 class Store(AdminStoreMixin, FreeStoreMixin, PlategaStoreMixin):
-    def __init__(self, path: Path):
+    def __init__(self, path: Path, *, payment_test_owner_id=0):
+        if type(payment_test_owner_id) is not int or not 0 <= payment_test_owner_id < 2**52:
+            raise ValueError("invalid_payment_test_owner")
+        self.payment_test_owner_id = payment_test_owner_id
         self.path = path
         path.parent.mkdir(parents=True, exist_ok=True)
         self._enable_wal()
