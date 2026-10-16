@@ -77,7 +77,10 @@ class PlategaCheckout:
                     and (order["expires"] is None or order["expires"] > time.time())
                     and order["state"] == "pending"
                 ):
-                    text += "Перейдите к оплате. Генерации начислятся после подтверждения платежа."
+                    text += (
+                        "Перейдите к оплате. Генерации начислятся после подтверждения платежа."
+                        "\nИтоговая сумма на странице Platega может включать её комиссию."
+                    )
                     if order["expires"]:
                         text += (
                             "\nСсылка действует до "
@@ -124,21 +127,21 @@ class PlategaCheckout:
             return False
         async with self.locks[user % len(self.locks)]:
             s = self.store.platega_session(user)
+            previous_message = s["message_id"]
             if s["stage"] == "cancelled" or (
                 s["order_id"] and self.store.platega_get(s["order_id"])["state"] == "paid"
             ):
+                if s["stage"] != "cancelled":
+                    previous_message = None  # Keep the confirmed receipt in chat history.
                 s = self.store.platega_session(user, reset=True)
-            if s["message_id"]:
-                try:
-                    await self.edit(message.bot, s)
-                    return True
-                except TelegramBadRequest as error:
-                    if "message to edit not found" not in error.message.casefold():
-                        raise
+            s["revision"] += 1
             text, markup = self.render(s)
             sent = await message.answer(text, reply_markup=markup)
             s["message_id"] = sent.message_id
             self.store.platega_save_session(s)
+            if previous_message and previous_message != sent.message_id:
+                with contextlib.suppress(TelegramBadRequest):
+                    await message.bot.delete_message(chat_id=user, message_id=previous_message)
             return True
 
     async def open_callback(self, callback):

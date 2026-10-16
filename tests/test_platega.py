@@ -136,6 +136,55 @@ async def test_chargeback_does_not_credit_again(setup):
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("callback_amount", [160, 174.4])
+async def test_verified_customer_fee_is_separate_from_order_price(setup, callback_amount):
+    store, settings = setup
+    order = store.platega_order(11, "express", "sbp")
+    result = canonical(order["id"])
+    result.update(comission=14.4, comissionType=0)
+    result["paymentDetails"]["amount"] = 174.4
+    gateway = PlategaClient(
+        settings,
+        store,
+        httpx.AsyncClient(transport=httpx.MockTransport(lambda request: httpx.Response(200, json=result))),
+    )
+    body = {"id": result["id"], "amount": callback_amount, "currency": "RUB", "status": "CONFIRMED"}
+    assert await gateway.reconcile(result["id"], order["id"], callback=body)
+    assert not await gateway.reconcile(result["id"], order["id"], callback=body)
+    assert store.wallet(11, trial=True) == (6, 0)
+    p = store.platega_get(order["id"])
+    assert (p["amount"], p["provider_amount"], p["provider_fee"], p["commission_type"]) == (
+        16000,
+        17440,
+        1440,
+        0,
+    )
+    await gateway.close()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "gross,fee,kind",
+    [(174.39, 14.4, 0), (174.4, -14.4, 0), (174.4, 14.4, 1), (174.4, 14.4, False), (174.4, None, 0)],
+)
+async def test_fee_mismatch_never_credits(setup, gross, fee, kind):
+    store, settings = setup
+    order = store.platega_order(11, "express", "sbp")
+    result = canonical(order["id"])
+    result.update(comission=fee, comissionType=kind)
+    result["paymentDetails"]["amount"] = gross
+    gateway = PlategaClient(
+        settings,
+        store,
+        httpx.AsyncClient(transport=httpx.MockTransport(lambda request: httpx.Response(200, json=result))),
+    )
+    with pytest.raises(PlategaError):
+        await gateway.reconcile(result["id"], order["id"])
+    assert store.wallet(11, trial=True) == (1, 0)
+    await gateway.close()
+
+
+@pytest.mark.asyncio
 async def test_callback_auth_and_duplicate_confirmation(setup):
     from fastapi import FastAPI
 
@@ -248,7 +297,12 @@ async def test_checkout_one_message_and_restart(setup, pack):
     before = posted.copy()
     await PlategaCheckout(store, gateway).open(incoming, 11)
     assert posted == before
-    assert len([m for m in bot.sent if m.__api_method__ == "sendMessage"]) == 1
+    reopened = store.platega_session(11)
+    assert reopened["message_id"] != s["message_id"]
+    assert reopened["order_id"] == s["order_id"]
+    assert reopened["revision"] > s["revision"]
+    assert len([m for m in bot.sent if m.__api_method__ == "sendMessage"]) == 2
+    assert any(m.__api_method__ == "deleteMessage" and m.message_id == s["message_id"] for m in bot.sent)
     assert store.wallet(11, trial=True) == (1, 0)
     text, markup = checkout.render(s)
     assert "Stars" not in text and "Оплачивая" in text
@@ -257,7 +311,8 @@ async def test_checkout_one_message_and_restart(setup, pack):
     )
     if pack == "payment_test":
         result = canonical(s["order_id"], tx)
-        result["paymentDetails"]["amount"] = 1
+        result["paymentDetails"]["amount"] = 1.09
+        result.update(comission=0.09, comissionType=0)
         await gateway.close()
         gateway.client = httpx.AsyncClient(
             transport=httpx.MockTransport(lambda request: httpx.Response(200, json=result))

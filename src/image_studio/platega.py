@@ -28,10 +28,15 @@ def transaction_id(value):
         raise PlategaError("invalid_transaction") from None
 
 
-def amount_kopecks(value):
+def amount_kopecks(value, *, allow_zero=False):
     try:
         amount = Decimal(str(value)) * 100
-        if not amount.is_finite() or amount <= 0 or amount != amount.to_integral_value():
+        if (
+            not amount.is_finite()
+            or amount < 0
+            or (amount == 0 and not allow_zero)
+            or amount != amount.to_integral_value()
+        ):
             raise ValueError
         return int(amount)
     except (ValueError, InvalidOperation, TypeError):
@@ -51,6 +56,10 @@ class PlategaStoreMixin:
             state TEXT NOT NULL DEFAULT 'ready',transaction_id TEXT UNIQUE,url TEXT,
             expires REAL,next_check REAL NOT NULL DEFAULT 0)""")
         c.execute("CREATE INDEX IF NOT EXISTS platega_due ON platega_orders(state,next_check)")
+        columns = {row[1] for row in c.execute("PRAGMA table_info(platega_orders)")}
+        for column in ("provider_amount", "provider_fee", "commission_type"):
+            if column not in columns:
+                c.execute(f"ALTER TABLE platega_orders ADD COLUMN {column} INTEGER")
         c.execute("""CREATE TABLE IF NOT EXISTS platega_sessions(
             user_id INTEGER PRIMARY KEY,token TEXT NOT NULL UNIQUE,message_id INTEGER,
             stage TEXT NOT NULL DEFAULT 'plans',pack TEXT,method TEXT,order_id TEXT,
@@ -85,7 +94,8 @@ class PlategaStoreMixin:
     def platega_get(self, order):
         with self.tx() as c:
             row = c.execute(
-                "SELECT i.*,p.method,p.state,p.transaction_id,p.url,p.expires,p.next_check "
+                "SELECT i.*,p.method,p.state,p.transaction_id,p.url,p.expires,p.next_check,"
+                "p.provider_amount,p.provider_fee,p.commission_type "
                 "FROM platega_orders p JOIN invoices i ON i.id=p.id WHERE p.id=?",
                 (order,),
             ).fetchone()
@@ -148,7 +158,17 @@ class PlategaStoreMixin:
                 ),
             )
 
-    def platega_bind(self, order, tx, *, url=None, expires=None):
+    def platega_bind(
+        self,
+        order,
+        tx,
+        *,
+        url=None,
+        expires=None,
+        provider_amount=None,
+        provider_fee=None,
+        commission_type=None,
+    ):
         with self.tx() as c:
             p = c.execute("SELECT * FROM platega_orders WHERE id=?", (order,)).fetchone()
             if p is None or p["transaction_id"] not in {None, tx}:
@@ -156,8 +176,9 @@ class PlategaStoreMixin:
             c.execute(
                 "UPDATE platega_orders SET transaction_id=?,url=COALESCE(?,url),"
                 "expires=COALESCE(?,expires),state=CASE WHEN state IN ('paid','chargebacked') THEN state "
-                "ELSE 'pending' END,next_check=? WHERE id=?",
-                (tx, url, expires, time.time() + 15, order),
+                "ELSE 'pending' END,next_check=?,provider_amount=COALESCE(?,provider_amount),"
+                "provider_fee=COALESCE(?,provider_fee),commission_type=COALESCE(?,commission_type) WHERE id=?",
+                (tx, url, expires, time.time() + 15, provider_amount, provider_fee, commission_type, order),
             )
             c.execute(
                 "UPDATE invoices SET provider_id=?,confirmation_url=COALESCE(?,confirmation_url) WHERE id=?",
@@ -264,11 +285,20 @@ class PlategaClient:
         details = value.get("paymentDetails")
         if not isinstance(details, dict):
             raise PlategaError("amount_mismatch")
+        gross = amount_kopecks(details.get("amount"))
+        fee = amount_kopecks(value.get("comission", 0), allow_zero=True)
+        kind = value.get("comissionType")
+        if fee > gross:
+            raise PlategaError("amount_mismatch")
+        if gross != p["amount"]:
+            # Observed merchant API format: type 0 includes the customer's fee.
+            # Require exact integer arithmetic; never accept arbitrary overpayment.
+            if type(kind) is not int or kind != 0 or fee <= 0 or gross - fee != p["amount"]:
+                raise PlategaError("amount_mismatch")
         merchant = value.get("merchantId", value.get("mechantId"))
         if (
             transaction_id(merchant) != transaction_id(self.settings.platega_merchant_id)
             or details.get("currency") != "RUB"
-            or amount_kopecks(details.get("amount")) != p["amount"]
             or p["transaction_id"] not in {None, tx}
         ):
             raise PlategaError("identity_mismatch")
@@ -278,13 +308,19 @@ class PlategaClient:
         if callback is not None and (
             transaction_id(callback.get("id")) != tx
             or callback.get("currency") != "RUB"
-            or amount_kopecks(callback.get("amount")) != p["amount"]
+            or amount_kopecks(callback.get("amount")) not in {p["amount"], gross}
             or callback.get("status") != status
         ):
             raise PlategaError("callback_mismatch")
         if p["state"] == "chargebacked" and status != "CHARGEBACKED":
             raise PlategaError("chargeback_needs_review")
-        self.store.platega_bind(payload, tx)
+        self.store.platega_bind(
+            payload,
+            tx,
+            provider_amount=gross,
+            provider_fee=fee,
+            commission_type=kind if type(kind) is int else None,
+        )
         if status == "CONFIRMED":
             return self.store.payment(p["user_id"], payload, "RUB", p["amount"], tx, is_test=False)
         if status == "CHARGEBACKED":

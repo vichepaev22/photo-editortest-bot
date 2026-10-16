@@ -37,6 +37,8 @@ class OfflineBot(Bot):
         self.sent.append(method)
         if method.__api_method__ == "answerCallbackQuery":
             return True
+        if method.__api_method__ == "deleteMessage":
+            return True
         if method.__api_method__ == "editMessageText" and self.edit_error:
             raise TelegramBadRequest(method=method, message=self.edit_error)
         if method.__api_method__ == "sendMessage":
