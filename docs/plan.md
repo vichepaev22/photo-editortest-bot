@@ -101,3 +101,6 @@ CR-PLATEGA-002, accepted/implemented/verified-offline/deployed: owner-only пл�
 
 
 CR-PLATEGA-003 accepted/implemented/verified-offline/deployed: воспроизвести комиссию/повторное открытие, исправить нормализацию и UI с сохранением прав, проверить короткие сценарии, CI, backup/VPS; дождаться автоматического подтверждения уже оплаченного заказа. Систематическая диагностика выявила canonical1.09/comission0.09/type0 при заказе1 и редактирование старого message_id.
+
+
+CR-ADMIN-INBOX-001 accepted/implemented, verification in progress: тихий журнал и per-admin отметки, UI обоих ботов, безопасные старые кнопки; целевые offline проверки → CI Telegram → guarded VPS release с backup и сверкой данных/health. Права и пользовательские подтверждения не меняются.

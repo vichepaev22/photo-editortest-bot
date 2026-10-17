@@ -148,22 +148,27 @@ def test_session_settings_questions_and_restart(store):
     assert again.admin_claim_event() is None
     again.admin_configure("enabled", True)
     again.admin_configure("questions", True)
-    assert again.admin_claim_event()["kind"] == "questions"
+    assert again.admin_claim_event() is None
+    assert again.admin_inbox(99)["events"][0]["kind"] == "questions"
 
 
 def test_outbox_dedup_recovery_retry_and_terminal(store):
     assert store.admin_event("one", "generation", {"status": "started"})
     assert not store.admin_event("one", "generation", {})
+    assert store.admin_claim_event() is None
+    ready(store)
+    op = store.admin_prepare_credit(99, 10, "add", 2, "support")
+    store.admin_confirm_credit(99, op["id"])
     row = store.admin_claim_event()
-    assert row["attempts"] == 1
-    assert store.admin_event_detail(row["id"])["payload"] == {"status": "started"}
+    assert row["attempts"] == 1 and row["kind"] == "credit_grant"
     with pytest.raises(DomainError):
         store.admin_event_detail("0" * 32)
     again = Store(store.path)
     again.admin_recover_events()
     assert again.admin_claim_event() is None
-    assert again.admin_events()[0]["status"] == "needs_review"
-    again.admin_event("retry", "generation", {})
+    assert again.admin_event_detail(row["id"])["status"] == "needs_review"
+    op = again.admin_prepare_credit(99, 10, "add", 2, "retry notice")
+    again.admin_confirm_credit(99, op["id"])
     for attempt in range(3):
         row = again.admin_claim_event()
         assert row["attempts"] == attempt + 1
@@ -171,7 +176,7 @@ def test_outbox_dedup_recovery_retry_and_terminal(store):
         with again.tx() as c:
             c.execute("UPDATE admin_outbox SET next_attempt=0 WHERE id=?", (row["id"],))
     assert again.admin_claim_event() is None
-    assert again.admin_events()[0]["status"] == "failed"
+    assert again.admin_event_detail(row["id"])["status"] == "failed"
 
 
 def test_generation_events_metadata_and_production_payment_only(store):

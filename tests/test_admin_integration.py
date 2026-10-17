@@ -86,7 +86,7 @@ async def test_capture_storage_error_does_not_fail_user_generation(tmp_path, mon
     assert ui[4].wallet(1) == (0, 0)
 
 
-async def test_real_store_outbox_delivery_metadata_without_description(tmp_path):
+async def test_real_generation_stays_in_quiet_inbox_without_description(tmp_path):
     ui = build_ui(tmp_path, admin_user_id=99)
     ui[2].admin_set_sharing(1, True)
     await feed(ui, callback="preset:hair")
@@ -104,9 +104,12 @@ async def test_real_store_outbox_delivery_metadata_without_description(tmp_path)
     delivery = AdminDelivery(Receiver(), ui[2], 99)
     while await delivery.process_one():
         pass
-    assert len(sent) == 3 and all(target == 99 for target, _ in sent)
-    assert all("Секретное описание" not in text for _, text in sent)
-    assert {row["status"] for row in ui[2].admin_events()} == {"sent"}
+    assert sent == []
+    inbox = ui[2].admin_inbox(99)
+    assert inbox["total"] == inbox["unread"] == 3
+    assert "Секретное описание" not in str(inbox)
+    assert {row["status"] for row in inbox["events"]} == {"pending"}
+    assert all(row["attempts"] == 0 for row in inbox["events"])
 
 
 @pytest.mark.parametrize("text", ["Описание", "/неизвестная"])

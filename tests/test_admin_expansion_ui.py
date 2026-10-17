@@ -230,17 +230,38 @@ async def test_credit_confirmation_expiry_and_wrong_actor_are_noop(expanded):
     assert ui[2].wallet(42) == (5, 0)
 
 
-async def test_notifications_mute_categories_persist(expanded):
+async def test_notifications_inbox_and_legacy_switches_stay_quiet(expanded):
     ui, _, _ = expanded
-    await send(ui, callback="admin:setting:enabled:0")
-    assert ui[2].admin_claim_event() is None
-    await send(ui, callback="admin:setting:questions:0")
-    reopened = Store(ui[2].path)
-    assert not reopened.admin_settings()["enabled"]
-    assert not reopened.admin_settings()["questions"]
-    await send(ui, callback="admin:setting:enabled:1")
-    sent = await send(ui, callback="admin:settings")
-    assert "Все уведомления: включены" in text_methods(sent)[0].text
+    store = ui[2]
+    for callback in ("admin:setting:enabled:0", "admin:setting:questions:1", "admin:setting:enabled:1", "admin:settings"):
+        sent = await send(ui, callback=callback)
+        assert "Сообщения в основной чат отключены" in text_methods(sent)[0].text
+        assert store.admin_claim_event() is None
+    sent = await send(ui, "/admin")
+    button = next(b for row in text_methods(sent)[0].reply_markup.inline_keyboard for b in row
+                  if b.callback_data == "admin:inbox:0")
+    unread = store.admin_unread_count(OWNER)
+    assert button.style == "success" and f"🔔 Уведомления · {unread}" == button.text
+    await send(ui, callback="admin:inbox:0")
+    assert store.admin_unread_count(OWNER) == unread
+    await send(ui, callback="admin:event:" + store.admin_events()[0]["id"])
+    assert Store(store.path).admin_unread_count(OWNER) == unread - 1
+    store.admin_event("later", "questions", {"user_id": 42, "text": "help"})
+    await send(ui, callback="admin:readall", user_id=99)
+    # The outsider's first visit adds an event; it must not read the inbox.
+    assert store.admin_unread_count(OWNER) == unread + 1
+    await send(ui, callback="admin:readall")
+    assert store.admin_unread_count(OWNER) == 0
+
+
+async def test_failed_detail_render_does_not_read_event(expanded):
+    from unittest.mock import AsyncMock
+    ui, controller, _ = expanded
+    event = ui[2].admin_events()[0]
+    controller._show = AsyncMock(side_effect=RuntimeError("offline render failure"))
+    with pytest.raises(RuntimeError):
+        await controller.event(None, event["id"])
+    assert ui[2].admin_unread_count(OWNER) == 1
 
 
 async def test_event_receipts_payment_metadata_and_full_muted_question(expanded):

@@ -31,7 +31,7 @@ _RESERVE_ACTION = {"reserved": "зарезервировано", "spent": "сп�
 
 def _button(text, data):
     style = None
-    if data in {"admin:filter:paying", "admin:filter:visited"} or data.startswith(("admin:confirm:", "admin:reason:")):
+    if data.startswith("admin:inbox:") or data in {"admin:filter:paying", "admin:filter:visited"} or data.startswith(("admin:confirm:", "admin:reason:")):
         style = "success"
     elif data in {"admin:filter:all", "admin:search", "admin:settings", "admin:home"} or data.startswith("admin:events:"):
         style = "primary"
@@ -105,7 +105,7 @@ class PrivateVisitMiddleware(BaseMiddleware):
         return await handler(event, data)
 
 
-def _render(stats, *, listing=False, query="", filter="all"):
+def _render(stats, *, listing=False, query="", filter="all", unread=0):
     lines = [
         "<b>Статистика бота</b>",
         f"Заходили в бот: {stats.get('visited_users', stats['total_users'])}",
@@ -146,7 +146,7 @@ def _render(stats, *, listing=False, query="", filter="all"):
     keyboard.extend([
         [_button(label, "admin:filter:" + key) for key, label in _FILTERS.items()],
         [_button("🔎 Найти пользователя", "admin:search")],
-        [_button("События", "admin:events:0"), _button("Уведомления", "admin:settings")],
+        [_button(f"🔔 Уведомления · {unread}", "admin:inbox:0")],
     ])
     if listing:
         keyboard.append([_button("← Администрирование", "admin:home")])
@@ -206,7 +206,7 @@ class AdminController:
         stats = self.store.admin_stats(page=page)
         if stats["page"] != page:
             raise DomainError("invalid_admin_page")
-        await self._show(message, *_render(stats), edit=edit, panel_id=panel_id)
+        await self._show(message, *_render(stats, unread=self.store.admin_unread_count(self.admin_user_id)), edit=edit, panel_id=panel_id)
 
     async def users(self, message, *, query="", page=0, filter="all", edit=False, panel_id=None):
         stats = self.store.admin_search(query, page=page, filter=filter)
@@ -216,7 +216,7 @@ class AdminController:
         if panel_id:
             data["_panel_id"] = panel_id
         self._session("user_list", data, message=message if edit else None)
-        await self._show(message, *_render(stats, listing=True, query=query, filter=filter), edit=edit, panel_id=panel_id)
+        await self._show(message, *_render(stats, listing=True, query=query, filter=filter, unread=self.store.admin_unread_count(self.admin_user_id)), edit=edit, panel_id=panel_id)
 
     async def card(self, message, user_id, *, edit=False):
         user = self.store.admin_user(user_id, trial=self.trial_access)
@@ -244,14 +244,44 @@ class AdminController:
         await self._show(message, text, _keyboard(*rows, [("История изменений", f"admin:audit:{user_id}")], _home_row()), edit=edit)
 
     async def settings(self, message, *, edit=False):
-        settings = self.store.admin_settings()
-        lines = ["<b>Уведомления владельцу</b>", "Заглушение сохраняет события в очереди до включения уведомлений."]
+        # Old settings buttons must never reactivate background alerts.
+        await self.inbox(message, edit=edit)
+
+    async def inbox(self, message, page=0, *, edit=False):
+        inbox = self.store.admin_inbox(self.admin_user_id, page)
+        lines = [f"<b>🔔 Уведомления</b> · новых: {inbox['unread']}",
+                 "События сохраняются здесь. Сообщения в основной чат отключены."]
         rows = []
-        for key, label in _CATEGORIES.items():
-            enabled = bool(settings[key])
-            lines.append(f"{label}: {'включены' if enabled else 'выключены'}")
-            rows.append([(f"{'Выключить' if enabled else 'Включить'}: {label}", f"admin:setting:{key}:{int(not enabled)}")])
-        await self._show(message, "\n".join(lines), _keyboard(*rows, _home_row()), edit=edit)
+        for event in inbox["events"]:
+            payload = event["payload"]
+            label = _EVENT_NAMES.get(event["kind"], "Событие")
+            marker = "🔵" if event["read_at"] is None else "✓"
+            lines.append(f"{marker} {_timestamp(event.get('created'))} · {label}\n"
+                         f"Пользователь: {escape(_short(payload.get('user_id'), 16))}")
+            if event.get("message_id"):
+                lines.append("История доставки · сообщение: " + escape(_short(event["message_id"], 32)))
+            if event["kind"] == "questions":
+                lines.append(escape(str(payload.get("text", ""))[:140]))
+            elif event["kind"] == "payment":
+                lines.append(f"{_money(payload.get('amount'))} · Начислено: {escape(_short(payload.get('credits'), 16))}")
+            elif event["kind"] == "generation":
+                lines.append(f"{_preset(payload.get('preset'))} · {_status(payload.get('status'), _JOB_STATUS)}")
+            elif event["kind"] == "credit_grant":
+                lines.append(f"Дополнительно: +{escape(_short(payload.get('credits'), 16))} ген. · "
+                             f"{_status(event.get('status'), _DELIVERY)}")
+            rows.append([(f"{marker} {label}", "admin:event:" + event["id"])])
+        if not inbox["events"]:
+            lines.append("Пока уведомлений нет.")
+        lines.append(f"Страница {page + 1}/{inbox['pages']}")
+        nav = []
+        if page:
+            nav.append(("←", f"admin:inbox:{page - 1}"))
+        if page + 1 < inbox["pages"]:
+            nav.append(("→", f"admin:inbox:{page + 1}"))
+        rows += [nav, [("Обновить", f"admin:inbox:{page}")]]
+        if inbox["unread"]:
+            rows.append([("✓ Прочитать всё", "admin:readall")])
+        await self._show(message, "\n\n".join(lines), _keyboard(*rows, _home_row()), edit=edit)
 
     async def consume_text(self, message):
         if not self.active(message) or not message.text:
@@ -389,41 +419,14 @@ class AdminController:
                 await self.settings(callback.message, edit=True)
             elif match := re.fullmatch(r"admin:setting:(enabled|registration|questions|generation|payment):([01])", raw, re.ASCII):
                 self.store.admin_session_clear(self.admin_user_id)
-                self.store.admin_configure(match[1], match[2] == "1")
                 await self.settings(callback.message, edit=True)
-            elif match := re.fullmatch(rf"admin:events:({_PAGE})", raw, re.ASCII):
+            elif raw == "admin:readall":
                 self.store.admin_session_clear(self.admin_user_id)
-                page = int(match[1])
-                events = self.store.admin_events(page=page)
-                lines, rows = ["<b>События</b>"], []
-                for event in events:
-                    payload = event["payload"]
-                    label = _EVENT_NAMES.get(event["kind"], "Событие")
-                    lines.append(f"{_timestamp(event.get('created'))} · {label} · {_status(event.get('status'), _DELIVERY)}\nПользователь: {escape(_short(payload.get('user_id'), 16))}")
-                    if event.get("message_id"):
-                        lines.append("Сообщение Telegram: " + escape(_short(event["message_id"], 32)))
-                    if event["kind"] == "questions":
-                        lines.append(escape(str(payload.get("text", ""))[:140]))
-                    elif event["kind"] == "payment":
-                        lines.append(f"{_money(payload.get('amount'))} · Начислено: {escape(_short(payload.get('credits'), 16))}")
-                    elif event["kind"] == "generation":
-                        lines.append(f"{_preset(payload.get('preset'))} · {_status(payload.get('status'), _JOB_STATUS)}")
-                    elif event["kind"] == "credit_grant":
-                        lines.append(f"Дополнительно: +{escape(_short(payload.get('credits'), 16))} ген.")
-                    rows.append([("Подробно · " + label, "admin:event:" + event["id"])])
-                    job = payload.get("job_id") or payload.get("job")
-                    if isinstance(job, str) and re.fullmatch(_UUID, job, re.ASCII):
-                        rows.append([("Задание " + job[:8], "admin:job:" + job)])
-                nav = []
-                if page:
-                    nav.append(("←", f"admin:events:{page - 1}"))
-                if len(events) == 10 and page < 999999999:
-                    nav.append(("→", f"admin:events:{page + 1}"))
-                if not events:
-                    lines.append("Событий пока нет.")
-                lines.append(f"Страница {page + 1}")
-                # Keep Telegram's text limit even for ten long user questions.
-                await self._show(callback.message, "\n\n".join(lines), _keyboard(*rows, nav, _home_row()), edit=True)
+                self.store.admin_mark_all_read(self.admin_user_id)
+                await self.inbox(callback.message, edit=True)
+            elif match := re.fullmatch(rf"admin:(?:inbox|events):({_PAGE})", raw, re.ASCII):
+                self.store.admin_session_clear(self.admin_user_id)
+                await self.inbox(callback.message, int(match[1]), edit=True)
             elif match := re.fullmatch(rf"admin:event:({_UUID})", raw, re.ASCII):
                 self.store.admin_session_clear(self.admin_user_id)
                 await self.event(callback.message, match[1], edit=True)
@@ -444,7 +447,8 @@ class AdminController:
             _EVENT_NAMES.get(kind, "Событие"),
             f"Событие: {event_id}",
             f"Время: {_timestamp(event.get('created'))}",
-            f"Доставка: {_status(event.get('status'), _DELIVERY)} · попыток: {_short(event.get('attempts'), 4)}",
+            (f"Доставка пользователю: {_status(event.get('status'), _DELIVERY)} · попыток: {_short(event.get('attempts'), 4)}"
+             if kind == "credit_grant" else "Сохранено в админ-панели. Автоматическая отправка отключена."),
             f"Сообщение в Telegram: {_short(event.get('message_id'), 32)}",
         ]
         if event.get("status") == "needs_review":
@@ -480,7 +484,8 @@ class AdminController:
             lines.extend([f"Дополнительно: +{_short(payload.get('credits'), 16)} ген.",
                           "Получатель уведомления: пользователь", "Пометка администратора:",
                           _short(payload.get("reason"), 240)])
-        await self._show(message, "\n".join(lines), _keyboard(*rows, [("← События", "admin:events:0")], _home_row()), edit=edit, html=False)
+        await self._show(message, "\n".join(lines), _keyboard(*rows, [("← Уведомления", "admin:inbox:0")], _home_row()), edit=edit, html=False)
+        self.store.admin_mark_read(self.admin_user_id, event_id)
 
     async def job(self, message, job_id, *, result=False, edit=False):
         detail = self.store.admin_job_detail(job_id)

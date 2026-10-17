@@ -45,6 +45,9 @@ class AdminStoreMixin:
                 id TEXT PRIMARY KEY,event_key TEXT UNIQUE NOT NULL,kind TEXT NOT NULL,payload TEXT NOT NULL,
                 created REAL NOT NULL,status TEXT NOT NULL DEFAULT 'pending',attempts INTEGER NOT NULL DEFAULT 0,
                 next_attempt REAL NOT NULL DEFAULT 0,message_id INTEGER,finished REAL)""",
+            """CREATE TABLE IF NOT EXISTS admin_notification_reads(
+                actor INTEGER NOT NULL,event_id TEXT NOT NULL,read_at REAL NOT NULL,
+                PRIMARY KEY(actor,event_id))""",
             "CREATE INDEX IF NOT EXISTS admin_outbox_delivery ON admin_outbox(status,next_attempt,created)",
             """CREATE TABLE IF NOT EXISTS admin_question_limits(
                 user_id INTEGER PRIMARY KEY,last_at REAL NOT NULL)""",
@@ -310,6 +313,45 @@ class AdminStoreMixin:
             return [self._admin_row(r) for r in c.execute("SELECT * FROM admin_outbox ORDER BY created DESC,rowid DESC "
                                                         "LIMIT 10 OFFSET ?", (page * 10,))]
 
+    def admin_inbox(self, actor, page=0):
+        _actor(actor)
+        if type(page) is not int or not 0 <= page <= 100000:
+            raise DomainError("invalid_admin_page")
+        with self.tx() as c:
+            total, unread = c.execute("""SELECT COUNT(*),COALESCE(SUM(r.event_id IS NULL),0)
+                FROM admin_outbox o LEFT JOIN admin_notification_reads r
+                ON r.event_id=o.id AND r.actor=?""", (actor,)).fetchone()
+            pages = max(1, (total + 9) // 10)
+            if page >= pages:
+                raise DomainError("invalid_admin_page")
+            events = [self._admin_row(row) for row in c.execute("""SELECT o.*,r.read_at
+                FROM admin_outbox o LEFT JOIN admin_notification_reads r
+                ON r.event_id=o.id AND r.actor=? ORDER BY o.created DESC,o.rowid DESC
+                LIMIT 10 OFFSET ?""", (actor, page * 10))]
+            return {"events": events, "total": total, "unread": unread, "page": page, "pages": pages}
+
+    def admin_unread_count(self, actor):
+        _actor(actor)
+        with self.tx() as c:
+            return c.execute("""SELECT COUNT(*) FROM admin_outbox o WHERE NOT EXISTS
+                (SELECT 1 FROM admin_notification_reads r WHERE r.actor=? AND r.event_id=o.id)""",
+                (actor,)).fetchone()[0]
+
+    def admin_mark_read(self, actor, event_id):
+        _actor(actor)
+        _id(event_id)
+        with self.tx() as c:
+            if not c.execute("SELECT 1 FROM admin_outbox WHERE id=?", (event_id,)).fetchone():
+                raise DomainError("unknown_admin_event")
+            return bool(c.execute("INSERT OR IGNORE INTO admin_notification_reads VALUES(?,?,?)",
+                                  (actor, event_id, time.time())).rowcount)
+
+    def admin_mark_all_read(self, actor):
+        _actor(actor)
+        with self.tx() as c:
+            return c.execute("""INSERT OR IGNORE INTO admin_notification_reads(actor,event_id,read_at)
+                SELECT ?,id,? FROM admin_outbox""", (actor, time.time())).rowcount
+
     def admin_event_detail(self, event_id):
         _id(event_id)
         with self.tx() as c:
@@ -321,11 +363,10 @@ class AdminStoreMixin:
     def admin_claim_event(self):
         with self.tx() as c:
             c.execute("DELETE FROM admin_job_shares WHERE expires<=?", (time.time(),))
+            # Administrative alerts are a quiet inbox. Only recipient credit notices
+            # use delivery, regardless of historical switches or queued alerts.
             row = c.execute("""SELECT o.* FROM admin_outbox o WHERE o.status='pending' AND o.attempts<3
-                AND o.next_attempt<=? AND (o.kind='credit_grant' OR
-                (o.kind IN ('registration','questions','generation','payment') AND
-                (SELECT enabled FROM admin_settings WHERE category='enabled')=1 AND
-                (SELECT enabled FROM admin_settings WHERE category=o.kind)=1))
+                AND o.next_attempt<=? AND o.kind='credit_grant'
                 ORDER BY o.created,o.rowid LIMIT 1""", (time.time(),)).fetchone()
             if row is None:
                 return None
