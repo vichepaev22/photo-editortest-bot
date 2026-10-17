@@ -104,3 +104,6 @@ CR-PLATEGA-003 accepted/implemented/verified-offline/deployed: воспроиз�
 
 
 CR-ADMIN-INBOX-001 accepted/implemented, verification in progress: тихий журнал и per-admin отметки, UI обоих ботов, безопасные старые кнопки; целевые offline проверки → CI Telegram → guarded VPS release с backup и сверкой данных/health. Права и пользовательские подтверждения не меняются.
+
+
+CR-ADMIN-INBOX-001 completed: тихие журналы Telegram/MAX размещены; per-admin прочтение, безопасные legacy callbacks и recipient notices проверены. CI Telegram 556 passed; MAX merge 14 passed; backup/SQLite/env/HTTPS/services PASS. Подробности и граница проверки телефона — docs/verification.md.
