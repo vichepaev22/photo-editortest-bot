@@ -15,9 +15,9 @@ def test_ten_dollar_budget_and_pack_contribution():
     assert result["api_only_calls_for_10_usd"] == 166
     assert result["api_rub"] == pytest.approx(5.4)
     assert result["loaded_cost_rub"] == pytest.approx(7.21)
-    assert result["packs"][1]["price_rub"] == 249
-    assert result["packs"][1]["credits"] == 10
-    assert result["packs"][1]["net_receipts_rub"] == pytest.approx(223.4277)
+    assert result["packs"][1]["price_rub"] == 480
+    assert result["packs"][1]["credits"] == 50
+    assert result["packs"][1]["net_receipts_rub"] == pytest.approx(430.704)
 
 
 @pytest.mark.parametrize("kwargs", [{"fx": 0}, {"api_usd": 0}, {"retry_multiplier": 0.5}])

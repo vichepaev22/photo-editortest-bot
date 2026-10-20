@@ -173,9 +173,9 @@ async def test_merge_shortcut_requires_two_distinct_photos(ui):
     assert confirmation(await send(ui, "На одной фотографии")) is None
     await send(ui, photo=True)
     button = confirmation(await send(ui, "Вместе в парке"))
-    assert button and "2" in button.text
+    assert button and "1" in button.text
     await send(ui, callback=button.callback_data)
-    assert len(ui[2].jobs(1)) == 1 and ui[2].wallet(1) == (3, 2)
+    assert len(ui[2].jobs(1)) == 1 and ui[2].wallet(1) == (3, 1)
 
 
 async def test_owned_result_button_reuses_file_and_rejects_foreign_owner(ui):
