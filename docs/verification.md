@@ -441,3 +441,16 @@ VPS release /root/obraz-admin-inbox-20261017-r2: четыре source-хеша с
 
 
 CR-PRICING-005 / CR-OWNER-QUALITY-001 — offline21.10.2026: Telegram78 целевых passed, дополнительные8 owner-quality/merge passed; новая проверка исторического checkout и JS syntax выполнены, Ruff PASS. MAX30 passed, четыре обновлённых ожидания нового каталога затем4 passed; подписи бонусов и idempotent settlement покрыты общими проверками. Sunburst model metadata GET=200 без платной генерации; действующий owner-unlimited и ID совпали. CI/VPS pending. Никаких новых реальных заказов/оплат/Image-вызовов агентом.
+
+
+## CR-PRICING-005 / CR-OWNER-QUALITY-001 — размещено21.10.2026
+
+Accepted / implemented / verified-offline / deployed. Source9313546151576bb2e45deddf865d3dc99881b9d2; CI/Pages https://github.com/vichepaev22/photo-editortest-bot/actions/runs/39490312627 success —568 passed /33.54s, Ruff PASS. MAX34 целевых сценария проверены; новые цены/бонусы, callback идемпотентность, исторические160/5 и платёж1₽, late payment, доступ к чужим счетам и списание/удаление сохранены. JavaScript обоих приложений node --check PASS. Два прежних ожидания старого каталога/стоимости merge обновлены по принятому требованию; проверки финансовой однократности не ослаблялись.
+
+VPS /root/obraz-pricing-20261021:23 source-файла сверены, backup source/env/SQLite перед изменением; строки всех прежних таблиц сохранены (Telegram18, MAX26), добавлена только owner_image_quality Telegram. В env изменены только IMAGE_MODEL и IMAGE_QUALITY. Обе службы active/NRestarts0, соседний Bagizov/PID не изменён, SQLite quick_check=ok. Основная модель обеих платформ gpt-image-2.5-sunburst-2026-09-08 /medium. Неоплачиваемый GET metadata модели200; реальных заказов и платных Image-вызовов агента0.
+
+Публично проверены HTTPS API обоих ботов, MAX /api/plans24000/48000/72000 копеек, totals20/50/75, bonus0/10/15, base20/40/60, SBP-only. MAX-студия на VPS и Telegram-студия GitHub Pages отдают index с app.js?v=20261021-packages, хешиJS совпадают. Telegram HTTPS-корень VPS намеренно не используется как frontend; проверка обращается к реальному адресу Pages, инфраструктура не менялась.
+
+Telegram «Купить» при старом открытом счёте теперь открывает текущий каталог; старый счёт продолжает обслуживаться по собственным160/5 и не переоценивается. Бонус входит в единое начисление50/75. Баланс показывает общий доступный остаток и бесплатную/купленную части. /quality доступна только настроенному владельцу Telegram с прежним unlimited; выборMedium/High/Xhigh/Max1024 сохраняется и фиксируется для нового задания. Чужие кнопки/пользователи его не включают, повторная отправка не меняет уже созданный job, режимы остальных пользователей Medium. Платные публичные множители3/5/10 и Max2K не включены.
+
+Платёж новой суммы и визуальное сравнение качества на настоящих фото выполняет владелец. Их нельзя считать уже подтверждёнными этим offline/HTTP-релизом. Никаких рассылок пользователям, новых подарков или изменения регулярных выдач не выполнялось.

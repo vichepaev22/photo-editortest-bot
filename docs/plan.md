@@ -110,3 +110,6 @@ CR-ADMIN-INBOX-001 completed: тихие журналы Telegram/MAX разме�
 
 
 CR-PRICING-005 / CR-OWNER-QUALITY-001 accepted/in progress: единый каталог + бонусы → ledger и UI/баланс → приватный тест качества Telegram → целевые тесты/CI → проверенная установка обеих служб с сохранением исторических счетов и публикацией актуального frontend.
+
+
+CR-PRICING-005 / CR-OWNER-QUALITY-001 completed21.10.2026: обновлены каталоги, бонусы, баланс, Sunburst Medium, owner-only /quality Telegram и stale checkout. CI568/Ruff/JS PASS; VPS backup, сохранение данных, HTTPS и актуальные frontend проверены. Реальная новая оплата/качество фото — проверка владельца.
