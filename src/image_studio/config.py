@@ -6,10 +6,10 @@ from urllib.parse import urlsplit
 from dotenv import load_dotenv
 
 MODELS = {
-    "gpt-image-2.5-flare",
     "gpt-image-2.5-flare-2026-09-08",
-    "gpt-image-2.5-sunburst",
+    "gpt-image-2.5-flare",
     "gpt-image-2.5-sunburst-2026-09-08",
+    "gpt-image-2.5-sunburst",
 }
 
 
@@ -17,7 +17,7 @@ MODELS = {
 class Settings:
     data_dir: Path = Path("data")
     image_provider: str = "mock"
-    image_model: str = "gpt-image-2.5-flare-2026-09-08"
+    image_model: str = "gpt-image-2.5-sunburst-2026-09-08"
     quality: str = "medium"
     reference_analysis_model: str = "gpt-4.1-mini-2025-04-14"
     bot_token: str = ""
@@ -91,7 +91,7 @@ class Settings:
         return cls(
             data_dir=Path(os.getenv("DATA_DIR", "data")),
             image_provider=os.getenv("IMAGE_PROVIDER", "mock"),
-            image_model=os.getenv("IMAGE_MODEL", "gpt-image-2.5-flare-2026-09-08"),
+            image_model=os.getenv("IMAGE_MODEL", "gpt-image-2.5-sunburst-2026-09-08"),
             quality=os.getenv("IMAGE_QUALITY", "medium"),
             reference_analysis_model=os.getenv("REFERENCE_ANALYSIS_MODEL", "gpt-4.1-mini-2025-04-14"),
             bot_token=os.getenv("TELEGRAM_BOT_TOKEN", ""),

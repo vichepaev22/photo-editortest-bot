@@ -9,6 +9,7 @@ from aiogram.exceptions import TelegramBadRequest
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup, Message
 
 from .platega import PlategaError
+from .pricing import credits_text, plan_button
 from .purchase_demo import METHODS, _legal_footer
 from .store import DomainError
 
@@ -38,7 +39,7 @@ class PlategaCheckout:
         plans = self.store.platega_plans(s["user_id"])
         order = self.store.platega_get(s["order_id"]) if s["order_id"] else None
         if order and order["state"] == "paid":
-            text += f"✅ Оплата подтверждена\nНачислено генераций: {order['credits']}.\nСпасибо за покупку!"
+            text += f"✅ Оплата подтверждена\nНачислено: {credits_text(order['pack'], order['credits'], order['amount']/100)}.\nСпасибо за покупку!"
             return text, InlineKeyboardMarkup(
                 inline_keyboard=[
                     [InlineKeyboardButton(text="💎 Мои попытки", callback_data="nav:balance")],
@@ -62,7 +63,7 @@ class PlategaCheckout:
             rows = [
                 [
                     button(
-                        f"{name} · {price} ₽ ({count} {'генерация' if count == 1 else 'генераций'})",
+                        plan_button(key, name, price, count),
                         "plan:" + key,
                     )
                 ]
@@ -70,7 +71,9 @@ class PlategaCheckout:
             ]
         else:
             name, price, count = plans[s["pack"]]
-            text += f"Пакет: {name}\nСтоимость: {price} ₽\nГенераций: {count}\n\n"
+            if order:
+                price, count = order["amount"] / 100, order["credits"]
+            text += f"Пакет: {name}\nСтоимость: {price:g} ₽\nГенераций: {credits_text(s["pack"], count, price)}\n\n"
             if s["stage"] == "methods":
                 text += "Выберите способ оплаты через Platega."
                 rows = [

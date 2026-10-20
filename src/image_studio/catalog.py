@@ -18,7 +18,7 @@ PRESETS = {
     "enhance": Preset(
         "Улучшение фото", "Reduce noise and improve natural lighting without inventing identity details."
     ),
-    "merge": Preset("Объединить два фото", "Combine both reference images in one natural composition.", 2, 2),
+    "merge": Preset("Объединить два фото", "Combine both reference images in one natural composition.", 2, 1),
     "document_original": Preset(
         "Фото на документы · исходник", "Prepare the original photograph for printing by cropping and resizing only."
     ),
@@ -37,8 +37,8 @@ PRESETS = {
     ),
 }
 
-# Proposed prices, not a verified profitable tariff. Amounts are integer RUB kopecks.
-PACKS = {"small": (5, 14900), "medium": (10, 24900), "large": (25, 54900)}
+# Legacy sandbox aliases follow the current catalog; historical invoices keep their amounts.
+PACKS = {"small": (20, 24000), "medium": (50, 48000), "large": (75, 72000)}
 
 
 def prompt_for(preset: str, description: str) -> str:

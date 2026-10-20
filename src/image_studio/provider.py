@@ -23,7 +23,7 @@ class ProviderError(Exception):
 
 
 class ImageProvider(Protocol):
-    async def edit(self, images: list[Path], prompt: str) -> ImageResult: ...
+    async def edit(self, images: list[Path], prompt: str, *, quality=None) -> ImageResult: ...
     async def close(self): ...
 
 
@@ -34,7 +34,10 @@ class OpenAIProvider:
         self.analysis_model = analysis_model
         self.client = client or AsyncOpenAI(api_key=key, max_retries=0, timeout=180)
 
-    async def edit(self, images, prompt):
+    async def edit(self, images, prompt, *, quality=None):
+        selected = self.quality if quality is None else quality
+        if selected not in {"low", "medium", "high", "xhigh", "max"}:
+            raise ProviderError("invalid_quality")
         try:
             with ExitStack() as stack:
                 files = [stack.enter_context(path.open("rb")) for path in images]
@@ -43,7 +46,7 @@ class OpenAIProvider:
                     image=files,
                     prompt=prompt,
                     n=1,
-                    quality=self.quality,
+                    quality=selected,
                     size="1024x1024",
                     output_format="jpeg",
                 )
@@ -83,7 +86,7 @@ class MockProvider:
         self.analysis_calls += 1
         return mock_recipe(), {"model": "mock", "usage": {}, "billable": False}
 
-    async def edit(self, images, prompt):
+    async def edit(self, images, prompt, *, quality=None):
         self.calls += 1
         with Image.open(images[0]) as source:
             output = source.convert("RGB")

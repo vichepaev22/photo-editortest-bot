@@ -28,7 +28,7 @@ def canonical(order, tx=None, status="CONFIRMED"):
         "id": tx or str(uuid.uuid4()),
         "status": status,
         "mechantId": MERCHANT,
-        "paymentDetails": {"amount": 160, "currency": "RUB"},
+        "paymentDetails": {"amount": 240, "currency": "RUB"},
         "payload": order,
     }
 
@@ -46,9 +46,9 @@ async def test_verified_payment_once_and_start_preserved(setup):
     gateway = PlategaClient(settings, store, httpx.AsyncClient(transport=httpx.MockTransport(handler)))
     assert await gateway.reconcile(result["id"], order["id"])
     assert not await gateway.reconcile(result["id"], order["id"])
-    assert store.wallet(11, trial=True) == (6, 0)
+    assert store.wallet(11, trial=True) == (21, 0)
     assert store.has_manual_access(11)
-    assert store.admin_stats()["revenue_kopecks"] == 16000
+    assert store.admin_stats()["revenue_kopecks"] == 24000
     with store.tx() as c:
         assert c.execute("SELECT COUNT(*) FROM platega_notices").fetchone()[0] == 1
 
@@ -106,12 +106,12 @@ async def test_buy_during_original_trial_retains_reserve_and_refund(setup, fail)
         httpx.AsyncClient(transport=httpx.MockTransport(lambda request: httpx.Response(200, json=result))),
     )
     await gateway.reconcile(result["id"], order["id"])
-    assert store.wallet(11, trial=True) == (6, 1)
+    assert store.wallet(11, trial=True) == (21, 1)
     if fail:
         store.fail(job, "failed")
     else:
         store.finish(job, "x.jpg", {}, "test")
-    assert store.wallet(11, trial=True) == (6 if fail else 5, 0)
+    assert store.wallet(11, trial=True) == (21 if fail else 20, 0)
 
 
 @pytest.mark.asyncio
@@ -132,17 +132,17 @@ async def test_chargeback_does_not_credit_again(setup):
     result["status"] = "CONFIRMED"
     with pytest.raises(PlategaError):
         await gateway.reconcile(result["id"], order["id"])
-    assert store.wallet(11, trial=True)[0] == 6
+    assert store.wallet(11, trial=True)[0] == 21
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("callback_amount", [160, 174.4])
+@pytest.mark.parametrize("callback_amount", [240, 254.4])
 async def test_verified_customer_fee_is_separate_from_order_price(setup, callback_amount):
     store, settings = setup
     order = store.platega_order(11, "express", "sbp")
     result = canonical(order["id"])
     result.update(comission=14.4, comissionType=0)
-    result["paymentDetails"]["amount"] = 174.4
+    result["paymentDetails"]["amount"] = 254.4
     gateway = PlategaClient(
         settings,
         store,
@@ -151,11 +151,11 @@ async def test_verified_customer_fee_is_separate_from_order_price(setup, callbac
     body = {"id": result["id"], "amount": callback_amount, "currency": "RUB", "status": "CONFIRMED"}
     assert await gateway.reconcile(result["id"], order["id"], callback=body)
     assert not await gateway.reconcile(result["id"], order["id"], callback=body)
-    assert store.wallet(11, trial=True) == (6, 0)
+    assert store.wallet(11, trial=True) == (21, 0)
     p = store.platega_get(order["id"])
     assert (p["amount"], p["provider_amount"], p["provider_fee"], p["commission_type"]) == (
-        16000,
-        17440,
+        24000,
+        25440,
         1440,
         0,
     )
@@ -165,7 +165,7 @@ async def test_verified_customer_fee_is_separate_from_order_price(setup, callbac
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
     "gross,fee,kind",
-    [(174.39, 14.4, 0), (174.4, -14.4, 0), (174.4, 14.4, 1), (174.4, 14.4, False), (174.4, None, 0)],
+    [(254.39, 14.4, 0), (254.4, -14.4, 0), (254.4, 14.4, 1), (254.4, 14.4, False), (254.4, None, 0)],
 )
 async def test_fee_mismatch_never_credits(setup, gross, fee, kind):
     store, settings = setup
@@ -198,7 +198,7 @@ async def test_callback_auth_and_duplicate_confirmation(setup):
     )
     app = FastAPI()
     install_platega_routes(app, settings, gateway)
-    body = {"id": result["id"], "amount": 160, "currency": "RUB", "status": "CONFIRMED"}
+    body = {"id": result["id"], "amount": 240, "currency": "RUB", "status": "CONFIRMED"}
     async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="https://local") as api:
         assert (await api.post("/api/payments/platega/callback", json=body)).status_code == 404
         assert store.wallet(11, trial=True) == (1, 0)
@@ -207,9 +207,9 @@ async def test_callback_auth_and_duplicate_confirmation(setup):
             assert (
                 await api.post("/api/payments/platega/callback", json=body, headers=headers)
             ).status_code == 200
-        assert store.wallet(11, trial=True) == (6, 0)
+        assert store.wallet(11, trial=True) == (21, 0)
         assert (await api.get("/api/payments/platega/result")).status_code == 200
-        assert store.wallet(11, trial=True) == (6, 0)
+        assert store.wallet(11, trial=True) == (21, 0)
 
 
 def test_payment_test_is_retired_for_everyone(setup):
@@ -247,7 +247,7 @@ async def test_checkout_one_message_and_restart(setup, pack):
 
         posted.append(request.method)
         assert json.loads(request.content)["paymentDetails"] == {
-            "amount": {"express": 160, "base": 380, "premium": 790}[pack],
+            "amount": {"express": 240, "base": 480, "premium": 720}[pack],
             "currency": "RUB",
         }
         return httpx.Response(

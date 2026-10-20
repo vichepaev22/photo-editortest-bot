@@ -320,7 +320,7 @@ async def test_job_input_owner_merge_cost_and_insufficient_credit(studio):
     second = (await client.post("/api/photos", content=image(), headers=headers)).json()["id"]
     merged = await client.post("/api/jobs", json=body(photo, "merge") | {"photos": [photo, second]},
                                headers=headers)
-    assert merged.status_code == 200 and store.wallet(1) == (3, 2)
+    assert merged.status_code == 200 and store.wallet(1) == (3, 1)
     no_credit = await auth(client, 3)
     store.consent(3)
     third = (await client.post("/api/photos", content=image(), headers=no_credit)).json()["id"]

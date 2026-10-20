@@ -36,6 +36,7 @@ from .admin import register_admin
 from .admin_delivery import AdminDelivery
 from .catalog import PRESETS
 from .media import MAX_BYTES, Media, normalize
+from .owner_quality import register_owner_quality
 from .platega import PlategaClient, install_platega_routes
 from .platega_checkout import PlategaCheckout
 from .provider import MockProvider, OpenAIProvider
@@ -312,6 +313,7 @@ def build_dispatcher(settings, store, media, service, *, step_messages=None, pur
     router = Router()
     router.message.filter(F.chat.type == "private")
     router.callback_query.filter(F.message.chat.type == "private")
+    register_owner_quality(router, service)
     admin = register_admin(
         router, store, settings.admin_user_id, media=media, trial_access=trial,
         unlimited_user_id=settings.admin_user_id if settings.owner_unlimited_testing else 0,
@@ -344,7 +346,8 @@ def build_dispatcher(settings, store, media, service, *, step_messages=None, pur
             await answer("Сначала подтвердите условия и согласие в /start.", reply_markup=CONSENT)
             return
         if service.is_unlimited(user):
-            await answer("♾ Безлимитное тестирование\n\nКоличество генераций для вашего аккаунта не ограничено.",
+            await answer("♾ Безлимитное тестирование\n\nКоличество генераций для вашего аккаунта не ограничено.\n"
+                         "🧪 Выбор качества для ваших тестов: /quality",
                          reply_markup=BACK if edit else MAIN)
             return
         total, reserved = service.wallet(user)

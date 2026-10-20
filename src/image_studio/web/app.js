@@ -537,7 +537,7 @@
     window.ObrazWelcome?.open();
     if(state.preview){
       state.connection='ready';
-      state.catalog=[{id:'reference',label:'Фото по примеру',inputs:2,credits:1},{id:'hair',label:'Причёска',inputs:1,credits:1},{id:'clothes',label:'Одежда',inputs:1,credits:1},{id:'glasses',label:'Очки',inputs:1,credits:1},{id:'background',label:'Фон',inputs:1,credits:1},{id:'enhance',label:'Улучшение фото',inputs:1,credits:1},{id:'merge',label:'Объединить два фото',inputs:2,credits:state.trial?1:2},{id:'document',label:'Фото на документы',inputs:1,credits:1}];
+      state.catalog=[{id:'reference',label:'Фото по примеру',inputs:2,credits:1},{id:'hair',label:'Причёска',inputs:1,credits:1},{id:'clothes',label:'Одежда',inputs:1,credits:1},{id:'glasses',label:'Очки',inputs:1,credits:1},{id:'background',label:'Фон',inputs:1,credits:1},{id:'enhance',label:'Улучшение фото',inputs:1,credits:1},{id:'merge',label:'Объединить два фото',inputs:2,credits:1},{id:'document',label:'Фото на документы',inputs:1,credits:1}];
       $('modeBadge').textContent='Предпросмотр';renderPresets();renderPhotos();renderMe();showEntry();
       document.querySelector('.privacy-note').innerHTML='<span class="privacy-dot"></span>Фото остаются только в вашей вкладке браузера.';
       $('resultsView').querySelector('.fine-print').textContent='Предпросмотр интерфейса: генерация и хранение результатов пока не подключены.';

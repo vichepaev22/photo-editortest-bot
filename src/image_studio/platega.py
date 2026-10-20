@@ -12,6 +12,7 @@ from urllib.parse import urlsplit
 import httpx
 
 from .admin_store import DomainError
+from .pricing import credits_text
 from .purchase_demo import PLANS
 
 log = logging.getLogger(__name__)
@@ -222,7 +223,7 @@ class PlategaClient:
         body = {
             "paymentMethod": 2 if p["method"] == "sbp" else 13,
             "paymentDetails": {"amount": p["amount"] // 100, "currency": "RUB"},
-            "description": f"Образ: {p['credits']} генераций",
+            "description": "Образ: " + credits_text(p["pack"], p["credits"], p["amount"] / 100),
             "payload": order,
             "orderId": order,
             "metadata": {"userId": str(p["user_id"]), "userName": f"user-{p['user_id']}"},

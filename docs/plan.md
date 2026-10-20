@@ -107,3 +107,6 @@ CR-ADMIN-INBOX-001 accepted/implemented, verification in progress: тихий ж
 
 
 CR-ADMIN-INBOX-001 completed: тихие журналы Telegram/MAX размещены; per-admin прочтение, безопасные legacy callbacks и recipient notices проверены. CI Telegram 556 passed; MAX merge 14 passed; backup/SQLite/env/HTTPS/services PASS. Подробности и граница проверки телефона — docs/verification.md.
+
+
+CR-PRICING-005 / CR-OWNER-QUALITY-001 accepted/in progress: единый каталог + бонусы → ledger и UI/баланс → приватный тест качества Telegram → целевые тесты/CI → проверенная установка обеих служб с сохранением исторических счетов и публикацией актуального frontend.

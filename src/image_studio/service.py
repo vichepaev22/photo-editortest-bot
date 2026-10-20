@@ -25,6 +25,8 @@ class Service:
         self.trial_access = trial_access
         self.unlimited_user_id = unlimited_user_id
         self.recurring_free = recurring_free
+        from .owner_quality import OwnerQuality
+        self.owner_quality = OwnerQuality(store, unlimited_user_id) if unlimited_user_id else None
         if recurring_free:
             store.enable_recurring_free(trial=trial_access, exempt=unlimited_user_id)
 
@@ -185,7 +187,12 @@ class Service:
         payload_path = self.media.path(f"{user}/{payload_name}")
         if not payload_path.exists() and self.store.job(job)["status"] == "queued":
             try:
-                self.media.save(user, json.dumps({"inputs": inputs, "prompt": prompt}).encode(), payload_name)
+                payload = {"inputs": inputs, "prompt": prompt}
+                if self.owner_quality and self.is_unlimited(user):
+                    selected = self.owner_quality.current(user)
+                    if selected:
+                        payload["owner_quality"] = selected
+                self.media.save(user, json.dumps(payload).encode(), payload_name)
             except OSError:
                 self.store.fail(job, "storage_error")
                 raise DomainError("storage_error") from None
@@ -220,8 +227,14 @@ class Service:
                     data = source.read(MAX_BYTES + 1)
                 usage, request_id = {}, None
             else:
-                result = await self.provider.edit(inputs, payload["prompt"])
+                selected = payload.get("owner_quality") if self.is_unlimited(j["user_id"]) and j["quota_exempt"] else None
+                if selected:
+                    result = await self.provider.edit(inputs, payload["prompt"], quality=selected)
+                else:
+                    result = await self.provider.edit(inputs, payload["prompt"])
                 data, usage, request_id = result.data, result.usage, result.request_id
+                if selected:
+                    usage = dict(usage, owner_quality=selected, image_model=getattr(self.provider, "model", "mock"))
                 if analysis is not None:
                     usage = {"image": usage, "reference_analysis": analysis}
             if j["preset"] in DOCUMENT_PRESETS:

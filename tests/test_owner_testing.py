@@ -66,13 +66,13 @@ async def test_owner_can_complete_five_without_grant_or_debit_others_keep_one(se
         assert connection.execute("SELECT COUNT(*) FROM events WHERE kind='trial_grant' AND ref='1'").fetchone()[0] == 0
 
 
-async def test_owner_gate_independent_of_trial_preserves_two_credit_merge(setup):
+async def test_owner_gate_independent_of_trial_uses_single_generation_merge(setup):
     store, media, provider, photos = setup
     service = Service(store, media, provider, unlimited_user_id=1)
     before = counters(store)
-    assert service.wallet(1) == (0, 0) and service.cost("merge") == 2
+    assert service.wallet(1) == (0, 0) and service.cost("merge") == 1
     job = service.submit(1, "merge", "merge", photos[1], "test")
-    assert (store.job(job)["trial"], store.job(job)["cost"], store.job(job)["quota_exempt"]) == (0, 2, 1)
+    assert (store.job(job)["trial"], store.job(job)["cost"], store.job(job)["quota_exempt"]) == (0, 1, 1)
     assert await service.process(job)
     assert counters(store) == before
     with pytest.raises(DomainError, match="^insufficient_credits$"):

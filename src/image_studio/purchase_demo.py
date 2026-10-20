@@ -9,7 +9,8 @@ from dataclasses import dataclass, replace
 from aiogram.exceptions import TelegramBadRequest
 from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, Message
 
-PLANS = {"express": ("Express", 160, 5), "base": ("Базовый", 380, 12), "premium": ("Premium", 790, 30)}
+from .pricing import PLANS, credits_text, plan_button
+
 METHODS = {"sbp": "СБП", "crypto": "Крипта"}
 TEST_URL = "https://example.com/?payment-demo=1"
 PRIVACY_URL = "https://telegra.ph/Politika-konfidencialnosti-10-09-68"
@@ -67,11 +68,11 @@ def render(checkout):
             "или новый вариант — 1 генерация.\n"
             "Демонстрационная сессия действует 60 минут с открытия."
         )
-        rows = [[action(f"{name} · {price} ₽ ({count} генераций)", "plan:" + key)]
+        rows = [[action(plan_button(key, name, price, count), "plan:" + key)]
                 for key, (name, price, count) in PLANS.items()]
     else:
         name, price, count = PLANS[checkout.plan]
-        text = notice + f"\nТариф: {name}\nСтоимость: {price} ₽\nГенераций: {count}\n"
+        text = notice + f"\nТариф: {name}\nСтоимость: {price} ₽\nГенераций: {credits_text(checkout.plan, count, price)}\n"
         if checkout.stage == "methods":
             text += "Выберите способ для демонстрации."
             rows = [[action(name, "method:" + key, style="success" if key == "sbp" else "primary")

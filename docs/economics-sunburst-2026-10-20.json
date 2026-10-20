@@ -1,0 +1,232 @@
+{
+  "date": "2026-10-20",
+  "status": "research_only_not_implemented",
+  "target_model": "gpt-image-2.5-sunburst-2026-09-08",
+  "target_quality": "medium",
+  "fx_rub_per_usd": 100,
+  "fx_note": "Planning actual funding cost assumption, not current official FX.",
+  "server_rub_per_month": 300,
+  "deductions_fraction_assumed": 0.3,
+  "deductions_note": "Unverified aggregate reserve for merchant fees, tax, withdrawal; not an actual Platega tariff.",
+  "input_tokens_assumed": {
+    "text": 500,
+    "image": 1000
+  },
+  "rates_usd_per_million": {
+    "text_input": 5,
+    "image_input": 8,
+    "image_output": 30
+  },
+  "estimate_note": "Official calculator groups Sunburst/Flare as GPT Image 2.5. This is an estimate, not measured Sunburst usage or provider invoice. Input tokens are assumptions. n=1, no cache, no streaming partials, direct Images API. Reference analysis, retries and more input images add cost.",
+  "output_formula_square": "ceil(band^2 * (2000000 + edge^2) / 4000000)",
+  "calculator_url": "https://developers.openai.com/_astro/GptImageTokenCalculator.react.COKX_Fgn.js",
+  "calculator_sha256": "3bd869c65b0ec7291a7f6900d4efa1e92c54e76aad2de866e3d918a5161fd18b",
+  "sources": [
+    "https://developers.openai.com/api/docs/models/gpt-image-2.5-sunburst",
+    "https://developers.openai.com/api/docs/pricing#image-generation",
+    "https://developers.openai.com/api/docs/guides/image-generation#cost-and-latency"
+  ],
+  "qualities": [
+    {
+      "quality": "medium",
+      "size": "1024x1024",
+      "estimated_output_tokens": 439,
+      "input_usd_assumed": 0.0105,
+      "output_usd_estimated": 0.01317,
+      "total_usd_estimated": 0.02367,
+      "total_rub_estimated": 2.367,
+      "planning_budget_rub": 4,
+      "proposed_credit_weight": 1
+    },
+    {
+      "quality": "medium",
+      "size": "2048x2048",
+      "estimated_output_tokens": 892,
+      "input_usd_assumed": 0.0105,
+      "output_usd_estimated": 0.02676,
+      "total_usd_estimated": 0.03726,
+      "total_rub_estimated": 3.726,
+      "planning_budget_rub": null,
+      "proposed_credit_weight": null
+    },
+    {
+      "quality": "high",
+      "size": "1024x1024",
+      "estimated_output_tokens": 1756,
+      "input_usd_assumed": 0.0105,
+      "output_usd_estimated": 0.05268,
+      "total_usd_estimated": 0.06318,
+      "total_rub_estimated": 6.318,
+      "planning_budget_rub": 9,
+      "proposed_credit_weight": 3
+    },
+    {
+      "quality": "high",
+      "size": "2048x2048",
+      "estimated_output_tokens": 3568,
+      "input_usd_assumed": 0.0105,
+      "output_usd_estimated": 0.10704,
+      "total_usd_estimated": 0.11754,
+      "total_rub_estimated": 11.754,
+      "planning_budget_rub": null,
+      "proposed_credit_weight": null
+    },
+    {
+      "quality": "xhigh",
+      "size": "1024x1024",
+      "estimated_output_tokens": 3122,
+      "input_usd_assumed": 0.0105,
+      "output_usd_estimated": 0.09366,
+      "total_usd_estimated": 0.10416,
+      "total_rub_estimated": 10.416,
+      "planning_budget_rub": 15,
+      "proposed_credit_weight": 5
+    },
+    {
+      "quality": "xhigh",
+      "size": "2048x2048",
+      "estimated_output_tokens": 6343,
+      "input_usd_assumed": 0.0105,
+      "output_usd_estimated": 0.19029,
+      "total_usd_estimated": 0.20079,
+      "total_rub_estimated": 20.079,
+      "planning_budget_rub": null,
+      "proposed_credit_weight": null
+    },
+    {
+      "quality": "max",
+      "size": "1024x1024",
+      "estimated_output_tokens": 7024,
+      "input_usd_assumed": 0.0105,
+      "output_usd_estimated": 0.21072,
+      "total_usd_estimated": 0.22122,
+      "total_rub_estimated": 22.122,
+      "planning_budget_rub": 30,
+      "proposed_credit_weight": 10
+    },
+    {
+      "quality": "max",
+      "size": "2048x2048",
+      "estimated_output_tokens": 14272,
+      "input_usd_assumed": 0.0105,
+      "output_usd_estimated": 0.42816,
+      "total_usd_estimated": 0.43866,
+      "total_rub_estimated": 43.866,
+      "planning_budget_rub": 60,
+      "proposed_credit_weight": 20
+    }
+  ],
+  "packages": [
+    {
+      "name": "Express",
+      "price_rub": 240,
+      "paid_medium_results": 20,
+      "bonus_medium_results": 0,
+      "total_medium_results": 20,
+      "effective_price_rub": 12.0,
+      "api_budget_rub": 80,
+      "deductions_budget_rub": 72.0,
+      "contribution_before_server_free_ads_rub": 88.0,
+      "purchases_to_cover_server": 4,
+      "purchases_for_10000_after_server_no_free_ads": 118,
+      "purchases_for_10000_after_server_and_100_active_free_users_no_ads": 145
+    },
+    {
+      "name": "Базовый",
+      "price_rub": 480,
+      "paid_medium_results": 40,
+      "bonus_medium_results": 10,
+      "total_medium_results": 50,
+      "effective_price_rub": 9.6,
+      "api_budget_rub": 200,
+      "deductions_budget_rub": 144.0,
+      "contribution_before_server_free_ads_rub": 136.0,
+      "purchases_to_cover_server": 3,
+      "purchases_for_10000_after_server_no_free_ads": 76,
+      "purchases_for_10000_after_server_and_100_active_free_users_no_ads": 94
+    },
+    {
+      "name": "Premium",
+      "price_rub": 720,
+      "paid_medium_results": 60,
+      "bonus_medium_results": 15,
+      "total_medium_results": 75,
+      "effective_price_rub": 9.6,
+      "api_budget_rub": 300,
+      "deductions_budget_rub": 216.0,
+      "contribution_before_server_free_ads_rub": 204.0,
+      "purchases_to_cover_server": 2,
+      "purchases_for_10000_after_server_no_free_ads": 51,
+      "purchases_for_10000_after_server_and_100_active_free_users_no_ads": 63
+    }
+  ],
+  "medium_cost_sensitivity": [
+    {
+      "api_per_result_rub": 4,
+      "contribution_by_package_rub": [
+        88.0,
+        136.0,
+        204.0
+      ]
+    },
+    {
+      "api_per_result_rub": 5,
+      "contribution_by_package_rub": [
+        68.0,
+        86.0,
+        129.0
+      ]
+    },
+    {
+      "api_per_result_rub": 6,
+      "contribution_by_package_rub": [
+        48.0,
+        36.0,
+        54.0
+      ]
+    },
+    {
+      "api_per_result_rub": 7,
+      "contribution_by_package_rub": [
+        28.0,
+        -14.0,
+        -21.0
+      ]
+    }
+  ],
+  "deduction_sensitivity": [
+    {
+      "fraction": 0.1,
+      "contribution_by_package_rub": [
+        136.0,
+        232.0,
+        348.0
+      ]
+    },
+    {
+      "fraction": 0.2,
+      "contribution_by_package_rub": [
+        112.0,
+        184.0,
+        276.0
+      ]
+    },
+    {
+      "fraction": 0.3,
+      "contribution_by_package_rub": [
+        88.0,
+        136.0,
+        204.0
+      ]
+    }
+  ],
+  "free_usage_scenario": {
+    "users": 100,
+    "results_per_30_days_each": 6,
+    "api_budget_each_rub": 4,
+    "cost_rub": 2400,
+    "excludes": "initial, channel, manual and owner usage"
+  },
+  "production_configuration_changed": false,
+  "paid_calls": 0
+}

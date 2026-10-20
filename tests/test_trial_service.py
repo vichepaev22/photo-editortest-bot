@@ -116,13 +116,13 @@ def test_trial_claim_requires_consent_and_is_per_user(trial):
     assert store.wallet(2) == (0, 0)
 
 
-async def test_disabled_trial_retains_two_credit_merge(trial):
+async def test_disabled_trial_uses_single_generation_merge(trial):
     store, media, provider, photos = trial
     service = Service(store, media, provider)
-    assert service.cost("merge") == 2
+    assert service.cost("merge") == 1
     job = service.submit(1, "paid", "merge", photos, "test")
     assert await service.process(job)
-    assert store.wallet(1) == (1, 0)
+    assert store.wallet(1) == (2, 0)
     assert not user_row(store, 1)["trial_granted"]
 
 

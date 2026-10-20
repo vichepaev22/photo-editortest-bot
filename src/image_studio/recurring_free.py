@@ -145,7 +145,8 @@ def balance_text(info):
     suffix = ('Следующее пополнение: ' + datetime.fromtimestamp(
         next_due, timezone(timedelta(hours=5))).strftime('%d.%m в %H:%M (МСК+2)')
         if next_due else 'Пополнения доступны после согласия в /start.')
-    return (f"🎁 Бесплатные: {info['free_available']} из 3\n"
+    return (f"Доступно генераций: {info['free_available'] + info['extra_available']}\n\n"
+            f"🎁 Бесплатные: {info['free_available']} из 3\n"
             f"💎 Купленные и дополнительные: {info['extra_available']}\n"
             f"Каждые 5 дней — +1 бесплатно.\n{suffix}")
 
