@@ -70,3 +70,27 @@ def test_old_checkout_displays_stored_price_instead_of_new_catalog(tmp_path):
     text,_=PlategaCheckout(store,None).render(session)
     assert "Стоимость: 160 ₽" in text and "Генераций: 5" in text
     assert "240 ₽" not in text and "бонусных" not in text
+
+
+async def test_reopening_buy_replaces_stale_checkout_but_keeps_old_invoice(tmp_path):
+    from datetime import datetime, timezone
+
+    from aiogram.types import Chat, Message
+    from test_purchase_demo import OfflineBot
+
+    from image_studio.platega_checkout import PlategaCheckout
+
+    store=Store(tmp_path/"old-session.db")
+    store.consent(11)
+    order=store.invoice(11,"express",16000,5)
+    with store.tx() as c:
+        c.execute("INSERT INTO platega_orders(id,user_id,method) VALUES(?,11,'sbp')",(order,))
+    session=store.platega_session(11)
+    previous_token=session["token"]
+    session.update(order_id=order,pack="express",method="sbp",stage="link")
+    store.platega_save_session(session)
+    incoming=Message(message_id=1,date=datetime.now(timezone.utc),chat=Chat(id=11,type="private")).as_(OfflineBot())
+    assert await PlategaCheckout(store,None).open(incoming,11)
+    current=store.platega_session(11)
+    assert current["stage"]=="plans" and current["order_id"] is None and current["token"]!=previous_token
+    assert (store.platega_get(order)["amount"],store.platega_get(order)["credits"])==(16000,5)

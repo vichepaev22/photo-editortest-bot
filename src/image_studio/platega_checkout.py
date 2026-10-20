@@ -137,9 +137,13 @@ class PlategaCheckout:
         async with self.locks[user % len(self.locks)]:
             s = self.store.platega_session(user)
             previous_message = s["message_id"]
+            plans = self.store.platega_plans(user)
+            order = self.store.platega_get(s["order_id"]) if s["order_id"] else None
+            plan = plans.get(s["pack"])
+            outdated = bool(order and plan and (order["amount"], order["credits"]) != (plan[1] * 100, plan[2]))
             if s["stage"] == "cancelled" or s["pack"] not in {None, *self.store.platega_plans(user)} or (
                 s["order_id"] and self.store.platega_get(s["order_id"])["state"] == "paid"
-            ):
+            ) or outdated:
                 if s["stage"] != "cancelled":
                     previous_message = None  # Keep the confirmed receipt in chat history.
                 s = self.store.platega_session(user, reset=True)
