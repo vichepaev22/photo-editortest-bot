@@ -16,7 +16,7 @@ dev = ["pytest>=8,<10", "pytest-asyncio>=0.24,<2", "ruff>=0.9,<1"]
 where = ["src"]
 
 [tool.setuptools.package-data]
-image_studio = ["web/*.html", "web/*.css", "web/*.js", "assets/*.mp4"]
+image_studio = ["web/*.html", "web/*.css", "web/*.js", "assets/*.mp4", "assets/onboarding/*.png"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

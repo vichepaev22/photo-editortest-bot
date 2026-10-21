@@ -99,20 +99,22 @@ def confirmation(sent):
 
 async def test_bottom_navigation_after_start_and_consent(ui):
     sent = await send(ui, "/start")
-    greeting = next(m for m in sent if m.__api_method__ == "sendMessage"
-                    and "фотостудия" in (getattr(m, "text", "") or ""))
+    greetings = [m for m in sent if m.__api_method__ == "sendMessage"]
+    greeting, final = greetings[0], greetings[-1]
     previews = [m for m in sent if m.__api_method__ == "sendMessageDraft"]
-    assert len(previews) == 4 and previews[-1].text == greeting.text
+    assert len(previews) == 12 and previews[-1].text == final.text
     assert all(p.can_stop is False for p in previews)
-    assert greeting.text.startswith("Образ · ваша фотостудия ✨")
-    assert "📄 Сделайте фото на документы." in greeting.text
-    assert "для совершеннолетних" in greeting.text
-    assert "передаются OpenAI; лицо может измениться" in greeting.text
-    assert not any(command in greeting.text for command in ("/terms", "/privacy", "/support"))
+    assert greeting.text.startswith("Привет! Я Образ — твоя фотостудия ✨")
+    assert "📄 Нужно фото на документы?" in final.text
+    assert "для совершеннолетних" in final.text
+    assert "передаются OpenAI; лицо может измениться" in final.text
+    assert not any(command in "".join(m.text for m in greetings)
+                   for command in ("/terms", "/privacy", "/support"))
+    assert len([m for m in sent if m.__api_method__ == "sendPhoto"]) == 3
     keyboards = [
         m.reply_markup for m in sent if isinstance(getattr(m, "reply_markup", None), ReplyKeyboardMarkup)
     ]
-    assert len(keyboards) == 1
+    assert len(keyboards) == 2 and keyboards[0] == keyboards[-1]
     keyboard = keyboards[0]
     assert keyboard.resize_keyboard
     assert keyboard.is_persistent is False and keyboard.one_time_keyboard is False

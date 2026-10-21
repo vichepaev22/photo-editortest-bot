@@ -1,5 +1,26 @@
 # Проверки и границы результата
 
+## CR-TELEGRAM-COLLAGES-001 — подключение PNG, 22.10.2026, offline verified / release pending
+
+Владелец предоставил три PNG, разрешил Telegram-first интеграцию. Они скопированы
+без изменения байтов в assets/onboarding; исходники проверены Pillow.verify,
+размеры1086×446,1088×492,1084×494; каждый файл меньше1MB и проходит лимиты sendPhoto.
+SHA256: 80dd134c4f541085… / a94b84805325b2f3… / 4088c703029d7a7a… (полные хеши — release manifest).
+Context7 aiogram3.31.0: FSInputFile/sendPhoto, прежний sendMessageDraft сохранён.
+
+Целевые onboarding/welcome/start: **8 passed / 25.53s**; отдельный новый сценарий
+согласия/повторного /start: **1 passed / 9.58s**; Ruff src/tests PASS. Проверены
+ровно три пары sendMessage→sendPhoto,12 растущих draft-превью с can_stop=false,
+порядок пользовательских файлов, MAIN с первого сообщения и в конце, прежние
+сведения о передаче фото/совершеннолетии/режиме. При429 пауза retry_after, при
+неопределённой сетевой отправке фото не дублируется, следующие описания доступны.
+Новому пользователю согласие предлагается после третьей картинки; повторный
+/start после согласия не меняет остаток и не создаёт image-job. До реализации
+проверка обнаружила отсутствие нового модуля (ModuleNotFoundError,11.29s).
+Изменения ограничены Telegram и его упакованными PNG; MAX/Mini App не менялись.
+CI/guarded VPS release pending. Реальных Image/LLM/платёжных вызовов и тестовых
+сообщений пользователям0. Просмотр всей последовательности на iPhone — владельцем.
+
 ## CR-TELEGRAM-COLLAGES-001 — 22.10.2026, brief delivered / integration pending assets
 
 Документационная поставка: start-collages-brief.md содержит три готовых текста

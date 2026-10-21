@@ -36,6 +36,7 @@ from .admin import register_admin
 from .admin_delivery import AdminDelivery
 from .catalog import PRESETS
 from .media import MAX_BYTES, Media, normalize
+from .onboarding import send_onboarding
 from .owner_quality import register_owner_quality
 from .platega import PlategaClient, install_platega_routes
 from .platega_checkout import PlategaCheckout
@@ -47,7 +48,6 @@ from .result_delivery import ResultDeliveryDeferred, send_result_document
 from .runtime import RUNTIME_DIR, BotRuntime
 from .service import Service
 from .store import DomainError, Store
-from .streaming_answer import animated_welcome
 from .subscriptions import (
     SUBSCRIPTION_KEYBOARD,
     offer_channel_bonus,
@@ -651,16 +651,10 @@ def build_dispatcher(settings, store, media, service, *, step_messages=None, pur
         )
         if service.recurring_free and not service.is_unlimited(message.from_user.id):
             mode = f"\nДоступно генераций: {total - reserved}.\n" + RULE_TEXT
-        await animated_welcome(
-            message,
-            "Образ · ваша фотостудия ✨\n\n"
-            "💇 Примерьте причёску, одежду или очки, смените фон.\n"
-            "🧩 Объедините фотографии.\n"
-            "📄 Сделайте фото на документы.\n\n"
+        await send_onboarding(message, MAIN, notice=(
             "Сервис для совершеннолетних. Используйте собственные фото или фото людей, давших согласие. "
-            "В рабочем режиме изображения передаются OpenAI; лицо может измениться.\n" + mode,
-            MAIN,
-        )
+            "В рабочем режиме изображения передаются OpenAI; лицо может измениться.\n" + mode
+        ))
         if not store.has_consent(message.from_user.id):
             await message.answer(
                 "Перед началом подтвердите совершеннолетие, права на фото и согласие изображённых людей. "
