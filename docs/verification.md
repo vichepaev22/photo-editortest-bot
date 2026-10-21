@@ -1,6 +1,6 @@
 # Проверки и границы результата
 
-## CR-TELEGRAM-COLLAGES-001 — подключение PNG, 22.10.2026, offline verified / release pending
+## CR-TELEGRAM-COLLAGES-001 — подключение PNG, 22.10.2026, offline verified / deployed
 
 Владелец предоставил три PNG, разрешил Telegram-first интеграцию. Они скопированы
 без изменения байтов в assets/onboarding; исходники проверены Pillow.verify,
@@ -18,8 +18,15 @@ Context7 aiogram3.31.0: FSInputFile/sendPhoto, прежний sendMessageDraft �
 /start после согласия не меняет остаток и не создаёт image-job. До реализации
 проверка обнаружила отсутствие нового модуля (ModuleNotFoundError,11.29s).
 Изменения ограничены Telegram и его упакованными PNG; MAX/Mini App не менялись.
-CI/guarded VPS release pending. Реальных Image/LLM/платёжных вызовов и тестовых
-сообщений пользователям0. Просмотр всей последовательности на iPhone — владельцем.
+Итог: [CI39686843160](https://github.com/vichepaev22/photo-editortest-bot/actions/runs/39686843160),
+source92f293585585702011d1c7745b32d246c2040289, **586 passed / 104.58s**, Ruff PASS.
+Telegram-only release telegram-onboarding-20261022 установлен: bot.py, onboarding.py,
+pyproject.toml и три PNG (6 файлов); backup в `/root/telegram-onboarding-20261022/backup`.
+19 прежних таблиц и все существующие строки сохранены; миграций0, env не менялся.
+Перед установкой активных jobs/резервов0. Новый модуль и наличие трёх файлов
+проверены под пользователем image-studio; служба active/NRestarts0, health200,
+соседние MAX/Bagizov не перезапускались. Реальных Image/LLM/платёжных вызовов и
+тестовых сообщений пользователям0. Просмотр всей последовательности на iPhone — владельцем.
 
 ## CR-TELEGRAM-COLLAGES-001 — 22.10.2026, brief delivered / integration pending assets
 
