@@ -1,5 +1,23 @@
 # Проверки и границы результата
 
+## CR-TELEGRAM-LIVE-001 — 22.10.2026, offline verified / release pending
+
+Каноническое требование: PRD.md CR-TELEGRAM-LIVE-001; устройство и источники:
+telegram-live-response.md. Только личный диалог Telegram, Mini App/MAX не меняются.
+Целевые streaming/live/bot-flow/trial-service/result-delivery: **68 passed / 52.68s**.
+После уточнения обработки кнопки live: **6 passed / 13.15s**. Ruff src/tests PASS.
+Проверены один message_id/parse_mode=None/нормализация/UTF-16, typing-finally,
+отмена источника без позднего финала, 429 с retry_after и интервал редактирования,
+ownership и старые кнопки, отмена очереди/резерв ровно раз, running-stop с
+сохранением флага после повторного открытия SQLite, расход успешного результата,
+возврат при ошибке без позднего уведомления, ручное скачивание сохранённого файла.
+Реальные стадии передаются из Service; дополнительные Image/LLM-вызовы: **0**.
+
+SSH preflight: Telegram/MAX/Bagizov active, NRestarts0; Telegram активных задач0,
+резервов0. Базовые source hashes сохранены локально/на VPS; release ещё не выполнен.
+CI и guarded Telegram release — отдельные последующие доказательства. Проверка
+в реальном клиенте Telegram с генерацией — владельцем после установки.
+
 CR-FREE-005, 15.10.2026: требование принято и внесено в PRD R07–R08, план и приёмку.
 Текущий статус: implemented/verified-offline/deployed; итоговые доказательства и граница реальной доставки — в отчёте CR-FREE-005 в конце файла.
 Проверены управляемое время/SQLite, резерв/возврат, предел три, идемпотентность

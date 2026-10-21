@@ -55,6 +55,7 @@ from .subscriptions import (
     subscription_hint,
 )
 from .telegram_free import telegram_free_delivery
+from .telegram_live import TelegramLive, progress_text, stop_keyboard
 
 
 def buttons(rows):
@@ -154,6 +155,7 @@ COMMANDS = [
         ("bonus", "Бонус за подписку на каналы"),
         ("id", "Мой ID для пилотного доступа"),
         ("cancel", "Сбросить новую заявку"),
+        ("stop", "Остановить текущий ответ"),
         ("result", "Мои готовые результаты"),
         ("delete", "Удалить локальные фото"),
         ("terms", "Условия тестирования"),
@@ -284,13 +286,15 @@ async def deliver_result(bot, store, steps, user, job, path, *, demo=False, unli
         await offer_channel_bonus(bot, store, user, job)
 
 
-async def processing_activity(bot, store, interval=4):
+async def processing_activity(bot, store, interval=4, *, live=None):
     while True:
         try:
             users = {
                 job["user_id"] for job in store.jobs()
                 if type(job["user_id"]) is int and job["user_id"] > 0
                 and job["status"] in {"queued", "running"}
+                and not job.get("telegram_silent")
+                and (live is None or job["id"] not in live.replies)
             }
             for user in sorted(users):
                 try:
@@ -322,12 +326,29 @@ def build_dispatcher(settings, store, media, service, *, step_messages=None, pur
     drafts = {}
     steps = step_messages if step_messages is not None else StepMessages(store)
     dp["step_messages"] = steps
+    live = TelegramLive(store)
+    dp["telegram_live"] = live
+    service.progress = live.stage
     purchases = purchase_demo if purchase_demo is not None else PurchaseDemo()
     dp["purchase_demo"] = purchases
 
     async def step_answer(message, user, draft, text, *, reply_markup=BACK):
-        sent = await message.answer(text, reply_markup=reply_markup)
+        sent = await message.answer(text, reply_markup=reply_markup, parse_mode=None)
         await steps.sent(message.bot, user, draft.steps_token, sent)
+        return sent
+
+    def stopped_text(state):
+        return ("⏹ Задача отменена до запуска. Попытка не потрачена." if state == "cancelled" else
+                "⏹ Живой ответ остановлен. Создание уже запущено: готовый файл будет в «Мои результаты». "
+                "Успешная генерация использует одну попытку." if state == "saved" else
+                "Сейчас нет активного ответа. Готовые файлы — в «Мои результаты».")
+
+    async def stop_current(user):
+        for job in store.jobs(user):
+            if job["status"] in {"queued", "running"} and not job["telegram_silent"]:
+                state = await live.stop(user, job["id"])
+                return state
+        return "inactive"
 
     def pricing(user=None):
         if service.is_unlimited(user):
@@ -380,6 +401,11 @@ def build_dispatcher(settings, store, media, service, *, step_messages=None, pur
     async def choose_preset(message, user, key):
         if not store.has_consent(user):
             await message.answer("Сначала подтвердите условия и согласие на фото.", reply_markup=CONSENT)
+            return
+        stopped = await stop_current(user)
+        if stopped == "saved":
+            await message.answer(stopped_text(stopped) + " Дождитесь завершения, затем начните новый образ.",
+                                 reply_markup=MAIN)
             return
         if len(drafts) >= 1000:
             oldest = min(drafts, key=lambda owner: drafts[owner].created)
@@ -504,13 +530,12 @@ def build_dispatcher(settings, store, media, service, *, step_messages=None, pur
             return
         drafts.pop(user, None)
         steps.bind(user, draft.steps_token, job)
-        await step_answer(
+        sent = await step_answer(
             message, user, draft,
-            ("📄 Подготавливаем лист с четырьмя фото\n\nБез ИИ. Обычно несколько секунд.\n"
-             if draft.preset == "document_original" else "✨ Создаём ваш образ\n\nОбычно до 2 минут.\n")
-            + "Результат появится здесь и в «Мои результаты».",
-            reply_markup=MAIN,
+            progress_text(draft.preset, draft.description),
+            reply_markup=stop_keyboard(job),
         )
+        live.attach(message.bot, user, job, sent.message_id, draft.preset, draft.description)
 
     async def send_result(message, user, job):
         record = store.result(user, job)
@@ -820,6 +845,30 @@ def build_dispatcher(settings, store, media, service, *, step_messages=None, pur
         drafts.pop(message.from_user.id, None)
         await message.answer("Новая заявка сброшена. Уже начатая обработка продолжается.", reply_markup=MAIN)
 
+    @router.message(Command("stop"))
+    async def stop(message: Message):
+        state = await stop_current(message.from_user.id)
+        await message.answer(stopped_text(state), reply_markup=MAIN)
+
+    @router.callback_query(F.data.startswith("live:stop:"))
+    async def stop_callback(callback: CallbackQuery):
+        user = callback.from_user.id
+        if callback.message.chat.id != user:
+            await callback.answer("Это не ваша задача", show_alert=True)
+            return
+        job = callback.data.removeprefix("live:stop:")
+        attached = job in live.replies
+        try:
+            if store.job(job)["user_id"] != user:
+                raise DomainError("unknown_job")
+            await callback.answer()
+            state = await live.stop(user, job)
+        except DomainError:
+            await callback.answer("Эта задача недоступна", show_alert=True)
+            return
+        if not attached and state != "inactive":
+            await callback.message.edit_text(stopped_text(state), parse_mode=None, reply_markup=BACK)
+
     @router.message(Command("delete"))
     async def delete(message: Message):
         try:
@@ -984,8 +1033,10 @@ def build_dispatcher(settings, store, media, service, *, step_messages=None, pur
             )
             return
         if not draft or not store.has_consent(user):
+            stopped = await stop_current(user)
             forwarded = capture_question()
-            await message.answer("Выберите функцию и загрузите фото через /start."
+            await message.answer((stopped_text(stopped) + "\n\n" if stopped != "inactive" else "")
+                                 + "Выберите функцию и загрузите фото через /start."
                                  + (" Сообщение передано владельцу для поддержки." if forwarded else ""))
             return
         source = message.reply_to_message
@@ -1171,6 +1222,9 @@ async def run(settings):
             )
 
             async def deliver(user, job, path):
+                await live.detach(job)
+                if store.job(job)["telegram_silent"]:
+                    return False
                 await deliver_result(bot, store, steps, user, job, path,
                                      demo=settings.image_provider == "mock", unlimited=service.is_unlimited(user))
 
@@ -1183,11 +1237,12 @@ async def run(settings):
                     "provider_rate_limit": "Студии нужно немного времени. Попробуйте позже.",
                     "provider_authentication": "Студия временно недоступна. Попробуйте позже.",
                 }
-                await bot.send_message(
-                    user,
-                    explanations.get(reason, "Обработка не выполнена.")
-                    + f" Резерв {'генерации' if settings.trial_access else 'кредитов'} возвращён.",
-                )
+                text = (explanations.get(reason, "Обработка не выполнена.")
+                        + f" Резерв {'генерации' if settings.trial_access else 'кредитов'} возвращён.")
+                if job in live.replies:
+                    await live.detach(job, text=text)
+                else:
+                    await bot.send_message(user, text, parse_mode=None)
 
             service = Service(store, media, provider, deliver, notify, trial_access=settings.trial_access,
                               unlimited_user_id=settings.admin_user_id if settings.owner_unlimited_testing else 0,
@@ -1196,6 +1251,7 @@ async def run(settings):
             live_checkout = PlategaCheckout(store, platega) if platega else None
             dp = build_dispatcher(settings, store, media, service, step_messages=steps,
                                   purchase_demo=live_checkout)
+            live = dp["telegram_live"]
             await bot.set_my_commands([
                 command.model_copy(update={"description": {
                     "demo": "Мои бесплатные генерации", "id": "Мой Telegram ID",
@@ -1258,7 +1314,8 @@ async def run(settings):
             tasks.extend([
                 asyncio.create_task(service.worker()),
                 asyncio.create_task(telegram_free_delivery(bot, store, MAIN).worker()),
-                asyncio.create_task(processing_activity(bot, store)),
+                asyncio.create_task(processing_activity(bot, store, live=live)),
+                asyncio.create_task(live.worker()),
                 asyncio.create_task(watch_stop()),
             ])
             if settings.admin_user_id:

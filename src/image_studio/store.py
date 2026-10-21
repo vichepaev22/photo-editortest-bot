@@ -96,6 +96,9 @@ class Store(AdminStoreMixin, FreeStoreMixin, PlategaStoreMixin):
                     "CHECK(is_test IN (0,1))"
                 )
             job_columns = {row["name"] for row in c.execute("PRAGMA table_info(jobs)")}
+            if "telegram_silent" not in job_columns:
+                c.execute("ALTER TABLE jobs ADD COLUMN telegram_silent INTEGER NOT NULL DEFAULT 0 "
+                          "CHECK(telegram_silent IN (0,1))")
             if "trial" not in job_columns:
                 c.execute("ALTER TABLE jobs ADD COLUMN trial INTEGER NOT NULL DEFAULT 0 CHECK(trial IN (0,1))")
             if "quota_exempt" not in job_columns:
@@ -547,16 +550,35 @@ class Store(AdminStoreMixin, FreeStoreMixin, PlategaStoreMixin):
             j = c.execute("SELECT * FROM jobs WHERE id=?", (job,)).fetchone()
             if j is None or j["status"] not in {"queued", "running", "review"}:
                 return
-            if j["free_credit"]:
-                c.execute("UPDATE users SET free_reserved=free_reserved-1 WHERE id=?", (j["user_id"],))
-            elif not j["quota_exempt"] and j["trial"]:
-                c.execute("UPDATE users SET trial_reserved=trial_reserved-1 WHERE id=?", (j["user_id"],))
-            elif not j["quota_exempt"]:
-                c.execute("UPDATE users SET reserved=reserved-? WHERE id=?", (j["cost"], j["user_id"]))
-            c.execute("UPDATE jobs SET status='failed',error=? WHERE id=?", (reason[:60], job))
-            self._event(c, "release", job)
-            self.platega_promote(c, j["user_id"])
-            self._admin_generation_event(c, job, "failed", "released")
+            self._fail(c, j, reason)
+
+    def _fail(self, c, j, reason):
+        if j["free_credit"]:
+            c.execute("UPDATE users SET free_reserved=free_reserved-1 WHERE id=?", (j["user_id"],))
+        elif not j["quota_exempt"] and j["trial"]:
+            c.execute("UPDATE users SET trial_reserved=trial_reserved-1 WHERE id=?", (j["user_id"],))
+        elif not j["quota_exempt"]:
+            c.execute("UPDATE users SET reserved=reserved-? WHERE id=?", (j["cost"], j["user_id"]))
+        c.execute("UPDATE jobs SET status='failed',error=? WHERE id=?", (reason[:60], j["id"]))
+        self._event(c, "release", j["id"])
+        self.platega_promote(c, j["user_id"])
+        self._admin_generation_event(c, j["id"], "failed", "released")
+
+    def stop_telegram_job(self, user, job):
+        # BEGIN IMMEDIATE сериализует отмену с claim: нельзя вернуть уже потраченную попытку.
+        with self.tx() as c:
+            j = c.execute("SELECT * FROM jobs WHERE id=? AND user_id=?", (job, user)).fetchone()
+            if type(user) is not int or user <= 0 or not j:
+                raise DomainError("unknown_job")
+            if j["status"] not in {"queued", "running", "generated"}:
+                return "inactive"
+            if j["telegram_silent"]:
+                return "inactive"
+            c.execute("UPDATE jobs SET telegram_silent=1 WHERE id=?", (job,))
+            if j["status"] == "queued":
+                self._fail(c, j, "user_cancelled")
+                return "cancelled"
+            return "saved"
 
     def delivered(self, job):
         with self.tx() as c:

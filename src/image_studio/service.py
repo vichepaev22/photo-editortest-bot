@@ -22,6 +22,7 @@ class Service:
     ):
         self.store, self.media, self.provider = store, media, provider
         self.deliver, self.notify = deliver, notify
+        self.progress = None
         self.trial_access = trial_access
         self.unlimited_user_id = unlimited_user_id
         self.recurring_free = recurring_free
@@ -208,10 +209,12 @@ class Service:
             return False
         j = self.store.job(job)
         try:
+            self._progress(j, "preparing")
             payload = json.loads(self.media.path(f"{j['user_id']}/{job}.json").read_text(encoding="utf-8"))
             inputs = [self.media.path(path) for path in payload["inputs"]]
             analysis = None
             if j["preset"] == "reference":
+                self._progress(j, "reference")
                 if any(self._owned_recent_file(j["user_id"], path, MAX_BYTES) is None
                        for path in payload["inputs"]):
                     raise ValueError("expired_reference_input")
@@ -227,6 +230,7 @@ class Service:
                     data = source.read(MAX_BYTES + 1)
                 usage, request_id = {}, None
             else:
+                self._progress(j, "generating")
                 selected = payload.get("owner_quality") if self.is_unlimited(j["user_id"]) and j["quota_exempt"] else None
                 if selected:
                     result = await self.provider.edit(inputs, payload["prompt"], quality=selected)
@@ -237,6 +241,7 @@ class Service:
                     usage = dict(usage, owner_quality=selected, image_model=getattr(self.provider, "model", "mock"))
                 if analysis is not None:
                     usage = {"image": usage, "reference_analysis": analysis}
+            self._progress(j, "formatting")
             if j["preset"] in DOCUMENT_PRESETS:
                 output = prepare_document_sheet(data)
                 extension = "png"
@@ -254,15 +259,25 @@ class Service:
             if self.notify:
                 await self._notify_safely(j["user_id"], job)
             return False
-        if self.deliver:
+        if self.deliver and not self.store.job(job)["telegram_silent"]:
             try:
-                await self.deliver(j["user_id"], job, self.media.path(relative))
-                self.store.delivered(job)
+                delivered = await self.deliver(j["user_id"], job, self.media.path(relative))
+                if delivered is not False:
+                    self.store.delivered(job)
             except Exception:
                 log.warning("delivery_failed job=%s", job)
         return True
 
+    def _progress(self, job, stage):
+        if self.progress:
+            try:
+                self.progress(job["user_id"], job["id"], stage)
+            except Exception:
+                log.warning("progress_observer_failed")
+
     async def _notify_safely(self, user, job):
+        if self.store.job(job)["telegram_silent"]:
+            return
         try:
             await self.notify(user, job)
         except Exception:
