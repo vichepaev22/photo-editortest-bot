@@ -1,6 +1,6 @@
 # Проверки и границы результата
 
-## CR-TELEGRAM-LIVE-001 — 22.10.2026, offline verified / release pending
+## CR-TELEGRAM-LIVE-001 — 22.10.2026, offline verified / deployed
 
 Каноническое требование: PRD.md CR-TELEGRAM-LIVE-001; устройство и источники:
 telegram-live-response.md. Только личный диалог Telegram, Mini App/MAX не меняются.
@@ -15,8 +15,17 @@ ownership и старые кнопки, отмена очереди/резерв
 
 SSH preflight: Telegram/MAX/Bagizov active, NRestarts0; Telegram активных задач0,
 резервов0. Базовые source hashes сохранены локально/на VPS; release ещё не выполнен.
-CI и guarded Telegram release — отдельные последующие доказательства. Проверка
-в реальном клиенте Telegram с генерацией — владельцем после установки.
+Итог: [CI39676457795](https://github.com/vichepaev22/photo-editortest-bot/actions/runs/39676457795),
+source2fcbefa094355f01e0d8fdc06c683a889e53f92f: **579 passed / 34.70s**, Ruff PASS.
+Guarded Telegram-only release установлен: пять source-файлов, backup в
+`/root/telegram-live-20261022/backup`, receipt.json в той же release-директории.
+19 прежних таблиц и все старые строки сохранены; добавлен только
+jobs.telegram_silent с default0. Приватный env не менялся. Runtime ready,
+HTTP health200, Telegram getMyCommands содержит stop/cancel/start; хеши всех
+пяти установленных файлов совпали с manifest. Telegram active/NRestarts0;
+MAX PID245185 и Bagizov PID106528 сохранились, active/NRestarts0. Платных
+Image/LLM-вызовов, реальных заказов и тестовых сообщений агентом0. Проверка
+визуального эффекта в реальном клиенте Telegram с генерацией — владельцем.
 
 CR-FREE-005, 15.10.2026: требование принято и внесено в PRD R07–R08, план и приёмку.
 Текущий статус: implemented/verified-offline/deployed; итоговые доказательства и граница реальной доставки — в отчёте CR-FREE-005 в конце файла.
