@@ -1,5 +1,7 @@
 # План реализации и размещения
 
+CR-TELEGRAM-COLLAGES-001, 22.10.2026 — accepted / brief delivered / integration pending assets. Подготовлены три текста и ТЗ на коллажи3+3+2 (start-collages-brief.md), заменяющие одну обзорную картинку. Владелец создаёт три изображения; после их получения — подключение текст→коллаж в Telegram с прежней клавиатурой и согласием. Текущий /start и runtime не меняются, изображения не генерируются.
+
 CR-TELEGRAM-LIVE-002, 22.10.2026 — accepted / implemented / verified-offline / deployed: убрать кнопку и пользовательскую отмену; сохранить живые статусы и автоматический результат. Обратная совместимость старых кнопок без изменения задачи → целевые регрессии/CI → Telegram-only VPS release. Основной контракт: PRD.md.
 
 CR-TELEGRAM-WELCOME-001, 22.10.2026 — accepted / implemented / verified-offline / deployed: штатные анимированные drafts приветствия → одно постоянное сообщение с нижней клавиатурой → короткие проверки/fallback → Telegram-only release вместе с LIVE-002. Бриф восьми функций: start-collage-brief.md; картинку создаёт владелец, подключить после получения готового файла.
