@@ -5,10 +5,47 @@ import contextlib
 import logging
 import re
 import time
+import uuid
 
-from aiogram.exceptions import TelegramBadRequest, TelegramRetryAfter
+from aiogram.exceptions import TelegramBadRequest, TelegramNetworkError, TelegramRetryAfter
 
 log = logging.getLogger(__name__)
+
+
+async def animated_welcome(message, text, keyboard, *, pause=asyncio.sleep):
+    """Штатная анимация Telegram: временный draft, затем одно полное сообщение.
+
+    Это раскрытие готового приветствия, без вызова LLM. Клавиатура прикрепляется
+    к постоянному сообщению; кнопка остановки drafts явно выключена.
+    """
+    draft_id = (uuid.uuid4().int & 0x7FFFFFFF) or 1
+    # Используем только typing; входящее сообщение пользователя не редактируется.
+    activity = StreamingAnswer(message.bot, message.chat.id, message.message_id)
+    async with activity.typing():
+        ends = sorted({min(26, len(text)), len(text) // 3, 2 * len(text) // 3, len(text)})
+        for end in ends:
+            if not end:
+                continue
+            try:
+                await message.bot.send_message_draft(
+                    chat_id=message.chat.id, draft_id=draft_id, text=text[:end],
+                    parse_mode=None, can_stop=False, keep_on_stop=False,
+                )
+            except TelegramRetryAfter as exc:
+                await pause(max(1.5, exc.retry_after))
+                break  # Не затягиваем приветствие повторными кадрами.
+            except (TelegramBadRequest, TelegramNetworkError) as exc:
+                log.warning("welcome_draft_unavailable type=%s", type(exc).__name__)
+                break
+            await pause(0.35 if end == len(text) else 1)
+        # Draft исчезает; только sendMessage сохраняет приветствие и MAIN в чате.
+        for attempt in range(2):
+            try:
+                return await message.answer(text, reply_markup=keyboard, parse_mode=None)
+            except TelegramRetryAfter as exc:
+                if attempt:
+                    raise
+                await pause(max(1.5, exc.retry_after))
 
 
 def clean_text(text):

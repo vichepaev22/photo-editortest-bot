@@ -47,6 +47,7 @@ from .result_delivery import ResultDeliveryDeferred, send_result_document
 from .runtime import RUNTIME_DIR, BotRuntime
 from .service import Service
 from .store import DomainError, Store
+from .streaming_answer import animated_welcome
 from .subscriptions import (
     SUBSCRIPTION_KEYBOARD,
     offer_channel_bonus,
@@ -55,7 +56,7 @@ from .subscriptions import (
     subscription_hint,
 )
 from .telegram_free import telegram_free_delivery
-from .telegram_live import TelegramLive, progress_text, stop_keyboard
+from .telegram_live import TelegramLive, progress_text
 
 
 def buttons(rows):
@@ -155,7 +156,6 @@ COMMANDS = [
         ("bonus", "Бонус за подписку на каналы"),
         ("id", "Мой ID для пилотного доступа"),
         ("cancel", "Сбросить новую заявку"),
-        ("stop", "Остановить текущий ответ"),
         ("result", "Мои готовые результаты"),
         ("delete", "Удалить локальные фото"),
         ("terms", "Условия тестирования"),
@@ -337,19 +337,6 @@ def build_dispatcher(settings, store, media, service, *, step_messages=None, pur
         await steps.sent(message.bot, user, draft.steps_token, sent)
         return sent
 
-    def stopped_text(state):
-        return ("⏹ Задача отменена до запуска. Попытка не потрачена." if state == "cancelled" else
-                "⏹ Живой ответ остановлен. Создание уже запущено: готовый файл будет в «Мои результаты». "
-                "Успешная генерация использует одну попытку." if state == "saved" else
-                "Сейчас нет активного ответа. Готовые файлы — в «Мои результаты».")
-
-    async def stop_current(user):
-        for job in store.jobs(user):
-            if job["status"] in {"queued", "running"} and not job["telegram_silent"]:
-                state = await live.stop(user, job["id"])
-                return state
-        return "inactive"
-
     def pricing(user=None):
         if service.is_unlimited(user):
             return "Для вашего аккаунта включено безлимитное тестирование."
@@ -401,11 +388,6 @@ def build_dispatcher(settings, store, media, service, *, step_messages=None, pur
     async def choose_preset(message, user, key):
         if not store.has_consent(user):
             await message.answer("Сначала подтвердите условия и согласие на фото.", reply_markup=CONSENT)
-            return
-        stopped = await stop_current(user)
-        if stopped == "saved":
-            await message.answer(stopped_text(stopped) + " Дождитесь завершения, затем начните новый образ.",
-                                 reply_markup=MAIN)
             return
         if len(drafts) >= 1000:
             oldest = min(drafts, key=lambda owner: drafts[owner].created)
@@ -533,7 +515,7 @@ def build_dispatcher(settings, store, media, service, *, step_messages=None, pur
         sent = await step_answer(
             message, user, draft,
             progress_text(draft.preset, draft.description),
-            reply_markup=stop_keyboard(job),
+            reply_markup=MAIN,
         )
         live.attach(message.bot, user, job, sent.message_id, draft.preset, draft.description)
 
@@ -669,14 +651,15 @@ def build_dispatcher(settings, store, media, service, *, step_messages=None, pur
         )
         if service.recurring_free and not service.is_unlimited(message.from_user.id):
             mode = f"\nДоступно генераций: {total - reserved}.\n" + RULE_TEXT
-        await message.answer(
+        await animated_welcome(
+            message,
             "Образ · ваша фотостудия ✨\n\n"
             "💇 Примерьте причёску, одежду или очки, смените фон.\n"
             "🧩 Объедините фотографии.\n"
             "📄 Сделайте фото на документы.\n\n"
             "Сервис для совершеннолетних. Используйте собственные фото или фото людей, давших согласие. "
             "В рабочем режиме изображения передаются OpenAI; лицо может измениться.\n" + mode,
-            reply_markup=MAIN,
+            MAIN,
         )
         if not store.has_consent(message.from_user.id):
             await message.answer(
@@ -847,8 +830,9 @@ def build_dispatcher(settings, store, media, service, *, step_messages=None, pur
 
     @router.message(Command("stop"))
     async def stop(message: Message):
-        state = await stop_current(message.from_user.id)
-        await message.answer(stopped_text(state), reply_markup=MAIN)
+        # Совместимость со старым меню Telegram, без отмены и изменения задачи.
+        await message.answer("Фото придёт автоматически после обработки. Готовые файлы — в «Мои результаты».",
+                             reply_markup=MAIN)
 
     @router.callback_query(F.data.startswith("live:stop:"))
     async def stop_callback(callback: CallbackQuery):
@@ -857,17 +841,15 @@ def build_dispatcher(settings, store, media, service, *, step_messages=None, pur
             await callback.answer("Это не ваша задача", show_alert=True)
             return
         job = callback.data.removeprefix("live:stop:")
-        attached = job in live.replies
         try:
             if store.job(job)["user_id"] != user:
                 raise DomainError("unknown_job")
-            await callback.answer()
-            state = await live.stop(user, job)
+            await callback.answer("Кнопка больше не используется. Фото придёт автоматически.", show_alert=True)
         except DomainError:
             await callback.answer("Эта задача недоступна", show_alert=True)
             return
-        if not attached and state != "inactive":
-            await callback.message.edit_text(stopped_text(state), parse_mode=None, reply_markup=BACK)
+        if isinstance(callback.message, Message):
+            await callback.message.edit_reply_markup(reply_markup=None)
 
     @router.message(Command("delete"))
     async def delete(message: Message):
@@ -1033,10 +1015,8 @@ def build_dispatcher(settings, store, media, service, *, step_messages=None, pur
             )
             return
         if not draft or not store.has_consent(user):
-            stopped = await stop_current(user)
             forwarded = capture_question()
-            await message.answer((stopped_text(stopped) + "\n\n" if stopped != "inactive" else "")
-                                 + "Выберите функцию и загрузите фото через /start."
+            await message.answer("Выберите функцию и загрузите фото через /start."
                                  + (" Сообщение передано владельцу для поддержки." if forwarded else ""))
             return
         source = message.reply_to_message

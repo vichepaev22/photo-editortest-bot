@@ -564,22 +564,6 @@ class Store(AdminStoreMixin, FreeStoreMixin, PlategaStoreMixin):
         self.platega_promote(c, j["user_id"])
         self._admin_generation_event(c, j["id"], "failed", "released")
 
-    def stop_telegram_job(self, user, job):
-        # BEGIN IMMEDIATE сериализует отмену с claim: нельзя вернуть уже потраченную попытку.
-        with self.tx() as c:
-            j = c.execute("SELECT * FROM jobs WHERE id=? AND user_id=?", (job, user)).fetchone()
-            if type(user) is not int or user <= 0 or not j:
-                raise DomainError("unknown_job")
-            if j["status"] not in {"queued", "running", "generated"}:
-                return "inactive"
-            if j["telegram_silent"]:
-                return "inactive"
-            c.execute("UPDATE jobs SET telegram_silent=1 WHERE id=?", (job,))
-            if j["status"] == "queued":
-                self._fail(c, j, "user_cancelled")
-                return "cancelled"
-            return "saved"
-
     def delivered(self, job):
         with self.tx() as c:
             c.execute("UPDATE jobs SET status='delivered' WHERE id=? AND status='generated'", (job,))

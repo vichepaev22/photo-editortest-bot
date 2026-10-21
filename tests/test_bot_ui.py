@@ -99,7 +99,11 @@ def confirmation(sent):
 
 async def test_bottom_navigation_after_start_and_consent(ui):
     sent = await send(ui, "/start")
-    greeting = next(m for m in sent if "фотостудия" in (getattr(m, "text", "") or ""))
+    greeting = next(m for m in sent if m.__api_method__ == "sendMessage"
+                    and "фотостудия" in (getattr(m, "text", "") or ""))
+    previews = [m for m in sent if m.__api_method__ == "sendMessageDraft"]
+    assert len(previews) == 4 and previews[-1].text == greeting.text
+    assert all(p.can_stop is False for p in previews)
     assert greeting.text.startswith("Образ · ваша фотостудия ✨")
     assert "📄 Сделайте фото на документы." in greeting.text
     assert "для совершеннолетних" in greeting.text

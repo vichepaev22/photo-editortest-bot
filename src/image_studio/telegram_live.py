@@ -4,8 +4,6 @@ import asyncio
 import logging
 from dataclasses import dataclass
 
-from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
-
 from .catalog import PRESETS
 from .streaming_answer import StreamingAnswer, clean_text
 
@@ -19,12 +17,6 @@ STAGES = {
 }
 
 
-def stop_keyboard(job):
-    return InlineKeyboardMarkup(inline_keyboard=[[
-        InlineKeyboardButton(text="⏹ Стоп", callback_data=f"live:stop:{job}"),
-    ]])
-
-
 def progress_text(preset, description, stage="queued", frame=0):
     # План основан на явном запросе, не имитирует внутреннее мышление модели.
     title = "📄 Подготавливаем лист с четырьмя фото" if preset == "document_original" else "✨ Создаём ваш образ"
@@ -36,7 +28,7 @@ def progress_text(preset, description, stage="queued", frame=0):
     return (f"{title}\n\n🎯 {PRESETS[preset].label}\n→ {request}\n"
             f"📎 Результат — файл в хорошем качестве.\n\n"
             f"{'◦' * (frame % 3 + 1)} {STAGES[stage]}…\n{timing}\n\n"
-            "Стоп: до запуска вернём попытку; после запуска результат сохранится в «Мои результаты».")
+            "Готовое фото появится здесь и в «Мои результаты».")
 
 
 @dataclass
@@ -66,13 +58,6 @@ class TelegramLive:
         if reply and reply.user == user and stage in STAGES:
             reply.stage = stage
 
-    async def stop(self, user, job):
-        state = self.store.stop_telegram_job(user, job)
-        await self.detach(job, text=("⏹ Отменено до запуска. Попытка не потрачена." if state == "cancelled" else
-                                    "⏹ Ответ остановлен. Создание уже началось; результат сохранится в «Мои результаты». "
-                                    "Успешная генерация использует одну попытку." if state == "saved" else None))
-        return state
-
     async def detach(self, job, *, text=None):
         reply = self.replies.pop(job, None)
         if reply and reply.task:
@@ -95,8 +80,7 @@ class TelegramLive:
                     record = self.store.job(job)
                     if record["telegram_silent"] or record["status"] not in {"queued", "running"}:
                         return
-                    await answer.edit(progress_text(reply.preset, reply.description, reply.stage, frame),
-                                      reply_markup=stop_keyboard(job))
+                    await answer.edit(progress_text(reply.preset, reply.description, reply.stage, frame))
                     frame += 1
                     await asyncio.sleep(3)
         except asyncio.CancelledError:
