@@ -1,6 +1,6 @@
 # Проверки и границы результата
 
-## CR-TELEGRAM-LIVE-002 / WELCOME-001 — 22.10.2026, offline verified / release pending
+## CR-TELEGRAM-LIVE-002 / WELCOME-001 — 22.10.2026, offline verified / deployed
 
 Владелец отклонил «Стоп»; критерии отмены в предыдущем отчёте — история, не
 действующий UX. Обновлены тесты под прямое уточнение требований: нет Stop в
@@ -14,7 +14,13 @@ sendMessage/MAIN, fallback при400/сеть, пауза429 и завершен
 Целевой набор live/welcome/start/очистка шагов: **11 passed / 26.71s**; Ruff src/tests
 PASS. Перед изменением тест отсутствия Stop воспроизвёл прежнюю кнопку (1 failed,
 14.00s). Платные Image/LLM-вызовы0; коллаж не генерировался. CI/Telegram-only
-размещение pending; отдельная визуальная приёмка приветствия — в клиенте владельца.
+размещение выполнены: [CI39678440021](https://github.com/vichepaev22/photo-editortest-bot/actions/runs/39678440021),
+source73f2560309bc3911ec35d97d73ae3f4ac1822343, **582 passed / 52.16s**, Ruff PASS.
+Telegram-only release telegram-welcome-20261022: четыре source-файла, backup
+`/root/telegram-welcome-20261022/backup`; 19 таблиц и все строки сохранены, миграций0,
+env не менялся, соседние службы не перезапускались. Сервис active/NRestarts0.
+Отдельная визуальная приёмка анимации приветствия — в клиенте владельца; автоматический
+тестовый /start от его имени не отправлялся. Картинка коллажа пока только описана.
 
 ## CR-TELEGRAM-LIVE-001 — 22.10.2026, offline verified / deployed
 

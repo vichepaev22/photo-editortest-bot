@@ -1,8 +1,8 @@
 # План реализации и размещения
 
-CR-TELEGRAM-LIVE-002, 22.10.2026 — accepted / in progress: убрать кнопку и пользовательскую отмену; сохранить живые статусы и автоматический результат. Обратная совместимость старых кнопок без изменения задачи → целевые регрессии/CI → Telegram-only VPS release. Основной контракт: PRD.md.
+CR-TELEGRAM-LIVE-002, 22.10.2026 — accepted / implemented / verified-offline / deployed: убрать кнопку и пользовательскую отмену; сохранить живые статусы и автоматический результат. Обратная совместимость старых кнопок без изменения задачи → целевые регрессии/CI → Telegram-only VPS release. Основной контракт: PRD.md.
 
-CR-TELEGRAM-WELCOME-001, 22.10.2026 — accepted / in progress: штатные анимированные drafts приветствия → одно постоянное сообщение с нижней клавиатурой → короткие проверки/fallback → Telegram-only release вместе с LIVE-002. Бриф восьми функций: start-collage-brief.md; картинку создаёт владелец, подключение файла отдельно.
+CR-TELEGRAM-WELCOME-001, 22.10.2026 — accepted / implemented / verified-offline / deployed: штатные анимированные drafts приветствия → одно постоянное сообщение с нижней клавиатурой → короткие проверки/fallback → Telegram-only release вместе с LIVE-002. Бриф восьми функций: start-collage-brief.md; картинку создаёт владелец, подключить после получения готового файла.
 
 CR-TELEGRAM-LIVE-001, 22.10.2026 — accepted / implemented / verified-offline / deployed, главный контракт: PRD.md.
 1. Реальные стадии обработки в одном сообщении Telegram, typing, plain text, ограничение частоты/429.
