@@ -127,3 +127,5 @@ CR-PRICING-005 / CR-OWNER-QUALITY-001 accepted/in progress: единый кат�
 
 
 CR-PRICING-005 / CR-OWNER-QUALITY-001 completed21.10.2026: обновлены каталоги, бонусы, баланс, Sunburst Medium, owner-only /quality Telegram и stale checkout. CI568/Ruff/JS PASS; VPS backup, сохранение данных, HTTPS и актуальные frontend проверены. Реальная новая оплата/качество фото — проверка владельца.
+
+CR-COLLAGES-REFRESH-002 accepted/pending22.10.2026: проверить новые квадратные PNG и нумерацию1→2→3, заменить Telegram-ассеты без изменения байтов/логики, выполнить одну существующую целевую проверку и обязательный CI, обновить только Telegram на VPS; затем заменить те же файлы в MAX и перезапустить только MAX для сброса старого медиа-кэша. Guarded asset-only release, резервная копия/сверка хешей/готовность служб. Новые тесты, платные вызовы и рассылки не нужны.
