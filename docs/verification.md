@@ -1,8 +1,10 @@
 # Проверки и границы результата
 
-## CR-COLLAGES-REFRESH-002 — квадратные PNG,22.10.2026, offline verified / release pending
+## CR-COLLAGES-REFRESH-002 — квадратные PNG,22.10.2026, verified / deployed
 
-Три новых исходника владельца проверены Pillow.verify и полным декодированием: PNG1254×1254, размер каждого меньше10MB. Файлы11/22/333 скопированы без изменения байтов в1-style/2-photo/3-tools; порядок вложений намеренно не используется. Существующие tests/test_onboarding.py: **4 passed /15.03s**; новые тесты для замены статики не добавлялись. Код и зависимости не менялись. VPS preflight обеих платформ: active/NRestarts0, queued/running/review0, резерв0; прежние PNG и исходники совпадают с ожидаемой поставкой. Публикация/CI и Telegram-first→MAX release ещё выполняются. Image/LLM/реальных платежей/сообщений пользователям для проверки0.
+Три новых исходника владельца проверены Pillow.verify и полным декодированием: PNG1254×1254, размер каждого меньше10MB. Файлы11/22/333 скопированы без изменения байтов в1-style/2-photo/3-tools; порядок вложений намеренно не используется. Существующие tests/test_onboarding.py: **4 passed /15.03s**; новые тесты для замены статики не добавлялись. Код и зависимости не менялись. VPS preflight обеих платформ: active/NRestarts0, queued/running/review0, резерв0; прежние PNG и исходники совпадают с ожидаемой поставкой. Image/LLM/реальных платежей/сообщений пользователям для проверки0.
+
+Итог: source ead9bc6a57d9093dd95c546d32f12c4ca0225d55; [CI39784621691](https://github.com/vichepaev22/photo-editortest-bot/actions/runs/39784621691) success, **586 passed /104.64s**, Ruff PASS, Pages published. Сначала collages-refresh-telegram-20261022 (только3PNG), затем collages-refresh-max-20261022 (те же3PNG); backup в /root/<release>/backup, квитанции receipt.json. Сохранены все прежние строки19/26таблиц, env и7/5защищённых исходников. Итоговые шесть SHA256 совпадают с новыми файлами владельца; PNG1254×1254 повторно проверены на VPS. Обе службы active/NRestarts0, health200, Telegram ready; MAX перезапущен для сброса старых медиа-токенов. PIDTelegram293831/MAX293985; Bagizov106528 не менялся. Миграций0, платных вызовов0, тестовых сообщений0. Отображение нового /start в клиенте проверяет владелец; старые уже отправленные сообщения не редактировались.
 
 ## CR-TELEGRAM-COLLAGES-001 — подключение PNG, 22.10.2026, offline verified / deployed
 
