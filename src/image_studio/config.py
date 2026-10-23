@@ -33,6 +33,7 @@ class Settings:
     return_url: str = "https://example.com/payment-result"
     admin_token: str = ""
     admin_user_id: int = 0
+    admin_video_enabled: bool = False
     vat_code: int = 1
     studio_enabled: bool = True
     studio_port: int = 8089
@@ -57,6 +58,8 @@ class Settings:
                 raise ValueError("https_platega_return_required")
         if type(self.admin_user_id) is not int or not 0 <= self.admin_user_id < 2**52:
             raise ValueError("invalid_admin_user_id")
+        if type(self.admin_video_enabled) is not bool or (self.admin_video_enabled and not self.admin_user_id):
+            raise ValueError("invalid_admin_video_configuration")
         if type(self.owner_unlimited_testing) is not bool:
             raise ValueError("invalid_owner_unlimited_testing")
         if self.owner_unlimited_testing and self.admin_user_id == 0:
@@ -107,6 +110,7 @@ class Settings:
             return_url=os.getenv("YOOKASSA_RETURN_URL", "https://example.com/payment-result"),
             admin_token=os.getenv("BILLING_ADMIN_TOKEN", ""),
             admin_user_id=int(os.getenv("ADMIN_TELEGRAM_ID", "0")),
+            admin_video_enabled=os.getenv("ADMIN_VIDEO_ENABLED", "false").lower() == "true",
             vat_code=int(os.getenv("YOOKASSA_VAT_CODE", "1")),
             studio_enabled=os.getenv("STUDIO_ENABLED", "true").lower() == "true",
             studio_port=int(os.getenv("STUDIO_PORT", "8089")),

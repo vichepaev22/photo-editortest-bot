@@ -34,6 +34,7 @@ from aiogram.types import (
 
 from .admin import register_admin
 from .admin_delivery import AdminDelivery
+from .admin_video import register_admin_video
 from .catalog import PRESETS
 from .media import MAX_BYTES, Media, normalize
 from .onboarding import send_onboarding
@@ -318,11 +319,16 @@ def build_dispatcher(settings, store, media, service, *, step_messages=None, pur
     router.message.filter(F.chat.type == "private")
     router.callback_query.filter(F.message.chat.type == "private")
     register_owner_quality(router, service)
+    video = register_admin_video(router, settings, store, navigation=set(NAV.values()))
     admin = register_admin(
         router, store, settings.admin_user_id, media=media, trial_access=trial,
         unlimited_user_id=settings.admin_user_id if settings.owner_unlimited_testing else 0,
+        video_enabled=settings.admin_video_enabled,
     )
     dp = Dispatcher(events_isolation=SimpleEventIsolation())
+    dp["admin_video"] = video
+    dp.startup.register(video.start)
+    dp.shutdown.register(video.close)
     drafts = {}
     steps = step_messages if step_messages is not None else StepMessages(store)
     dp["step_messages"] = steps

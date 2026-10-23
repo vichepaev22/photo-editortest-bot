@@ -33,7 +33,7 @@ def _button(text, data):
     style = None
     if data.startswith("admin:inbox:") or data in {"admin:filter:paying", "admin:filter:visited"} or data.startswith(("admin:confirm:", "admin:reason:")):
         style = "success"
-    elif data in {"admin:filter:all", "admin:search", "admin:settings", "admin:home"} or data.startswith("admin:events:"):
+    elif data in {"admin:filter:all", "admin:search", "admin:settings", "admin:home", "video:home"} or data.startswith("admin:events:"):
         style = "primary"
     elif data.startswith("admin:credit:"):
         action = data.rsplit(":", 1)[-1]
@@ -105,7 +105,7 @@ class PrivateVisitMiddleware(BaseMiddleware):
         return await handler(event, data)
 
 
-def _render(stats, *, listing=False, query="", filter="all", unread=0):
+def _render(stats, *, listing=False, query="", filter="all", unread=0, video_enabled=False):
     lines = [
         "<b>Статистика бота</b>",
         f"Заходили в бот: {stats.get('visited_users', stats['total_users'])}",
@@ -148,6 +148,8 @@ def _render(stats, *, listing=False, query="", filter="all", unread=0):
         [_button("🔎 Найти пользователя", "admin:search")],
         [_button(f"🔔 Уведомления · {unread}", "admin:inbox:0")],
     ])
+    if video_enabled and not listing:
+        keyboard.append([_button("🎬 Видеомонтаж · тест", "video:home")])
     if listing:
         keyboard.append([_button("← Администрирование", "admin:home")])
     return "\n".join(lines), InlineKeyboardMarkup(inline_keyboard=keyboard)
@@ -156,12 +158,13 @@ def _render(stats, *, listing=False, query="", filter="all", unread=0):
 class AdminController:
     """Owner-only durable UI; active() lets integrations exclude wizard replies."""
 
-    def __init__(self, store, admin_user_id, *, media=None, trial_access=False, unlimited_user_id=0):
+    def __init__(self, store, admin_user_id, *, media=None, trial_access=False, unlimited_user_id=0, video_enabled=False):
         self.store = store
         self.admin_user_id = admin_user_id
         self.media = media
         self.trial_access = trial_access
         self.unlimited_user_id = unlimited_user_id
+        self.video_enabled = video_enabled
 
     def owner(self, message, user):
         return (
@@ -206,7 +209,8 @@ class AdminController:
         stats = self.store.admin_stats(page=page)
         if stats["page"] != page:
             raise DomainError("invalid_admin_page")
-        await self._show(message, *_render(stats, unread=self.store.admin_unread_count(self.admin_user_id)), edit=edit, panel_id=panel_id)
+        await self._show(message, *_render(stats, unread=self.store.admin_unread_count(self.admin_user_id),
+                                         video_enabled=self.video_enabled), edit=edit, panel_id=panel_id)
 
     async def users(self, message, *, query="", page=0, filter="all", edit=False, panel_id=None):
         stats = self.store.admin_search(query, page=page, filter=filter)
@@ -519,11 +523,12 @@ class AdminController:
         await self._show(message, text, _keyboard(*rows, [("События", "admin:events:0")], _home_row()), edit=edit)
 
 
-def register_admin(router: Router, store: Store, admin_user_id: int, *, media=None, trial_access=False, unlimited_user_id=0):
+def register_admin(router: Router, store: Store, admin_user_id: int, *, media=None, trial_access=False, unlimited_user_id=0, video_enabled=False):
     visits = PrivateVisitMiddleware(store)
     router.message.outer_middleware(visits)
     router.callback_query.outer_middleware(visits)
-    controller = AdminController(store, admin_user_id, media=media, trial_access=trial_access, unlimited_user_id=unlimited_user_id)
+    controller = AdminController(store, admin_user_id, media=media, trial_access=trial_access,
+                                 unlimited_user_id=unlimited_user_id, video_enabled=video_enabled)
 
     @router.message(Command("admin"))
     async def admin(message: Message):
