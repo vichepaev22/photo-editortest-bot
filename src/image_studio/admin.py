@@ -5,7 +5,7 @@ from datetime import datetime, timedelta, timezone
 from html import escape
 
 from aiogram import BaseMiddleware, F, Router
-from aiogram.exceptions import TelegramBadRequest
+from aiogram.exceptions import AiogramError, TelegramBadRequest
 from aiogram.filters import Command
 from aiogram.types import CallbackQuery, FSInputFile, InlineKeyboardButton, InlineKeyboardMarkup, Message
 
@@ -336,10 +336,23 @@ class AdminController:
     async def _credit_preview(self, message, data, reason):
         if data["user_id"] == self.unlimited_user_id:
             raise DomainError("owner_unlimited")
+        recipient = self.store.admin_user(data["user_id"], trial=self.trial_access)
+        account = _account(recipient)
+        try:
+            profile = await message.bot.get_chat(recipient["id"], request_timeout=2)
+            if getattr(profile, "id", None) == recipient["id"]:
+                name = " ".join(part.strip() for part in (profile.first_name, profile.last_name)
+                                if isinstance(part, str) and part.strip())[:160]
+                account = _account(recipient | {"username": profile.username})
+                if name:
+                    account = f"{escape(name)} · {account}"
+        except (AiogramError, TimeoutError):
+            # Profile lookup must not block the existing confirmation workflow.
+            pass
         operation = self.store.admin_prepare_credit(self.admin_user_id, data["user_id"], data["mode"], data["value"], reason, trial=self.trial_access)
         self._session("credit_preview", {"operation": operation["id"], "user_id": data["user_id"]})
         preview = (
-            f"<b>Подтверждение изменения</b>\nПользователь: <code>{data['user_id']}</code>\n"
+            f"<b>Подтверждение изменения</b>\nПользователь: {account}\n\n"
             f"Доступно: {operation['before_available']} → {operation['after_available']}\n"
             f"Резерв: {operation['reserved']} → {operation['reserved']}\nПометка: {escape(reason)}\n\n"
         )

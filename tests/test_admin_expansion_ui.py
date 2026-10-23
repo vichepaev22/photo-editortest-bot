@@ -75,6 +75,7 @@ async def test_credit_reason_preview_confirmation_replay_and_escaping(expanded):
     sent = await send(ui, "Исправление <b>ошибки</b>")
     preview = text_methods(sent)[0]
     assert "5 → 10" in preview.text
+    assert '@target_user</a> (<code>42</code>)' in preview.text
     assert "&lt;b&gt;ошибки&lt;/b&gt;" in preview.text
     assert "Обычный сценарий" not in str(sent)
     confirmation = next(b for b in buttons(preview) if b.startswith("admin:confirm:"))
@@ -133,9 +134,46 @@ async def test_set_balance_requires_bounded_integer_and_reason(expanded):
         assert ui[2].wallet(42) == (5, 0)
         assert ui[2].admin_session(OWNER)["kind"] == "credit_value"
     await send(ui, "7")
-    await send(ui, "перерасчёт")
+    sent = await send(ui, "перерасчёт")
+    assert '@target_user</a> (<code>42</code>)' in text_methods(sent)[0].text
     await click(ui, "admin:confirm:")
     assert ui[2].wallet(42) == (7, 0)
+
+
+@pytest.mark.parametrize("mode", ["p5", "set"])
+async def test_final_credit_preview_shows_escaped_live_name_without_username(expanded, monkeypatch, mode):
+    from types import SimpleNamespace
+    from unittest.mock import AsyncMock
+
+    ui, _, _ = expanded
+    monkeypatch.setattr(ui[1], "get_chat", AsyncMock(return_value=SimpleNamespace(
+        id=42, first_name="Анна <тест>", last_name="& Петрова", username=None,
+    )))
+    await send(ui, callback=f"admin:credit:42:{mode}")
+    if mode == "set":
+        await send(ui, "50")
+    sent = await send(ui, "За тестирование")
+    preview = text_methods(sent)[0]
+    assert "Анна &lt;тест&gt; &amp; Петрова" in preview.text
+    assert 'tg://user?id=42' in preview.text
+    assert "<тест>" not in preview.text
+    assert ui[2].wallet(42) == (5, 0)
+
+
+async def test_final_credit_preview_keeps_cached_username_when_profile_lookup_fails(expanded, monkeypatch):
+    from unittest.mock import AsyncMock
+
+    from aiogram.exceptions import TelegramBadRequest
+    from aiogram.methods import GetChat
+
+    ui, _, _ = expanded
+    monkeypatch.setattr(ui[1], "get_chat", AsyncMock(side_effect=TelegramBadRequest(
+        method=GetChat(chat_id=42), message="chat not found",
+    )))
+    await send(ui, callback="admin:credit:42:p5")
+    sent = await send(ui, "Пометка")
+    assert "@target_user" in text_methods(sent)[0].text
+    assert ui[2].wallet(42) == (5, 0)
 
 
 async def test_restart_consumes_search_and_signed_delta(expanded):
