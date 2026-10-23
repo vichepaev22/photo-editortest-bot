@@ -1,6 +1,6 @@
 # Тестовый видеомонтаж для владельца Telegram
 
-CR-ADMIN-VIDEO-001,23.10.2026. Статус: implemented/offline verified, deployment pending.
+CR-ADMIN-VIDEO-001,23.10.2026. Статус: implemented/offline and synthetic-server verified/deployed; реальный платный тест выполняет владелец.
 Главное ТЗ: [PRD.md](PRD.md), раздел CR-ADMIN-VIDEO-001. MAX и Mini App не меняются.
 
 ## Как запустить первый тест
