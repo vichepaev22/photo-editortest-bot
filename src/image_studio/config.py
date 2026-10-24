@@ -34,6 +34,7 @@ class Settings:
     admin_token: str = ""
     admin_user_id: int = 0
     admin_video_enabled: bool = False
+    bonus_shop_enabled: bool = False
     vat_code: int = 1
     studio_enabled: bool = True
     studio_port: int = 8089
@@ -60,6 +61,10 @@ class Settings:
             raise ValueError("invalid_admin_user_id")
         if type(self.admin_video_enabled) is not bool or (self.admin_video_enabled and not self.admin_user_id):
             raise ValueError("invalid_admin_video_configuration")
+        if (type(self.bonus_shop_enabled) is not bool
+                or (self.bonus_shop_enabled
+                    and (self.admin_user_id != 3975497 or not self.owner_unlimited_testing))):
+            raise ValueError("invalid_bonus_pilot_configuration")
         if type(self.owner_unlimited_testing) is not bool:
             raise ValueError("invalid_owner_unlimited_testing")
         if self.owner_unlimited_testing and self.admin_user_id == 0:
@@ -111,6 +116,7 @@ class Settings:
             admin_token=os.getenv("BILLING_ADMIN_TOKEN", ""),
             admin_user_id=int(os.getenv("ADMIN_TELEGRAM_ID", "0")),
             admin_video_enabled=os.getenv("ADMIN_VIDEO_ENABLED", "false").lower() == "true",
+            bonus_shop_enabled=os.getenv("BONUS_SHOP_ENABLED", "false").lower() == "true",
             vat_code=int(os.getenv("YOOKASSA_VAT_CODE", "1")),
             studio_enabled=os.getenv("STUDIO_ENABLED", "true").lower() == "true",
             studio_port=int(os.getenv("STUDIO_PORT", "8089")),

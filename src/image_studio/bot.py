@@ -35,6 +35,7 @@ from aiogram.types import (
 from .admin import register_admin
 from .admin_delivery import AdminDelivery
 from .admin_video import register_admin_video
+from .bonus_shop import BonusShop
 from .catalog import PRESETS
 from .media import MAX_BYTES, Media, normalize
 from .onboarding import send_onboarding
@@ -330,6 +331,10 @@ def build_dispatcher(settings, store, media, service, *, step_messages=None, pur
     dp.startup.register(video.start)
     dp.shutdown.register(video.close)
     drafts = {}
+    bonus = BonusShop(settings, store, media, service)
+    bonus.navigation = set(NAV.values())
+    bonus.register(router, drafts)
+    dp["bonus_shop"] = bonus
     steps = step_messages if step_messages is not None else StepMessages(store)
     dp["step_messages"] = steps
     live = TelegramLive(store)
@@ -361,8 +366,9 @@ def build_dispatcher(settings, store, media, service, *, step_messages=None, pur
             return
         if service.is_unlimited(user):
             await answer("♾ Безлимитное тестирование\n\nКоличество генераций для вашего аккаунта не ограничено.\n"
-                         "🧪 Выбор качества для ваших тестов: /quality",
-                         reply_markup=BACK if edit else MAIN)
+                         "🧪 Выбор качества для ваших тестов: /quality"
+                         + (bonus.balance_content(user) if bonus.allowed(user) else ""),
+                         reply_markup=bonus.balance_keyboard() if bonus.allowed(user) else BACK if edit else MAIN)
             return
         total, reserved = service.wallet(user)
         if service.recurring_free:
@@ -540,11 +546,16 @@ def build_dispatcher(settings, store, media, service, *, step_messages=None, pur
             reply_markup=buttons([[("📸 Новая правка", "nav:edit"), ("🖼 Результаты", "nav:results")]]),
         )
         store.delivered(job)
+        try:
+            await bonus.after_job(message.bot, user, job)
+        except Exception:
+            logging.getLogger(__name__).warning("bonus_panel_update_failed")
         await steps.delivered(message.bot, user, job)
         if settings.image_provider != "mock" and not service.is_unlimited(user):
             await offer_channel_bonus(message.bot, store, user, job)
 
     async def navigate(message, user, action):
+        bonus.leave(user)
         if action in {"home", "edit"}:
             drafts.pop(user, None)
             if not store.has_consent(user):
@@ -643,6 +654,7 @@ def build_dispatcher(settings, store, media, service, *, step_messages=None, pur
 
     @router.message(CommandStart())
     async def start(message: Message):
+        bonus.leave(message.from_user.id)
         drafts.pop(message.from_user.id, None)
         total, reserved = service.wallet(message.from_user.id)
         mode = (
@@ -1207,6 +1219,10 @@ async def run(settings):
                     return False
                 await deliver_result(bot, store, steps, user, job, path,
                                      demo=settings.image_provider == "mock", unlimited=service.is_unlimited(user))
+                try:
+                    await bonus.after_job(bot, user, job)
+                except Exception:
+                    logging.getLogger(__name__).warning("bonus_panel_update_failed")
 
             async def notify(user, job):
                 if user == 0:
@@ -1223,6 +1239,10 @@ async def run(settings):
                     await live.detach(job, text=text)
                 else:
                     await bot.send_message(user, text, parse_mode=None)
+                try:
+                    await bonus.after_job(bot, user, job, failed=True)
+                except Exception:
+                    logging.getLogger(__name__).warning("bonus_panel_update_failed")
 
             service = Service(store, media, provider, deliver, notify, trial_access=settings.trial_access,
                               unlimited_user_id=settings.admin_user_id if settings.owner_unlimited_testing else 0,
@@ -1232,6 +1252,7 @@ async def run(settings):
             dp = build_dispatcher(settings, store, media, service, step_messages=steps,
                                   purchase_demo=live_checkout)
             live = dp["telegram_live"]
+            bonus = dp["bonus_shop"]
             await bot.set_my_commands([
                 command.model_copy(update={"description": {
                     "demo": "Мои бесплатные генерации", "id": "Мой Telegram ID",

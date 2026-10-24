@@ -150,7 +150,7 @@ class Service:
         checked = self._originals(user, record.get("inputs"), jobs)
         return checked if len(checked) == count else []
 
-    def submit(self, user, key, preset, inputs, description):
+    def submit(self, user, key, preset, inputs, description, *, bonus_step=None):
         if self.recurring_free:
             self.store.advance_free_due()
         choice = PRESETS.get(preset)
@@ -161,6 +161,10 @@ class Service:
             if self._owned_recent_file(user, path, MAX_BYTES) is None:
                 raise DomainError("invalid_inputs")
         prompt = prompt_for(preset, description)
+        if bonus_step is not None:
+            planned = self.store.bonus_step(user, bonus_step)
+            if planned["preset"] != preset or planned["description"] != description:
+                raise DomainError("bonus_step_mismatch")
         quota_exempt = self.is_unlimited(user)
         use_trial = self.trial_access
         if self.trial_access and self.store.has_manual_access(user):
@@ -170,6 +174,7 @@ class Service:
             try:
                 job = self.store.reserve(
                     user, key, preset, self.cost(preset), trial=use_trial, quota_exempt=quota_exempt,
+                    **({"bonus_step": bonus_step} if bonus_step is not None else {}),
                 )
                 break
             except DomainError as error:

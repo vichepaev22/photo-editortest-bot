@@ -7,6 +7,7 @@ from contextlib import contextmanager
 from pathlib import Path
 
 from .admin_store import AdminStoreMixin, DomainError
+from .bonus_store import BonusStoreMixin
 from .platega import PlategaStoreMixin
 from .recurring_free import FreeStoreMixin
 
@@ -19,7 +20,7 @@ def validated_username(username):
     return None
 
 
-class Store(AdminStoreMixin, FreeStoreMixin, PlategaStoreMixin):
+class Store(AdminStoreMixin, FreeStoreMixin, PlategaStoreMixin, BonusStoreMixin):
     def __init__(self, path: Path, *, payment_test_owner_id=0):
         if type(payment_test_owner_id) is not int or not 0 <= payment_test_owner_id < 2**52:
             raise ValueError("invalid_payment_test_owner")
@@ -109,6 +110,7 @@ class Store(AdminStoreMixin, FreeStoreMixin, PlategaStoreMixin):
             self._admin_init(c)
             self._free_init(c)
             self._platega_init(c)
+            self._bonus_init(c)
 
     def _enable_wal(self):
         # Journal changes need an autocommit connection, outside BEGIN IMMEDIATE.
@@ -428,7 +430,7 @@ class Store(AdminStoreMixin, FreeStoreMixin, PlategaStoreMixin):
                                         "created": time.time()})
             return True
 
-    def reserve(self, user, key, preset, cost, *, trial=False, quota_exempt=False):
+    def reserve(self, user, key, preset, cost, *, trial=False, quota_exempt=False, bonus_step=None):
         if (type(cost) is not int or cost <= 0 or not key or type(trial) is not bool
                 or type(quota_exempt) is not bool or (trial and cost != 1)):
             raise DomainError("invalid_job")
@@ -438,6 +440,9 @@ class Store(AdminStoreMixin, FreeStoreMixin, PlategaStoreMixin):
             u = self._user(c, user)
             old = c.execute("SELECT * FROM jobs WHERE user_id=? AND request_key=?", (user, key)).fetchone()
             if old:
+                binding = c.execute("SELECT step_id FROM bonus_jobs WHERE job_id=?", (old["id"],)).fetchone()
+                if (binding["step_id"] if binding else None) != bonus_step:
+                    raise DomainError("request_mismatch")
                 if old["preset"] != preset or old["cost"] != cost:
                     raise DomainError("request_mismatch")
                 if bool(old["trial"]) != trial:
@@ -483,6 +488,8 @@ class Store(AdminStoreMixin, FreeStoreMixin, PlategaStoreMixin):
                 (job, user, key, preset, cost, time.time(), int(trial), int(quota_exempt), int(free_credit)),
             )
             self._event(c, "reserve", job)
+            if bonus_step is not None:
+                self._bonus_bind(c, user, bonus_step, preset, job)
             return job
 
     def job(self, job):
@@ -560,6 +567,7 @@ class Store(AdminStoreMixin, FreeStoreMixin, PlategaStoreMixin):
         elif not j["quota_exempt"]:
             c.execute("UPDATE users SET reserved=reserved-? WHERE id=?", (j["cost"], j["user_id"]))
         c.execute("UPDATE jobs SET status='failed',error=? WHERE id=?", (reason[:60], j["id"]))
+        c.execute("UPDATE bonus_steps SET job_id=NULL WHERE job_id=? AND done=0", (j["id"],))
         self._event(c, "release", j["id"])
         self.platega_promote(c, j["user_id"])
         self._admin_generation_event(c, j["id"], "failed", "released")
@@ -567,6 +575,9 @@ class Store(AdminStoreMixin, FreeStoreMixin, PlategaStoreMixin):
     def delivered(self, job):
         with self.tx() as c:
             c.execute("UPDATE jobs SET status='delivered' WHERE id=? AND status='generated'", (job,))
+            row = c.execute("SELECT status FROM jobs WHERE id=?", (job,)).fetchone()
+            if row and row["status"] == "delivered":
+                self._bonus_delivered(c, job)
 
     def result(self, user, job):
         j = self.job(job)
@@ -589,6 +600,7 @@ class Store(AdminStoreMixin, FreeStoreMixin, PlategaStoreMixin):
                 raise DomainError("already_active")
             c.execute("UPDATE users SET consent=0,share_enabled=0,free_active=0 WHERE id=?", (user,))
             c.execute("DELETE FROM admin_job_shares WHERE user_id=?", (user,))
+            c.execute("DELETE FROM bonus_sessions WHERE user_id=?", (user,))
             c.execute("UPDATE free_notices SET status='skipped' WHERE user_id=? AND status='queued'", (user,))
 
     def begin_refund(self, order):
