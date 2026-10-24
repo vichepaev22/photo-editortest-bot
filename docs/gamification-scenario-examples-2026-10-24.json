@@ -1,0 +1,630 @@
+{
+  "date": "2026-10-24",
+  "status": "design_preview_only_not_integrated",
+  "nodes": {
+    "hair": {
+      "label": "Причёска",
+      "input": [
+        "portrait"
+      ],
+      "output": "portrait",
+      "extra": null
+    },
+    "clothes": {
+      "label": "Одежда",
+      "input": [
+        "portrait"
+      ],
+      "output": "portrait",
+      "extra": null
+    },
+    "glasses": {
+      "label": "Очки",
+      "input": [
+        "portrait"
+      ],
+      "output": "portrait",
+      "extra": null
+    },
+    "background": {
+      "label": "Фон",
+      "input": [
+        "portrait",
+        "group"
+      ],
+      "output": "same",
+      "extra": null
+    },
+    "enhance": {
+      "label": "Улучшение",
+      "input": [
+        "portrait",
+        "group"
+      ],
+      "output": "same",
+      "extra": null
+    },
+    "merge": {
+      "label": "Объединение",
+      "input": [
+        "portrait"
+      ],
+      "output": "group",
+      "extra": "second_person_photo"
+    },
+    "reference": {
+      "label": "Фото по примеру",
+      "input": [
+        "portrait"
+      ],
+      "output": "portrait",
+      "extra": "reference_photo"
+    },
+    "document": {
+      "label": "Фото на документы",
+      "input": [
+        "portrait"
+      ],
+      "output": "sheet",
+      "extra": null
+    }
+  },
+  "edges": {
+    "hair": [
+      "clothes",
+      "glasses",
+      "background"
+    ],
+    "clothes": [
+      "hair",
+      "glasses",
+      "background"
+    ],
+    "glasses": [
+      "hair",
+      "clothes",
+      "background"
+    ],
+    "background": [
+      "glasses",
+      "merge",
+      "enhance"
+    ],
+    "enhance": [
+      "hair",
+      "clothes",
+      "glasses",
+      "background",
+      "merge",
+      "document"
+    ],
+    "reference": [
+      "clothes",
+      "background",
+      "enhance"
+    ],
+    "merge": [
+      "enhance"
+    ],
+    "document": []
+  },
+  "slots": [
+    {
+      "slot": "first",
+      "steps": 1,
+      "points": 50
+    },
+    {
+      "slot": "pair",
+      "steps": 2,
+      "points": 100
+    },
+    {
+      "slot": "combo",
+      "steps": 2,
+      "points": 100
+    },
+    {
+      "slot": "creative",
+      "steps": 3,
+      "points": 100
+    },
+    {
+      "slot": "finale",
+      "steps": 3,
+      "points": 150
+    }
+  ],
+  "base_points": 500,
+  "first_campaign_points": 550,
+  "points_per_generation": 100,
+  "capabilities": {
+    "single_photo_only": {
+      "1": 6,
+      "2": 16,
+      "3": 33
+    },
+    "all_inputs_available": {
+      "1": 8,
+      "2": 22,
+      "3": 52
+    }
+  },
+  "examples": [
+    {
+      "preview_seed": 11,
+      "starting_remainder": 0,
+      "missions": [
+        {
+          "slot": "first",
+          "steps": 1,
+          "points": 50,
+          "theme": "travel",
+          "sequence": [
+            "document"
+          ],
+          "one_result_per_step": true,
+          "prompts": [
+            "Подготовьте портрет для документов; приём ведомством не обещается."
+          ],
+          "preview_id": "4c8106292de4"
+        },
+        {
+          "slot": "pair",
+          "steps": 2,
+          "points": 100,
+          "theme": "city",
+          "sequence": [
+            "enhance",
+            "glasses"
+          ],
+          "one_result_per_step": true,
+          "prompts": [
+            "Улучшите свет и чёткость кадра.",
+            "Примерьте очки для прогулки."
+          ],
+          "preview_id": "82f9ddaf93fd"
+        },
+        {
+          "slot": "combo",
+          "steps": 2,
+          "points": 100,
+          "theme": "travel",
+          "sequence": [
+            "background",
+            "merge"
+          ],
+          "one_result_per_step": true,
+          "prompts": [
+            "Подберите фон места, которое хотели бы посетить.",
+            "Добавьте второе фото человека и объедините кадры."
+          ],
+          "preview_id": "4b5894f1dfd8"
+        },
+        {
+          "slot": "creative",
+          "steps": 3,
+          "points": 100,
+          "theme": "office",
+          "sequence": [
+            "reference",
+            "clothes",
+            "hair"
+          ],
+          "one_result_per_step": true,
+          "prompts": [
+            "Добавьте понравившийся пример для композиции и освещения.",
+            "Подберите деловой образ по своему вкусу.",
+            "Попробуйте подходящую образу причёску."
+          ],
+          "preview_id": "984a72d6437e"
+        },
+        {
+          "slot": "finale",
+          "steps": 3,
+          "points": 150,
+          "theme": "city",
+          "sequence": [
+            "enhance",
+            "clothes",
+            "glasses"
+          ],
+          "one_result_per_step": true,
+          "prompts": [
+            "Улучшите свет и чёткость кадра.",
+            "Примерьте одежду для прогулки.",
+            "Примерьте очки для прогулки."
+          ],
+          "preview_id": "baea7d24df11"
+        }
+      ],
+      "completion_top_up": 50,
+      "awarded_points_total": 550,
+      "new_full_generations_from_campaign": 5,
+      "remaining_after_five_redemptions": 50,
+      "image_steps": 11,
+      "reward_liability_rub_at_4": 22.0,
+      "not_issued": true
+    },
+    {
+      "preview_seed": 22,
+      "starting_remainder": 0,
+      "missions": [
+        {
+          "slot": "first",
+          "steps": 1,
+          "points": 50,
+          "theme": "office",
+          "sequence": [
+            "glasses"
+          ],
+          "one_result_per_step": true,
+          "prompts": [
+            "Примерьте очки для этого образа."
+          ],
+          "preview_id": "4245f8b70e28"
+        },
+        {
+          "slot": "pair",
+          "steps": 2,
+          "points": 100,
+          "theme": "travel",
+          "sequence": [
+            "hair",
+            "clothes"
+          ],
+          "one_result_per_step": true,
+          "prompts": [
+            "Попробуйте удобную причёску для отдыха.",
+            "Выберите одежду для путешествия."
+          ],
+          "preview_id": "4f03bee48741"
+        },
+        {
+          "slot": "combo",
+          "steps": 2,
+          "points": 100,
+          "theme": "office",
+          "sequence": [
+            "reference",
+            "enhance"
+          ],
+          "one_result_per_step": true,
+          "prompts": [
+            "Добавьте понравившийся пример для композиции и освещения.",
+            "Улучшите свет и чёткость кадра."
+          ],
+          "preview_id": "f9ed2b5a2cd6"
+        },
+        {
+          "slot": "creative",
+          "steps": 3,
+          "points": 100,
+          "theme": "travel",
+          "sequence": [
+            "clothes",
+            "background",
+            "merge"
+          ],
+          "one_result_per_step": true,
+          "prompts": [
+            "Выберите одежду для путешествия.",
+            "Подберите фон места, которое хотели бы посетить.",
+            "Добавьте второе фото человека и объедините кадры."
+          ],
+          "preview_id": "0c31f83c7dd9"
+        },
+        {
+          "slot": "finale",
+          "steps": 3,
+          "points": 150,
+          "theme": "office",
+          "sequence": [
+            "reference",
+            "enhance",
+            "document"
+          ],
+          "one_result_per_step": true,
+          "prompts": [
+            "Добавьте понравившийся пример для композиции и освещения.",
+            "Улучшите свет и чёткость кадра.",
+            "Подготовьте портрет для документов; приём ведомством не обещается."
+          ],
+          "preview_id": "b84c286edc6b"
+        }
+      ],
+      "completion_top_up": 50,
+      "awarded_points_total": 550,
+      "new_full_generations_from_campaign": 5,
+      "remaining_after_five_redemptions": 50,
+      "image_steps": 11,
+      "reward_liability_rub_at_4": 22.0,
+      "not_issued": true
+    },
+    {
+      "preview_seed": 33,
+      "starting_remainder": 0,
+      "missions": [
+        {
+          "slot": "first",
+          "steps": 1,
+          "points": 50,
+          "theme": "travel",
+          "sequence": [
+            "glasses"
+          ],
+          "one_result_per_step": true,
+          "prompts": [
+            "Примерьте солнцезащитные очки."
+          ],
+          "preview_id": "b651aac9bed2"
+        },
+        {
+          "slot": "pair",
+          "steps": 2,
+          "points": 100,
+          "theme": "city",
+          "sequence": [
+            "clothes",
+            "background"
+          ],
+          "one_result_per_step": true,
+          "prompts": [
+            "Примерьте одежду для прогулки.",
+            "Перенесите съёмку на городскую улицу."
+          ],
+          "preview_id": "dd9fca7e4c59"
+        },
+        {
+          "slot": "combo",
+          "steps": 2,
+          "points": 100,
+          "theme": "travel",
+          "sequence": [
+            "merge",
+            "enhance"
+          ],
+          "one_result_per_step": true,
+          "prompts": [
+            "Добавьте второе фото человека и объедините кадры.",
+            "Улучшите свет и чёткость кадра."
+          ],
+          "preview_id": "b970ca703f54"
+        },
+        {
+          "slot": "creative",
+          "steps": 3,
+          "points": 100,
+          "theme": "travel",
+          "sequence": [
+            "reference",
+            "enhance",
+            "document"
+          ],
+          "one_result_per_step": true,
+          "prompts": [
+            "Добавьте понравившийся пример для композиции и освещения.",
+            "Улучшите свет и чёткость кадра.",
+            "Подготовьте портрет для документов; приём ведомством не обещается."
+          ],
+          "preview_id": "d9fe37a35865"
+        },
+        {
+          "slot": "finale",
+          "steps": 3,
+          "points": 150,
+          "theme": "travel",
+          "sequence": [
+            "hair",
+            "glasses",
+            "clothes"
+          ],
+          "one_result_per_step": true,
+          "prompts": [
+            "Попробуйте удобную причёску для отдыха.",
+            "Примерьте солнцезащитные очки.",
+            "Выберите одежду для путешествия."
+          ],
+          "preview_id": "6a86a896816e"
+        }
+      ],
+      "completion_top_up": 50,
+      "awarded_points_total": 550,
+      "new_full_generations_from_campaign": 5,
+      "remaining_after_five_redemptions": 50,
+      "image_steps": 11,
+      "reward_liability_rub_at_4": 22.0,
+      "not_issued": true
+    }
+  ],
+  "single_photo_example": {
+    "preview_seed": 44,
+    "starting_remainder": 0,
+    "missions": [
+      {
+        "slot": "first",
+        "steps": 1,
+        "points": 50,
+        "theme": "travel",
+        "sequence": [
+          "background"
+        ],
+        "one_result_per_step": true,
+        "prompts": [
+          "Подберите фон места, которое хотели бы посетить."
+        ],
+        "preview_id": "c22bf30cc687"
+      },
+      {
+        "slot": "pair",
+        "steps": 2,
+        "points": 100,
+        "theme": "travel",
+        "sequence": [
+          "enhance",
+          "glasses"
+        ],
+        "one_result_per_step": true,
+        "prompts": [
+          "Улучшите свет и чёткость кадра.",
+          "Примерьте солнцезащитные очки."
+        ],
+        "preview_id": "87a9f161d314"
+      },
+      {
+        "slot": "combo",
+        "steps": 2,
+        "points": 100,
+        "theme": "office",
+        "sequence": [
+          "hair",
+          "clothes"
+        ],
+        "one_result_per_step": true,
+        "prompts": [
+          "Попробуйте подходящую образу причёску.",
+          "Подберите деловой образ по своему вкусу."
+        ],
+        "preview_id": "c15726ec4e5a"
+      },
+      {
+        "slot": "creative",
+        "steps": 3,
+        "points": 100,
+        "theme": "office",
+        "sequence": [
+          "background",
+          "enhance",
+          "document"
+        ],
+        "one_result_per_step": true,
+        "prompts": [
+          "Выберите спокойный фон для делового портрета.",
+          "Улучшите свет и чёткость кадра.",
+          "Подготовьте портрет для документов; приём ведомством не обещается."
+        ],
+        "preview_id": "f3934123e90b"
+      },
+      {
+        "slot": "finale",
+        "steps": 3,
+        "points": 150,
+        "theme": "office",
+        "sequence": [
+          "clothes",
+          "hair",
+          "glasses"
+        ],
+        "one_result_per_step": true,
+        "prompts": [
+          "Подберите деловой образ по своему вкусу.",
+          "Попробуйте подходящую образу причёску.",
+          "Примерьте очки для этого образа."
+        ],
+        "preview_id": "2499adf2ff9b"
+      }
+    ],
+    "completion_top_up": 50,
+    "awarded_points_total": 550,
+    "new_full_generations_from_campaign": 5,
+    "remaining_after_five_redemptions": 50,
+    "image_steps": 11,
+    "reward_liability_rub_at_4": 22.0,
+    "not_issued": true
+  },
+  "repeat_campaign_example": {
+    "preview_seed": 55,
+    "starting_remainder": 50,
+    "missions": [
+      {
+        "slot": "first",
+        "steps": 1,
+        "points": 50,
+        "theme": "office",
+        "sequence": [
+          "clothes"
+        ],
+        "one_result_per_step": true,
+        "prompts": [
+          "Подберите деловой образ по своему вкусу."
+        ],
+        "preview_id": "48a1ce47f252"
+      },
+      {
+        "slot": "pair",
+        "steps": 2,
+        "points": 100,
+        "theme": "travel",
+        "sequence": [
+          "glasses",
+          "hair"
+        ],
+        "one_result_per_step": true,
+        "prompts": [
+          "Примерьте солнцезащитные очки.",
+          "Попробуйте удобную причёску для отдыха."
+        ],
+        "preview_id": "364ad9ccfecc"
+      },
+      {
+        "slot": "combo",
+        "steps": 2,
+        "points": 100,
+        "theme": "office",
+        "sequence": [
+          "enhance",
+          "document"
+        ],
+        "one_result_per_step": true,
+        "prompts": [
+          "Улучшите свет и чёткость кадра.",
+          "Подготовьте портрет для документов; приём ведомством не обещается."
+        ],
+        "preview_id": "3553e52065ee"
+      },
+      {
+        "slot": "creative",
+        "steps": 3,
+        "points": 100,
+        "theme": "city",
+        "sequence": [
+          "reference",
+          "background",
+          "merge"
+        ],
+        "one_result_per_step": true,
+        "prompts": [
+          "Добавьте понравившийся пример для композиции и освещения.",
+          "Перенесите съёмку на городскую улицу.",
+          "Добавьте второе фото человека и объедините кадры."
+        ],
+        "preview_id": "13dc33a5454d"
+      },
+      {
+        "slot": "finale",
+        "steps": 3,
+        "points": 150,
+        "theme": "city",
+        "sequence": [
+          "hair",
+          "background",
+          "merge"
+        ],
+        "one_result_per_step": true,
+        "prompts": [
+          "Попробуйте повседневную причёску.",
+          "Перенесите съёмку на городскую улицу.",
+          "Добавьте второе фото человека и объедините кадры."
+        ],
+        "preview_id": "8cdc59934770"
+      }
+    ],
+    "completion_top_up": 0,
+    "awarded_points_total": 500,
+    "new_full_generations_from_campaign": 5,
+    "remaining_after_five_redemptions": 50,
+    "image_steps": 11,
+    "reward_liability_rub_at_4": 20.0,
+    "not_issued": true
+  }
+}

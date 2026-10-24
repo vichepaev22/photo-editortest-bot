@@ -1,0 +1,844 @@
+{
+  "date_local": "2026-10-24",
+  "status": "proposal_only_no_runtime_changes",
+  "assumptions": {
+    "fx_rub_per_usd": 100,
+    "funding_fx_is_not_cbr_rate": true,
+    "server_rub_month": 300,
+    "merchant_total_deductions_reserve": 0.3,
+    "reserve_is_not_verified_platega_fee_or_tax": true,
+    "budget_rub_per_medium_result": 4,
+    "reward_redemption_fraction": 1,
+    "original_package_usage_fraction": 1,
+    "cac_rub": 0,
+    "support_other_rub": 0,
+    "shop_points_per_generation": 100
+  },
+  "formulas": {
+    "net": "P*(1-d)",
+    "contribution": "P*(1-d)-N*c_p-B*c_b-CAC-support-other",
+    "break_even_cost_equal_quality": "P*(1-d)/(N+B)",
+    "recursive_reward_bonus": "N*r/(1-r), only for 0<=r<1",
+    "bonus_cap_proposed_points": "100*min(0.10*N,0.20*base_contribution/c_b), rounded down; fixed before public offer, not changed for earned rewards"
+  },
+  "live_usage": {
+    "captured_utc": "2026-10-23T19:39:00.445366+00:00",
+    "cutoff_utc": "2026-10-22T00:00:00Z",
+    "read_only": true,
+    "owner_excluded": true,
+    "quota_exempt_excluded": true,
+    "image_only": true,
+    "observations": [
+      {
+        "platform": "telegram",
+        "preset": "hair",
+        "n": 1,
+        "api_rub": 2.5806
+      },
+      {
+        "platform": "max",
+        "preset": "background",
+        "n": 1,
+        "api_rub": 2.5326
+      },
+      {
+        "platform": "max",
+        "preset": "clothes",
+        "n": 1,
+        "api_rub": 2.5261
+      },
+      {
+        "platform": "max",
+        "preset": "document",
+        "n": 1,
+        "api_rub": 2.5861
+      }
+    ],
+    "n": 4,
+    "mean_rub": 2.55635,
+    "missing_usage": 0,
+    "reference_analysis_jobs": 0,
+    "runtime_model_both": "gpt-image-2.5-sunburst-2026-09-08",
+    "runtime_quality_both": "medium",
+    "per_job_model_not_persisted": true,
+    "note": "Runtime plus post-release time window are model provenance proxies, not per-job proof. Token cost recalculated at Standard 5/8/30 USD per million and planning FX100, not provider invoice reconciliation."
+  },
+  "scenarios": [
+    {
+      "plan": "Express",
+      "price_rub": 240,
+      "included_generations": 20,
+      "base_generations": 20,
+      "scenario": "none",
+      "extra_generation_equivalent": 0.0,
+      "net_after_reserve_rub": 168.0,
+      "cost_budget_rub": 4,
+      "contribution_rub": 88.0,
+      "contribution_fraction": 0.36666666666666664,
+      "break_even_cost_rub": 8.4,
+      "max_cost_for_20pct_gross_margin_rub": 6.0
+    },
+    {
+      "plan": "Express",
+      "price_rub": 240,
+      "included_generations": 20,
+      "base_generations": 20,
+      "scenario": "one_per_three",
+      "extra_generation_equivalent": 6.666666666666667,
+      "net_after_reserve_rub": 168.0,
+      "cost_budget_rub": 4,
+      "contribution_rub": 61.333333333333336,
+      "contribution_fraction": 0.25555555555555554,
+      "break_even_cost_rub": 6.3,
+      "max_cost_for_20pct_gross_margin_rub": 4.5
+    },
+    {
+      "plan": "Express",
+      "price_rub": 240,
+      "included_generations": 20,
+      "base_generations": 20,
+      "scenario": "half_each",
+      "extra_generation_equivalent": 10.0,
+      "net_after_reserve_rub": 168.0,
+      "cost_budget_rub": 4,
+      "contribution_rub": 48.0,
+      "contribution_fraction": 0.2,
+      "break_even_cost_rub": 5.6,
+      "max_cost_for_20pct_gross_margin_rub": 4.0
+    },
+    {
+      "plan": "Express",
+      "price_rub": 240,
+      "included_generations": 20,
+      "base_generations": 20,
+      "scenario": "combo_1_5_per_two",
+      "extra_generation_equivalent": 15.0,
+      "net_after_reserve_rub": 168.0,
+      "cost_budget_rub": 4,
+      "contribution_rub": 28.0,
+      "contribution_fraction": 0.11666666666666667,
+      "break_even_cost_rub": 4.8,
+      "max_cost_for_20pct_gross_margin_rub": 3.4285714285714284
+    },
+    {
+      "plan": "Express",
+      "price_rub": 240,
+      "included_generations": 20,
+      "base_generations": 20,
+      "scenario": "sixty_percent_of_paid",
+      "extra_generation_equivalent": 12.0,
+      "net_after_reserve_rub": 168.0,
+      "cost_budget_rub": 4,
+      "contribution_rub": 40.0,
+      "contribution_fraction": 0.16666666666666666,
+      "break_even_cost_rub": 5.25,
+      "max_cost_for_20pct_gross_margin_rub": 3.75
+    },
+    {
+      "plan": "Express",
+      "price_rub": 240,
+      "included_generations": 20,
+      "base_generations": 20,
+      "scenario": "sixty_percent_of_all",
+      "extra_generation_equivalent": 30.0,
+      "net_after_reserve_rub": 168.0,
+      "cost_budget_rub": 4,
+      "contribution_rub": -32.0,
+      "contribution_fraction": -0.13333333333333333,
+      "break_even_cost_rub": 3.36,
+      "max_cost_for_20pct_gross_margin_rub": 2.4
+    },
+    {
+      "plan": "Express",
+      "price_rub": 240,
+      "included_generations": 20,
+      "base_generations": 20,
+      "scenario": "combo_base_only",
+      "extra_generation_equivalent": 15.0,
+      "net_after_reserve_rub": 168.0,
+      "cost_budget_rub": 4,
+      "contribution_rub": 28.0,
+      "contribution_fraction": 0.11666666666666667,
+      "break_even_cost_rub": 4.8,
+      "max_cost_for_20pct_gross_margin_rub": 3.4285714285714284
+    },
+    {
+      "plan": "Express",
+      "price_rub": 240,
+      "included_generations": 20,
+      "base_generations": 20,
+      "scenario": "one_time_combo",
+      "extra_generation_equivalent": 1.5,
+      "net_after_reserve_rub": 168.0,
+      "cost_budget_rub": 4,
+      "contribution_rub": 82.0,
+      "contribution_fraction": 0.3416666666666667,
+      "break_even_cost_rub": 7.813953488372093,
+      "max_cost_for_20pct_gross_margin_rub": 5.5813953488372094
+    },
+    {
+      "plan": "Express",
+      "price_rub": 240,
+      "included_generations": 20,
+      "base_generations": 20,
+      "scenario": "capped_ten_percent",
+      "extra_generation_equivalent": 2.0,
+      "net_after_reserve_rub": 168.0,
+      "cost_budget_rub": 4,
+      "contribution_rub": 80.0,
+      "contribution_fraction": 0.3333333333333333,
+      "break_even_cost_rub": 7.636363636363637,
+      "max_cost_for_20pct_gross_margin_rub": 5.454545454545454
+    },
+    {
+      "plan": "Express",
+      "price_rub": 240,
+      "included_generations": 20,
+      "base_generations": 20,
+      "scenario": "campaign_550",
+      "extra_generation_equivalent": 5.5,
+      "net_after_reserve_rub": 168.0,
+      "cost_budget_rub": 4,
+      "contribution_rub": 66.0,
+      "contribution_fraction": 0.275,
+      "break_even_cost_rub": 6.588235294117647,
+      "max_cost_for_20pct_gross_margin_rub": 4.705882352941177
+    },
+    {
+      "plan": "Базовый",
+      "price_rub": 480,
+      "included_generations": 50,
+      "base_generations": 40,
+      "scenario": "none",
+      "extra_generation_equivalent": 0.0,
+      "net_after_reserve_rub": 336.0,
+      "cost_budget_rub": 4,
+      "contribution_rub": 136.0,
+      "contribution_fraction": 0.2833333333333333,
+      "break_even_cost_rub": 6.72,
+      "max_cost_for_20pct_gross_margin_rub": 4.8
+    },
+    {
+      "plan": "Базовый",
+      "price_rub": 480,
+      "included_generations": 50,
+      "base_generations": 40,
+      "scenario": "one_per_three",
+      "extra_generation_equivalent": 16.666666666666668,
+      "net_after_reserve_rub": 336.0,
+      "cost_budget_rub": 4,
+      "contribution_rub": 69.33333333333333,
+      "contribution_fraction": 0.14444444444444443,
+      "break_even_cost_rub": 5.04,
+      "max_cost_for_20pct_gross_margin_rub": 3.6
+    },
+    {
+      "plan": "Базовый",
+      "price_rub": 480,
+      "included_generations": 50,
+      "base_generations": 40,
+      "scenario": "half_each",
+      "extra_generation_equivalent": 25.0,
+      "net_after_reserve_rub": 336.0,
+      "cost_budget_rub": 4,
+      "contribution_rub": 36.0,
+      "contribution_fraction": 0.075,
+      "break_even_cost_rub": 4.48,
+      "max_cost_for_20pct_gross_margin_rub": 3.2
+    },
+    {
+      "plan": "Базовый",
+      "price_rub": 480,
+      "included_generations": 50,
+      "base_generations": 40,
+      "scenario": "combo_1_5_per_two",
+      "extra_generation_equivalent": 37.5,
+      "net_after_reserve_rub": 336.0,
+      "cost_budget_rub": 4,
+      "contribution_rub": -14.0,
+      "contribution_fraction": -0.029166666666666667,
+      "break_even_cost_rub": 3.84,
+      "max_cost_for_20pct_gross_margin_rub": 2.742857142857143
+    },
+    {
+      "plan": "Базовый",
+      "price_rub": 480,
+      "included_generations": 50,
+      "base_generations": 40,
+      "scenario": "sixty_percent_of_paid",
+      "extra_generation_equivalent": 30.0,
+      "net_after_reserve_rub": 336.0,
+      "cost_budget_rub": 4,
+      "contribution_rub": 16.0,
+      "contribution_fraction": 0.03333333333333333,
+      "break_even_cost_rub": 4.2,
+      "max_cost_for_20pct_gross_margin_rub": 3.0
+    },
+    {
+      "plan": "Базовый",
+      "price_rub": 480,
+      "included_generations": 50,
+      "base_generations": 40,
+      "scenario": "sixty_percent_of_all",
+      "extra_generation_equivalent": 75.0,
+      "net_after_reserve_rub": 336.0,
+      "cost_budget_rub": 4,
+      "contribution_rub": -164.0,
+      "contribution_fraction": -0.3416666666666667,
+      "break_even_cost_rub": 2.688,
+      "max_cost_for_20pct_gross_margin_rub": 1.92
+    },
+    {
+      "plan": "Базовый",
+      "price_rub": 480,
+      "included_generations": 50,
+      "base_generations": 40,
+      "scenario": "combo_base_only",
+      "extra_generation_equivalent": 30.0,
+      "net_after_reserve_rub": 336.0,
+      "cost_budget_rub": 4,
+      "contribution_rub": 16.0,
+      "contribution_fraction": 0.03333333333333333,
+      "break_even_cost_rub": 4.2,
+      "max_cost_for_20pct_gross_margin_rub": 3.0
+    },
+    {
+      "plan": "Базовый",
+      "price_rub": 480,
+      "included_generations": 50,
+      "base_generations": 40,
+      "scenario": "one_time_combo",
+      "extra_generation_equivalent": 1.5,
+      "net_after_reserve_rub": 336.0,
+      "cost_budget_rub": 4,
+      "contribution_rub": 130.0,
+      "contribution_fraction": 0.2708333333333333,
+      "break_even_cost_rub": 6.524271844660194,
+      "max_cost_for_20pct_gross_margin_rub": 4.660194174757281
+    },
+    {
+      "plan": "Базовый",
+      "price_rub": 480,
+      "included_generations": 50,
+      "base_generations": 40,
+      "scenario": "capped_ten_percent",
+      "extra_generation_equivalent": 5.0,
+      "net_after_reserve_rub": 336.0,
+      "cost_budget_rub": 4,
+      "contribution_rub": 116.0,
+      "contribution_fraction": 0.24166666666666667,
+      "break_even_cost_rub": 6.109090909090909,
+      "max_cost_for_20pct_gross_margin_rub": 4.363636363636363
+    },
+    {
+      "plan": "Базовый",
+      "price_rub": 480,
+      "included_generations": 50,
+      "base_generations": 40,
+      "scenario": "campaign_550",
+      "extra_generation_equivalent": 5.5,
+      "net_after_reserve_rub": 336.0,
+      "cost_budget_rub": 4,
+      "contribution_rub": 114.0,
+      "contribution_fraction": 0.2375,
+      "break_even_cost_rub": 6.054054054054054,
+      "max_cost_for_20pct_gross_margin_rub": 4.324324324324325
+    },
+    {
+      "plan": "Premium",
+      "price_rub": 720,
+      "included_generations": 75,
+      "base_generations": 60,
+      "scenario": "none",
+      "extra_generation_equivalent": 0.0,
+      "net_after_reserve_rub": 504.0,
+      "cost_budget_rub": 4,
+      "contribution_rub": 204.0,
+      "contribution_fraction": 0.2833333333333333,
+      "break_even_cost_rub": 6.72,
+      "max_cost_for_20pct_gross_margin_rub": 4.8
+    },
+    {
+      "plan": "Premium",
+      "price_rub": 720,
+      "included_generations": 75,
+      "base_generations": 60,
+      "scenario": "one_per_three",
+      "extra_generation_equivalent": 25.0,
+      "net_after_reserve_rub": 504.0,
+      "cost_budget_rub": 4,
+      "contribution_rub": 104.0,
+      "contribution_fraction": 0.14444444444444443,
+      "break_even_cost_rub": 5.04,
+      "max_cost_for_20pct_gross_margin_rub": 3.6
+    },
+    {
+      "plan": "Premium",
+      "price_rub": 720,
+      "included_generations": 75,
+      "base_generations": 60,
+      "scenario": "half_each",
+      "extra_generation_equivalent": 37.5,
+      "net_after_reserve_rub": 504.0,
+      "cost_budget_rub": 4,
+      "contribution_rub": 54.0,
+      "contribution_fraction": 0.075,
+      "break_even_cost_rub": 4.48,
+      "max_cost_for_20pct_gross_margin_rub": 3.2
+    },
+    {
+      "plan": "Premium",
+      "price_rub": 720,
+      "included_generations": 75,
+      "base_generations": 60,
+      "scenario": "combo_1_5_per_two",
+      "extra_generation_equivalent": 56.25,
+      "net_after_reserve_rub": 504.0,
+      "cost_budget_rub": 4,
+      "contribution_rub": -21.0,
+      "contribution_fraction": -0.029166666666666667,
+      "break_even_cost_rub": 3.84,
+      "max_cost_for_20pct_gross_margin_rub": 2.742857142857143
+    },
+    {
+      "plan": "Premium",
+      "price_rub": 720,
+      "included_generations": 75,
+      "base_generations": 60,
+      "scenario": "sixty_percent_of_paid",
+      "extra_generation_equivalent": 45.0,
+      "net_after_reserve_rub": 504.0,
+      "cost_budget_rub": 4,
+      "contribution_rub": 24.0,
+      "contribution_fraction": 0.03333333333333333,
+      "break_even_cost_rub": 4.2,
+      "max_cost_for_20pct_gross_margin_rub": 3.0
+    },
+    {
+      "plan": "Premium",
+      "price_rub": 720,
+      "included_generations": 75,
+      "base_generations": 60,
+      "scenario": "sixty_percent_of_all",
+      "extra_generation_equivalent": 112.5,
+      "net_after_reserve_rub": 504.0,
+      "cost_budget_rub": 4,
+      "contribution_rub": -246.0,
+      "contribution_fraction": -0.3416666666666667,
+      "break_even_cost_rub": 2.688,
+      "max_cost_for_20pct_gross_margin_rub": 1.92
+    },
+    {
+      "plan": "Premium",
+      "price_rub": 720,
+      "included_generations": 75,
+      "base_generations": 60,
+      "scenario": "combo_base_only",
+      "extra_generation_equivalent": 45.0,
+      "net_after_reserve_rub": 504.0,
+      "cost_budget_rub": 4,
+      "contribution_rub": 24.0,
+      "contribution_fraction": 0.03333333333333333,
+      "break_even_cost_rub": 4.2,
+      "max_cost_for_20pct_gross_margin_rub": 3.0
+    },
+    {
+      "plan": "Premium",
+      "price_rub": 720,
+      "included_generations": 75,
+      "base_generations": 60,
+      "scenario": "one_time_combo",
+      "extra_generation_equivalent": 1.5,
+      "net_after_reserve_rub": 504.0,
+      "cost_budget_rub": 4,
+      "contribution_rub": 198.0,
+      "contribution_fraction": 0.275,
+      "break_even_cost_rub": 6.588235294117647,
+      "max_cost_for_20pct_gross_margin_rub": 4.705882352941177
+    },
+    {
+      "plan": "Premium",
+      "price_rub": 720,
+      "included_generations": 75,
+      "base_generations": 60,
+      "scenario": "capped_ten_percent",
+      "extra_generation_equivalent": 7.5,
+      "net_after_reserve_rub": 504.0,
+      "cost_budget_rub": 4,
+      "contribution_rub": 174.0,
+      "contribution_fraction": 0.24166666666666667,
+      "break_even_cost_rub": 6.109090909090909,
+      "max_cost_for_20pct_gross_margin_rub": 4.363636363636363
+    },
+    {
+      "plan": "Premium",
+      "price_rub": 720,
+      "included_generations": 75,
+      "base_generations": 60,
+      "scenario": "campaign_550",
+      "extra_generation_equivalent": 5.5,
+      "net_after_reserve_rub": 504.0,
+      "cost_budget_rub": 4,
+      "contribution_rub": 182.0,
+      "contribution_fraction": 0.25277777777777777,
+      "break_even_cost_rub": 6.260869565217392,
+      "max_cost_for_20pct_gross_margin_rub": 4.472049689440993
+    }
+  ],
+  "sensitivity": [
+    {
+      "plan": "Express",
+      "cost_rub": 2.56,
+      "reserve_fraction": 0.1,
+      "extra_generations": 5.5,
+      "contribution_rub": 150.72
+    },
+    {
+      "plan": "Express",
+      "cost_rub": 2.56,
+      "reserve_fraction": 0.2,
+      "extra_generations": 5.5,
+      "contribution_rub": 126.72
+    },
+    {
+      "plan": "Express",
+      "cost_rub": 2.56,
+      "reserve_fraction": 0.3,
+      "extra_generations": 5.5,
+      "contribution_rub": 102.72
+    },
+    {
+      "plan": "Express",
+      "cost_rub": 4.0,
+      "reserve_fraction": 0.1,
+      "extra_generations": 5.5,
+      "contribution_rub": 114.0
+    },
+    {
+      "plan": "Express",
+      "cost_rub": 4.0,
+      "reserve_fraction": 0.2,
+      "extra_generations": 5.5,
+      "contribution_rub": 90.0
+    },
+    {
+      "plan": "Express",
+      "cost_rub": 4.0,
+      "reserve_fraction": 0.3,
+      "extra_generations": 5.5,
+      "contribution_rub": 66.0
+    },
+    {
+      "plan": "Express",
+      "cost_rub": 6.0,
+      "reserve_fraction": 0.1,
+      "extra_generations": 5.5,
+      "contribution_rub": 63.0
+    },
+    {
+      "plan": "Express",
+      "cost_rub": 6.0,
+      "reserve_fraction": 0.2,
+      "extra_generations": 5.5,
+      "contribution_rub": 39.0
+    },
+    {
+      "plan": "Express",
+      "cost_rub": 6.0,
+      "reserve_fraction": 0.3,
+      "extra_generations": 5.5,
+      "contribution_rub": 15.0
+    },
+    {
+      "plan": "Express",
+      "cost_rub": 8.0,
+      "reserve_fraction": 0.1,
+      "extra_generations": 5.5,
+      "contribution_rub": 12.0
+    },
+    {
+      "plan": "Express",
+      "cost_rub": 8.0,
+      "reserve_fraction": 0.2,
+      "extra_generations": 5.5,
+      "contribution_rub": -12.0
+    },
+    {
+      "plan": "Express",
+      "cost_rub": 8.0,
+      "reserve_fraction": 0.3,
+      "extra_generations": 5.5,
+      "contribution_rub": -36.0
+    },
+    {
+      "plan": "Базовый",
+      "cost_rub": 2.56,
+      "reserve_fraction": 0.1,
+      "extra_generations": 5.5,
+      "contribution_rub": 289.92
+    },
+    {
+      "plan": "Базовый",
+      "cost_rub": 2.56,
+      "reserve_fraction": 0.2,
+      "extra_generations": 5.5,
+      "contribution_rub": 241.92
+    },
+    {
+      "plan": "Базовый",
+      "cost_rub": 2.56,
+      "reserve_fraction": 0.3,
+      "extra_generations": 5.5,
+      "contribution_rub": 193.92
+    },
+    {
+      "plan": "Базовый",
+      "cost_rub": 4.0,
+      "reserve_fraction": 0.1,
+      "extra_generations": 5.5,
+      "contribution_rub": 210.0
+    },
+    {
+      "plan": "Базовый",
+      "cost_rub": 4.0,
+      "reserve_fraction": 0.2,
+      "extra_generations": 5.5,
+      "contribution_rub": 162.0
+    },
+    {
+      "plan": "Базовый",
+      "cost_rub": 4.0,
+      "reserve_fraction": 0.3,
+      "extra_generations": 5.5,
+      "contribution_rub": 114.0
+    },
+    {
+      "plan": "Базовый",
+      "cost_rub": 6.0,
+      "reserve_fraction": 0.1,
+      "extra_generations": 5.5,
+      "contribution_rub": 99.0
+    },
+    {
+      "plan": "Базовый",
+      "cost_rub": 6.0,
+      "reserve_fraction": 0.2,
+      "extra_generations": 5.5,
+      "contribution_rub": 51.0
+    },
+    {
+      "plan": "Базовый",
+      "cost_rub": 6.0,
+      "reserve_fraction": 0.3,
+      "extra_generations": 5.5,
+      "contribution_rub": 3.0
+    },
+    {
+      "plan": "Базовый",
+      "cost_rub": 8.0,
+      "reserve_fraction": 0.1,
+      "extra_generations": 5.5,
+      "contribution_rub": -12.0
+    },
+    {
+      "plan": "Базовый",
+      "cost_rub": 8.0,
+      "reserve_fraction": 0.2,
+      "extra_generations": 5.5,
+      "contribution_rub": -60.0
+    },
+    {
+      "plan": "Базовый",
+      "cost_rub": 8.0,
+      "reserve_fraction": 0.3,
+      "extra_generations": 5.5,
+      "contribution_rub": -108.0
+    },
+    {
+      "plan": "Premium",
+      "cost_rub": 2.56,
+      "reserve_fraction": 0.1,
+      "extra_generations": 5.5,
+      "contribution_rub": 441.92
+    },
+    {
+      "plan": "Premium",
+      "cost_rub": 2.56,
+      "reserve_fraction": 0.2,
+      "extra_generations": 5.5,
+      "contribution_rub": 369.92
+    },
+    {
+      "plan": "Premium",
+      "cost_rub": 2.56,
+      "reserve_fraction": 0.3,
+      "extra_generations": 5.5,
+      "contribution_rub": 297.92
+    },
+    {
+      "plan": "Premium",
+      "cost_rub": 4.0,
+      "reserve_fraction": 0.1,
+      "extra_generations": 5.5,
+      "contribution_rub": 326.0
+    },
+    {
+      "plan": "Premium",
+      "cost_rub": 4.0,
+      "reserve_fraction": 0.2,
+      "extra_generations": 5.5,
+      "contribution_rub": 254.0
+    },
+    {
+      "plan": "Premium",
+      "cost_rub": 4.0,
+      "reserve_fraction": 0.3,
+      "extra_generations": 5.5,
+      "contribution_rub": 182.0
+    },
+    {
+      "plan": "Premium",
+      "cost_rub": 6.0,
+      "reserve_fraction": 0.1,
+      "extra_generations": 5.5,
+      "contribution_rub": 165.0
+    },
+    {
+      "plan": "Premium",
+      "cost_rub": 6.0,
+      "reserve_fraction": 0.2,
+      "extra_generations": 5.5,
+      "contribution_rub": 93.0
+    },
+    {
+      "plan": "Premium",
+      "cost_rub": 6.0,
+      "reserve_fraction": 0.3,
+      "extra_generations": 5.5,
+      "contribution_rub": 21.0
+    },
+    {
+      "plan": "Premium",
+      "cost_rub": 8.0,
+      "reserve_fraction": 0.1,
+      "extra_generations": 5.5,
+      "contribution_rub": 4.0
+    },
+    {
+      "plan": "Premium",
+      "cost_rub": 8.0,
+      "reserve_fraction": 0.2,
+      "extra_generations": 5.5,
+      "contribution_rub": -68.0
+    },
+    {
+      "plan": "Premium",
+      "cost_rub": 8.0,
+      "reserve_fraction": 0.3,
+      "extra_generations": 5.5,
+      "contribution_rub": -140.0
+    }
+  ],
+  "expense_coverage": [
+    {
+      "plan": "Express",
+      "active_regular_free_users": 0,
+      "free_cost_rub": 0.0,
+      "target_rub": 0,
+      "purchases": 5
+    },
+    {
+      "plan": "Express",
+      "active_regular_free_users": 100,
+      "free_cost_rub": 2400.0,
+      "target_rub": 0,
+      "purchases": 41
+    },
+    {
+      "plan": "Базовый",
+      "active_regular_free_users": 0,
+      "free_cost_rub": 0.0,
+      "target_rub": 0,
+      "purchases": 3
+    },
+    {
+      "plan": "Базовый",
+      "active_regular_free_users": 100,
+      "free_cost_rub": 2400.0,
+      "target_rub": 0,
+      "purchases": 24
+    },
+    {
+      "plan": "Premium",
+      "active_regular_free_users": 0,
+      "free_cost_rub": 0.0,
+      "target_rub": 0,
+      "purchases": 2
+    },
+    {
+      "plan": "Premium",
+      "active_regular_free_users": 100,
+      "free_cost_rub": 2400.0,
+      "target_rub": 0,
+      "purchases": 15
+    }
+  ],
+  "beta_testing": {
+    "testers_user_reported": 3,
+    "granted_each": 50,
+    "granted_total": 150,
+    "grants_not_modified": true,
+    "revenue_for_beta_grants_rub": 0,
+    "image_only_estimate_rub": 383.4525,
+    "planning_api_rub": 600,
+    "stress_api_rub": 900,
+    "server_rub_per_month": 300,
+    "planning_api_plus_one_month_server_rub": 900,
+    "profit_target": null,
+    "note": "Issued credits are potential usage, not proof of already-incurred cost. Total excludes any additional grants and other users. Existing free policies remain unchanged."
+  },
+  "campaign_550": {
+    "status": "accepted_reward_target_design_only_not_issued",
+    "points_per_generation": 100,
+    "base_mission_points": [
+      50,
+      100,
+      100,
+      100,
+      150
+    ],
+    "base_total": 500,
+    "first_completion_top_up": 50,
+    "first_total": 550,
+    "first_generation_equivalent": 5.5,
+    "full_redemptions": 5,
+    "remainder": 50,
+    "image_only_estimate_rub": 14.059925,
+    "planning_liability_rub": 22,
+    "immediate_api_for_five_rub": 20,
+    "remainder_liability_rub": 2,
+    "stress_liability_rub": 33,
+    "beta_three_total_reward_liability_rub": 66,
+    "beta_150_plus_rewards_api_budget_rub": 666,
+    "beta_plus_rewards_plus_one_month_server_rub": 966,
+    "repeat_points_if_prior_remainder_50": 500,
+    "auto_repeat_enabled": false
+  },
+  "recursion_examples": [
+    {
+      "reward_ratio": 0.3333333333333333,
+      "total_multiplier": 1.4999999999999998,
+      "gift_multiplier": 0.49999999999999994
+    },
+    {
+      "reward_ratio": 0.5,
+      "total_multiplier": 2.0,
+      "gift_multiplier": 1.0
+    },
+    {
+      "reward_ratio": 0.75,
+      "total_multiplier": 4.0,
+      "gift_multiplier": 3.0
+    }
+  ]
+}
