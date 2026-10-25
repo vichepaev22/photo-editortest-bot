@@ -10,6 +10,8 @@ class Preset:
 
 
 PRESETS = {
+    # Internal dialog composition; deliberately absent from the public function catalog.
+    "look": Preset("Новый образ", "Apply only the requested compatible changes to clothing, hair, glasses or background."),
     "reference": Preset("Фото по примеру", "Image 1 is the user; image 2 is a staging reference.", 2, 1),
     "hair": Preset("Причёска", "Change only the hairstyle and hair color as requested."),
     "clothes": Preset("Одежда", "Change only the clothing as requested; keep the person fully clothed."),

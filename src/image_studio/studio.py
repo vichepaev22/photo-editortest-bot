@@ -297,7 +297,7 @@ def create_studio_app(settings, store, media, service):
     async def catalog():
         return {
             "presets": [{"id": key, "label": preset.label, "inputs": preset.inputs, "credits": service.cost(key)}
-                        for key, preset in PRESETS.items() if key != "document_original"],
+                        for key, preset in PRESETS.items() if key not in {"document_original", "look"}],
             "mode": settings.image_provider, "local_demo": demo_enabled(),
             "support_contact": settings.support_contact,
             "trial_access": service.trial_access,

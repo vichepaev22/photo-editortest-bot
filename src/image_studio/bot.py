@@ -57,6 +57,7 @@ from .subscriptions import (
     subscription_eligible,
     subscription_hint,
 )
+from .telegram_dialog import TelegramDialog
 from .telegram_free import telegram_free_delivery
 from .telegram_live import TelegramLive, progress_text
 
@@ -125,7 +126,7 @@ def result_presentation(record):
 
 
 _choices = [(ICONS[key] + " " + p.label, "preset:" + key)
-            for key, p in PRESETS.items() if key != "document_original"]
+            for key, p in PRESETS.items() if key not in {"document_original", "look"}]
 MENU = buttons([_choices[i : i + 2] for i in range(0, len(_choices), 2)])
 NAV = {
     "edit": "📸 Изменить фото",
@@ -340,6 +341,8 @@ def build_dispatcher(settings, store, media, service, *, step_messages=None, pur
     live = TelegramLive(store)
     dp["telegram_live"] = live
     service.progress = live.stage
+    dialog = TelegramDialog(settings, store, media, service, live, steps) if settings.dialog_enabled else None
+    dp["photo_dialog"] = dialog
     purchases = purchase_demo if purchase_demo is not None else PurchaseDemo()
     dp["purchase_demo"] = purchases
 
@@ -555,6 +558,8 @@ def build_dispatcher(settings, store, media, service, *, step_messages=None, pur
             await offer_channel_bonus(message.bot, store, user, job)
 
     async def navigate(message, user, action):
+        if dialog and action in {"home", "edit", "merge"}:
+            dialog.core.clear(user)
         bonus.leave(user)
         if action in {"home", "edit"}:
             drafts.pop(user, None)
@@ -655,6 +660,8 @@ def build_dispatcher(settings, store, media, service, *, step_messages=None, pur
     @router.message(CommandStart())
     async def start(message: Message):
         bonus.leave(message.from_user.id)
+        if dialog:
+            dialog.core.clear(message.from_user.id)
         drafts.pop(message.from_user.id, None)
         total, reserved = service.wallet(message.from_user.id)
         mode = (
@@ -680,11 +687,17 @@ def build_dispatcher(settings, store, media, service, *, step_messages=None, pur
                 reply_markup=CONSENT,
             )
 
+        elif dialog:
+            await dialog.show(message, message.from_user.id, dialog.core.entry())
+
     @router.callback_query(F.data == "consent")
     async def consent(callback: CallbackQuery):
         store.consent(callback.from_user.id)
         total, reserved = service.wallet(callback.from_user.id)
         await callback.answer("Согласие сохранено")
+        if dialog:
+            await dialog.show(callback.message, callback.from_user.id, dialog.core.entry())
+            return
         await callback.message.answer(
             "Выберите действие на нижней панели. "
             + (
@@ -837,6 +850,8 @@ def build_dispatcher(settings, store, media, service, *, step_messages=None, pur
 
     @router.message(Command("cancel"))
     async def cancel(message: Message):
+        if dialog:
+            dialog.core.clear(message.from_user.id)
         drafts.pop(message.from_user.id, None)
         await message.answer("Новая заявка сброшена. Уже начатая обработка продолжается.", reply_markup=MAIN)
 
@@ -865,6 +880,8 @@ def build_dispatcher(settings, store, media, service, *, step_messages=None, pur
 
     @router.message(Command("delete"))
     async def delete(message: Message):
+        if dialog:
+            dialog.core.clear(message.from_user.id)
         try:
             service.delete(message.from_user.id)
             drafts.pop(message.from_user.id, None)
@@ -906,7 +923,7 @@ def build_dispatcher(settings, store, media, service, *, step_messages=None, pur
             await callback.answer("Сначала подтвердите условия в /start", show_alert=True)
             return
         key = callback.data.split(":", 1)[1]
-        if key not in PRESETS:
+        if key not in PRESETS or key == "look":
             await callback.answer("Неизвестная функция")
             return
         await callback.answer()
@@ -985,6 +1002,9 @@ def build_dispatcher(settings, store, media, service, *, step_messages=None, pur
         draft.photos.append(path)
         draft.photo_messages.add(source.message_id)
         await step_two(message, draft)
+
+    if dialog:
+        dialog.register(router, drafts, admin, bonus, set(NAV.values()))
 
     @router.message(F.photo | F.document)
     async def photo(message: Message):

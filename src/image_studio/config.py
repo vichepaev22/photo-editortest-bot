@@ -15,6 +15,7 @@ MODELS = {
 
 @dataclass
 class Settings:
+    dialog_enabled: bool = False
     data_dir: Path = Path("data")
     image_provider: str = "mock"
     image_model: str = "gpt-image-2.5-sunburst-2026-09-08"
@@ -97,6 +98,7 @@ class Settings:
     def from_env(cls):
         load_dotenv()
         return cls(
+            dialog_enabled=os.getenv("DIALOG_ENABLED", "false").lower() == "true",
             data_dir=Path(os.getenv("DATA_DIR", "data")),
             image_provider=os.getenv("IMAGE_PROVIDER", "mock"),
             image_model=os.getenv("IMAGE_MODEL", "gpt-image-2.5-sunburst-2026-09-08"),
