@@ -1,5 +1,9 @@
 # Проверки и границы результата
 
+## CR-TG-INSTRUCTIONS-001 — 26.10.2026, implemented / verified / deployed
+
+Telegram-only, ac6911d. RED: новый модуль отсутствовал, ModuleNotFoundError; 8новых/18целевых проверок passed, Ruff PASS. CI40231987341 success:645passed/3skipped. Установленный код под сервисным пользователем прошёл offline UI-smoke на временной БД:3пары,6кадров, текстовое меню. Первый install откатил код из-за root-only прав новой папки PNG; после точечного owner/mode исправления smoke и запуск прошли. Telegram PID350313/ready/health200/NRestarts0;9хешей совпали, прежние28таблиц/строки и env/systemd не менялись, MAX348517/Bagizov106528 не перезапускались. Флаги диалога/частного магазина сохранены, traceback0. Платных вызовов/реальных сообщений/начислений агента0. Резервная копия: /root/tg-instructions-20261026-r2/backup. Проверка iPhone — владелец. [Подробности и тексты](telegram-instructions.md).
+
 ## CR-DIALOG-003 — 25.10.2026, implemented / verified / deployed
 
 Telegram и MAX для всех пользователей; fb60055, обязательный CI40206014409 success. Серверный smoke на временных БД, хеши12модулей, действующие флаги/health200 и сохранение прежних данных подтверждены. Реальных API-вызовов/сообщений/начислений агента0. Подробности и границы MAX baseline/телефонного POC: [отчёт](dialog-deployment-20261025.md).
