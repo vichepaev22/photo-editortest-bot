@@ -84,6 +84,27 @@ async def test_consent_foreign_photo_expiry_and_stale_confirm(dialog):
     assert not store.jobs()
 
 
+async def test_spoken_variant_counts_preserve_description_without_charging(dialog):
+    core, store, media, _, _ = dialog
+    await core.message(1, 'Примерь круглые очки', images=[photo(media)])
+    for words, number in [('один вариант', 1), ('три варианта', 3), ('давай шесть', 6),
+                          ('девять вариантов', 9), ('покажи двенадцать вариантов', 12)]:
+        card = await core.message(1, words)
+        assert core.current(1).count == number
+        assert core.current(1).description == 'Примерь круглые очки'
+        assert 'Расход: 1' in card.text
+    assert not store.jobs()
+
+
+async def test_short_category_request_asks_for_details_instead_of_confirming(dialog):
+    core, store, media, _, _ = dialog
+    await core.message(1, '', images=[photo(media)])
+    card = await core.message(1, 'А теперь фон')
+    assert 'Какой фон' in card.text
+    assert not any(data.startswith('dlg:confirm:') for row in card.rows for _, data in row)
+    assert not store.jobs()
+
+
 async def test_combined_edit_and_source_choice_are_explicit(dialog):
     core, store, media, _, service = dialog
     original = photo(media)

@@ -275,10 +275,15 @@ class PhotoDialog:
                     "Для причёсок и очков можно выбрать 1, 3, 6, 9 или 12 вариантов на одном листе.",
                     QUICK + BACK,
                 )
-            if session.preset in {"hair", "glasses"} and re.fullmatch(
-                r"(?:вариантов?\s*)?(1|3|6|9|12)(?:\s*вариант[а-я]*)?", lower
-            ):
-                session.count = int(re.search(r"\d+", lower)[0])
+            count_words = {"один": 1, "три": 3, "шесть": 6, "девять": 9, "двенадцать": 12}
+            count_match = re.fullmatch(
+                r"(?:(?:давай|покажи|сделай|хочу)\s+)?(?:вариантов?\s*)?"
+                r"(1|3|6|9|12|один|три|шесть|девять|двенадцать)(?:\s*вариант[а-я]*)?",
+                lower.strip(" .!"),
+            )
+            if session.preset in {"hair", "glasses"} and count_match:
+                value = count_match[1]
+                session.count = count_words[value] if value in count_words else int(value)
                 session.token = uuid.uuid4().hex[:20]
             else:
                 preset = self.infer(text)
@@ -309,7 +314,8 @@ class PhotoDialog:
                 if session.preset:
                     # A category alone asks for detail; a concrete wish remains the user's own text.
                     generic = re.fullmatch(
-                        r"(?:хочу\s+)?(?:примерить\s+)?(?:очки|прич[её]ску|одежду|фон|улучшить фото)", lower
+                        r"(?:(?:а\s+)?теперь\s+)?(?:(?:хочу|смени|поменяй|добавь|сделай|измени)\s+)?"
+                        r"(?:примерить\s+)?(?:очки|прич[её]ску|одежду|фон|улучшить фото)[!. ]*", lower
                     )
                     session.description = "" if generic else text
                     session.token = uuid.uuid4().hex[:20]
