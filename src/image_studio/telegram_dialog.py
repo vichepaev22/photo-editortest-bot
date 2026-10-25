@@ -12,6 +12,8 @@ from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup, InputRichM
 from .media import MAX_BYTES, normalize
 from .photo_dialog import BACK, GROUPS, LABELS, PhotoDialog
 from .store import DomainError
+from .telegram_attention import EntryAttention
+from .telegram_instructions import PANEL_TEXT
 
 ERRORS = {
     "consent_required": "Сначала подтвердите условия и согласие в /start.",
@@ -30,14 +32,15 @@ class TelegramDialog:
         self.core = PhotoDialog(store, media, service)
         self.live, self.steps = live, steps
         self.decode_lock = asyncio.Semaphore(1)
+        self.attention = EntryAttention(self)
 
-    def keyboard(self, card):
+    def keyboard(self, card, *, highlight=None):
         rows = [
             [
                 InlineKeyboardButton(
                     text=text,
                     callback_data=data,
-                    style="success" if data.startswith("dlg:confirm:") else None,
+                    style="success" if data == highlight or data.startswith("dlg:confirm:") else None,
                 )
                 for text, data in row
             ]
@@ -48,15 +51,17 @@ class TelegramDialog:
                 rows.append(
                     [
                         InlineKeyboardButton(
-                            text="🎨 Открыть студию", web_app=WebAppInfo(url=self.settings.mini_app_url)
+                            text="🎨 Открыть студию", web_app=WebAppInfo(url=self.settings.mini_app_url),
+                            style="success" if highlight == "studio" else None
                         )
                     ]
                 )
             if card.kind == "entry":
-                rows.append([InlineKeyboardButton(text="☰ Основное меню", callback_data="nav:home")])
+                rows.append([InlineKeyboardButton(text="📖 Инструкция", callback_data="guide:open",
+                            style="success" if highlight == "guide:open" else None)])
         return InlineKeyboardMarkup(inline_keyboard=rows)
 
-    def rich(self, card):
+    def rich(self, card, *, highlight=None):
         # Only our own labels/URLs enter rich markup; free-form user text uses plain messages.
         def row(items):
             return (
@@ -64,7 +69,7 @@ class TelegramDialog:
                 + "".join(
                     '<tg-button type="callback_data" data="'
                     + html.escape(data, quote=True)
-                    + '">'
+                    + ('" style="success">' if data == highlight else '">')
                     + html.escape(text)
                     + "</tg-button>"
                     for text, data in items
@@ -82,7 +87,7 @@ class TelegramDialog:
         else:
             result = (
                 "<h2>Создадим твой образ? ✨</h2><p>"
-                + html.escape(card.text.split("\n\n", 1)[1]).replace("\n", "<br>")
+                + html.escape(self.entry_text(card).split("\n\n", 1)[1]).replace("\n", "<br>")
                 + "</p>"
             )
             for items in card.rows:
@@ -91,11 +96,21 @@ class TelegramDialog:
             result += (
                 '<tg-button-row><tg-button type="web_app" url="'
                 + html.escape(self.settings.mini_app_url, quote=True)
-                + '">🎨 Открыть студию</tg-button></tg-button-row>'
+                + ('" style="success">' if highlight == 'studio' else '">')
+                + '🎨 Открыть студию</tg-button></tg-button-row>'
             )
         if card.kind == "entry":
-            result += row([("☰ Основное меню", "nav:home")])
+            result += row([("📖 Инструкция", "guide:open")])
         return InputRichMessage(html=result)
+
+    @staticmethod
+    def entry_text(card):
+        return card.text.replace("Ничего выбирать не обязательно — можно сразу написать сообщение.", PANEL_TEXT)
+
+    def sent(self, message, card, *, rich, edit):
+        if card.kind == "entry" and not edit:
+            self.attention.start(message, card, rich=rich)
+        return message
 
     async def show(self, message, user, card, *, edit=False):
         if card.kind in {"entry", "more"}:
@@ -104,7 +119,8 @@ class TelegramDialog:
                     return await message.bot.edit_message_text(
                         chat_id=user, message_id=message.message_id, rich_message=self.rich(card)
                     )
-                return await message.bot.send_rich_message(user, rich_message=self.rich(card))
+                sent = await message.bot.send_rich_message(user, rich_message=self.rich(card))
+                return self.sent(sent, card, rich=True, edit=edit)
             except TelegramBadRequest as exc:
                 # Definite rejection only; a network timeout must never duplicate a send.
                 if not any(
@@ -116,7 +132,7 @@ class TelegramDialog:
                 return await message.bot.edit_message_text(
                     chat_id=user,
                     message_id=message.message_id,
-                    text=card.text,
+                    text=self.entry_text(card) if card.kind == "entry" else card.text,
                     reply_markup=self.keyboard(card),
                     parse_mode=None,
                 )
@@ -125,9 +141,11 @@ class TelegramDialog:
                     return message
                 if not any(s in exc.message.lower() for s in ("not found", "can't be edited")):
                     raise
-        return await message.bot.send_message(
-            user, card.text, reply_markup=self.keyboard(card), parse_mode=None
+        sent = await message.bot.send_message(
+            user, self.entry_text(card) if card.kind == "entry" else card.text,
+            reply_markup=self.keyboard(card), parse_mode=None
         )
+        return self.sent(sent, card, rich=False, edit=edit)
 
     async def error(self, message, user, exc):
         from .photo_dialog import Card

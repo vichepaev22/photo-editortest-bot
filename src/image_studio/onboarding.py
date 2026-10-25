@@ -8,6 +8,7 @@ from aiogram.exceptions import TelegramBadRequest, TelegramNetworkError, Telegra
 from aiogram.types import FSInputFile
 
 from .streaming_answer import animated_welcome
+from .telegram_instructions import PANEL_TEXT
 
 log = logging.getLogger(__name__)
 ASSETS = Path(__file__).with_name("assets") / "onboarding"
@@ -35,7 +36,7 @@ SLIDES = (
         "Пришли её вместе со своим фото — создам похожий кадр с тобой.\n\n"
         "📄 Нужно фото на документы?\n"
         "Подготовь аккуратный портрет и получи четыре одинаковых снимка 35 × 45 мм на одном листе.\n\n"
-        "Выбирай, с чего начнём, на клавиатуре внизу ✨",
+        + PANEL_TEXT,
     ),
 )
 

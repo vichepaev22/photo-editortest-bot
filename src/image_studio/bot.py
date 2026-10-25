@@ -59,6 +59,7 @@ from .subscriptions import (
 )
 from .telegram_dialog import TelegramDialog
 from .telegram_free import telegram_free_delivery
+from .telegram_instructions import PANEL_TEXT, InstructionGuide, is_menu_request
 from .telegram_live import TelegramLive, progress_text
 
 
@@ -343,6 +344,24 @@ def build_dispatcher(settings, store, media, service, *, step_messages=None, pur
     service.progress = live.stage
     dialog = TelegramDialog(settings, store, media, service, live, steps) if settings.dialog_enabled else None
     dp["photo_dialog"] = dialog
+    guide = InstructionGuide(MAIN)
+    dp["instruction_guide"] = guide
+    dp.shutdown.register(guide.close)
+    if dialog:
+        dp.shutdown.register(dialog.attention.close)
+
+    async def interrupt_hints(handler, event, data):
+        actor = getattr(event, "from_user", None)
+        message = event if isinstance(event, Message) else getattr(event, "message", None)
+        if (actor and isinstance(message, Message) and message.chat.type == "private"
+                and message.chat.id == actor.id):
+            await guide.stop(actor.id)
+            if dialog:
+                await dialog.attention.stop(actor.id)
+        return await handler(event, data)
+
+    router.message.outer_middleware(interrupt_hints)
+    router.callback_query.outer_middleware(interrupt_hints)
     purchases = purchase_demo if purchase_demo is not None else PurchaseDemo()
     dp["purchase_demo"] = purchases
 
@@ -567,7 +586,7 @@ def build_dispatcher(settings, store, media, service, *, step_messages=None, pur
                 await message.answer("Подтвердите условия и согласие на фотографии.", reply_markup=CONSENT)
                 return
             if action == "home":
-                await message.answer("Выберите действие на нижней панели.", reply_markup=MAIN)
+                await message.answer(PANEL_TEXT, reply_markup=MAIN)
             else:
                 await message.answer(
                     "Что хотите изменить? " + pricing(user), reply_markup=MENU
@@ -656,6 +675,18 @@ def build_dispatcher(settings, store, media, service, *, step_messages=None, pur
         await callback.answer()
         if action in {*NAV, "home", "continue_help"}:
             await navigate(callback.message, callback.from_user.id, action)
+
+    @router.message(F.text.func(is_menu_request))
+    async def spoken_menu(message: Message):
+        await navigate(message, message.from_user.id, "home")
+
+    @router.callback_query(F.data == "guide:open")
+    async def instructions(callback: CallbackQuery):
+        if not isinstance(callback.message, Message) or callback.message.chat.id != callback.from_user.id:
+            await callback.answer()
+            return
+        await callback.answer()
+        guide.launch(callback.message)
 
     @router.message(CommandStart())
     async def start(message: Message):
