@@ -1,6 +1,7 @@
 import React, {useEffect, useState} from 'react';
 import {createRoot, type Root} from 'react-dom/client';
 import {WelcomeScene} from './Scene';
+import {welcomeDue} from './welcome-policy.mjs';
 
 const dialog=document.getElementById('welcomeDialog') as HTMLDialogElement;
 const mount=document.getElementById('welcomeStage')!;
@@ -12,6 +13,8 @@ const isolatedMount=document.createElement('div');isolatedMount.style.cssText='h
 shadow.append(isolatedStyles,isolatedMount);
 const key='obraz.welcome.svg.v1';
 let root:Root|null=null, closedInSession=false;
+let visitRecorded=false, dueThisVisit=false;
+const visitKey='obraz.welcome.last-visit.v1';
 const media=window.matchMedia('(prefers-reduced-motion: reduce)');
 
 function Animation(){
@@ -60,8 +63,14 @@ function close(mark=true){
 }
 function open(force=false){
   if(!dialog || !mount || dialog.open)return;
-  let seen=closedInSession;try{seen=seen||localStorage.getItem(key)==='seen';}catch{}
-  if(seen&&!force)return;
+  if(!visitRecorded){
+    const now=Date.now();let seen=false,lastVisit=NaN;
+    try{seen=localStorage.getItem(key)==='seen';lastVisit=Number(localStorage.getItem(visitKey));}catch{}
+    dueThisVisit=welcomeDue({seen,lastVisit,now});
+    try{localStorage.setItem(visitKey,String(now));}catch{}
+    visitRecorded=true;
+  }
+  if(!force&&(closedInSession||!dueThisVisit))return;
   try{
     dialog.showModal();
     root=createRoot(isolatedMount,{identifierPrefix:'welcome-',onUncaughtError:()=>queueMicrotask(()=>close(false))});

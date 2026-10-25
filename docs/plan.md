@@ -1,5 +1,7 @@
 # План реализации и размещения
 
+CR-GUIDE-NAV-002 accepted/in progress26.10: Telegram persistent MAIN и help→картинки; MAX3карточки/навигация/отмена; студийное motion-вступление first/7days, cache update. GUIDE1–GUIDE6 → focused/CI → sequential VPS/frontend install → phone acceptance.
+
 CR-TG-INSTRUCTIONS-001 completed/deployed26.10: ac6911d, CI40231987341 success, установленный UI-smoke passed, Telegram health200/ready; MAX unchanged. Подробности: [отчёт](telegram-instructions.md). Реальный вид/подсветка на iPhone — приёмка владельца. История плана: Telegram-only инструкция3PNG, новая entry-кнопка/приглашение, текстовое меню и конечная подсветка. Изолированные исходники в data/runtime/instructions-20261026/app; сохранить параллельные Jev-правки. TG-I1–TG-I7 → focused checks/обязательный CI → guarded Telegram install → пользовательский тест iPhone.
 
 CR-DIALOG-003 completed/deployed25.10.2026: диалог по умолчанию и нативные группы во всех Telegram/MAX аккаунтах. Последний код fb60055, CI40206014409 success; 12модулей проверены по хешам, два installed-code smoke на временных базах passed, health200/active/NRestarts0 обеих служб, приватный магазин сохранён. Подробности: [отчёт](dialog-deployment-20261025.md). Осталось: пользовательская проверка /start, свободного запроса и результата на телефоне; оплаченных вызовов агента0.

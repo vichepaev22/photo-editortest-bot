@@ -7,7 +7,6 @@ import time
 import uuid
 from dataclasses import dataclass, field
 from datetime import datetime
-from pathlib import Path
 from urllib.request import getproxies, proxy_bypass
 
 import uvicorn
@@ -20,7 +19,6 @@ from aiogram.types import (
     CallbackQuery,
     CopyTextButton,
     ErrorEvent,
-    FSInputFile,
     InlineKeyboardButton,
     InlineKeyboardMarkup,
     KeyboardButton,
@@ -144,7 +142,7 @@ MAIN = ReplyKeyboardMarkup(
         for row in [("edit", "merge"), ("balance", "results"), ("help", "support"), ("buy",)]
     ],
     resize_keyboard=True,
-    is_persistent=False,
+    is_persistent=True,
     one_time_keyboard=False,
     input_field_placeholder="Выберите действие ниже",
 )
@@ -627,17 +625,7 @@ def build_dispatcher(settings, store, media, service, *, step_messages=None, pur
                 reply_markup=buttons(rows) if rows else BACK,
             )
         elif action == "help":
-            await message.answer_video(
-                FSInputFile(Path(__file__).parent / "assets" / "how-to-use.mp4",
-                            filename="obraz-how-to-use.mp4"),
-                duration=22, width=1080, height=1920, supports_streaming=True,
-                caption="🎬 Как пользоваться «Образ ·»\n\n"
-                        "22 секунды: загрузка фото, причёски, очки и фото на документы.\n"
-                        "Примеры показаны на иллюстрациях."
-                        + ("\nСейчас тестовый режим: результат — копия исходника без ИИ."
-                           if settings.image_provider == "mock" else ""),
-                reply_markup=buttons([[("Продолжить →", "nav:continue_help")]]),
-            )
+            guide.launch(message)
         elif action == "continue_help":
             if not store.has_consent(user):
                 await message.answer("Подтвердите условия и согласие на фотографии.", reply_markup=CONSENT)

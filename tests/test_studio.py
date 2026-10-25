@@ -23,6 +23,15 @@ from image_studio.studio import create_studio_app
 TOKEN = "123456:offline-token-only"
 
 
+async def test_welcome_assets_public_and_index_uses_new_bundle(studio):
+    client, *_ = studio
+    page = await client.get('/')
+    assert 'welcome.js?v=20261026-guide2' in page.text
+    for path, fragment in [('/welcome.js', 'obraz.welcome.last-visit'), ('/welcome.css', 'welcome-dialog')]:
+        response = await client.get(path)
+        assert response.status_code == 200 and fragment in response.text
+
+
 async def test_owner_unlimited_is_authenticated_and_body_cannot_grant_it(studio):
     client, settings, store, media, provider, service, _ = studio
     settings.admin_user_id, settings.owner_unlimited_testing = 1, True

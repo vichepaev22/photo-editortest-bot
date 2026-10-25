@@ -6,7 +6,7 @@ from aiogram import Bot
 from aiogram.types import CallbackQuery, Chat, Message, PhotoSize, ReplyKeyboardMarkup, Update, User
 from PIL import Image
 
-from image_studio.bot import build_dispatcher
+from image_studio.bot import MAIN, build_dispatcher
 from image_studio.config import Settings
 from image_studio.media import Media
 from image_studio.provider import MockProvider
@@ -117,7 +117,7 @@ async def test_bottom_navigation_after_start_and_consent(ui):
     assert len(keyboards) == 2 and keyboards[0] == keyboards[-1]
     keyboard = keyboards[0]
     assert keyboard.resize_keyboard
-    assert keyboard.is_persistent is False and keyboard.one_time_keyboard is False
+    assert keyboard.is_persistent is True and keyboard.one_time_keyboard is False
     assert len(keyboard.keyboard) == 4
     assert {b.text for row in keyboard.keyboard for b in row} == {
         "📸 Изменить фото",
@@ -152,15 +152,17 @@ async def test_navigation_does_not_become_description_and_home_expires_confirmat
 
 
 @pytest.mark.parametrize("text", ["/help", "❓ Как пользоваться"])
-async def test_help_sends_motion_video_with_continue_without_spending(ui, text):
-    before = ui[4].wallet(1)
-    sent = await send(ui, text)
-    video = next((method for method in sent if method.__api_method__ == "sendVideo"), None)
-    assert video is not None and video.supports_streaming and video.duration == 22
-    assert "Как пользоваться" in video.caption
-    assert video.reply_markup.inline_keyboard[0][0].text == "Продолжить →"
-    assert video.reply_markup.inline_keyboard[0][0].callback_data == "nav:continue_help"
-    assert ui[4].wallet(1) == before and ui[2].jobs(1) == [] and ui[5].calls == 0
+async def test_help_sends_illustrated_instruction_without_video_or_spending(ui, text):
+    from unittest.mock import AsyncMock
+    guide=ui[0]['instruction_guide']
+    guide.pause=AsyncMock()
+    before=ui[4].wallet(1)
+    await send(ui,text)
+    await __import__('asyncio').gather(*list(guide.tasks.values()))
+    assert len([m for m in ui[1].sent if m.__api_method__=='sendPhoto'])==3
+    assert not any(m.__api_method__=='sendVideo' for m in ui[1].sent)
+    assert ui[1].sent[-1].reply_markup==MAIN and MAIN.is_persistent
+    assert ui[4].wallet(1)==before and not ui[2].jobs(1) and ui[5].calls==0
 
 
 async def test_help_continue_preserves_selected_photo_and_description_flow(ui):

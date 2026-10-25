@@ -470,6 +470,14 @@ def create_studio_app(settings, store, media, service):
     async def javascript():
         return await asset("app.js")
 
+    @app.get("/welcome.js")
+    async def welcome_script():
+        return await asset("welcome.js")
+
+    @app.get("/welcome.css")
+    async def welcome_styles():
+        return await asset("welcome.css")
+
     @app.get("/config.js")
     async def configuration():
         return await asset("config.js")
