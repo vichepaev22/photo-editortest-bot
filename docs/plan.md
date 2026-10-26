@@ -1,6 +1,6 @@
 # План реализации и размещения
 
-CR-GUIDE-NAV-002 accepted/in progress26.10: Telegram persistent MAIN и help→картинки; MAX3карточки/навигация/отмена; студийное motion-вступление first/7days, cache update. GUIDE1–GUIDE6 → focused/CI → sequential VPS/frontend install → phone acceptance.
+CR-GUIDE-NAV-002 completed/deployed26.10: d4cbbd5, CI40236958015 success, оба installed smoke и public asset checks passed. [Отчёт](navigation-and-help-20261026.md). Проверка клиента iPhone остаётся владельцу. История плана: Telegram persistent MAIN и help→картинки; MAX3карточки/навигация/отмена; студийное motion-вступление first/7days, cache update. GUIDE1–GUIDE6 → focused/CI → sequential VPS/frontend install → phone acceptance.
 
 CR-TG-INSTRUCTIONS-001 completed/deployed26.10: ac6911d, CI40231987341 success, установленный UI-smoke passed, Telegram health200/ready; MAX unchanged. Подробности: [отчёт](telegram-instructions.md). Реальный вид/подсветка на iPhone — приёмка владельца. История плана: Telegram-only инструкция3PNG, новая entry-кнопка/приглашение, текстовое меню и конечная подсветка. Изолированные исходники в data/runtime/instructions-20261026/app; сохранить параллельные Jev-правки. TG-I1–TG-I7 → focused checks/обязательный CI → guarded Telegram install → пользовательский тест iPhone.
 
