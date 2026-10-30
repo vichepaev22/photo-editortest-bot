@@ -1,13 +1,15 @@
 # План реализации и размещения
 
-CR-TG-PROCESSING-002 (30.10): implemented / offline verified; VPS pending (SSH без server banner). Сопоставлены rovno/progress.py и текущий
-TelegramLive. Context7: Bot API /websites/core_telegram_bots_api и aiogram3.31.0
-/aiogram/aiogram/v3.31.0: sendRichMessageDraft/tg-thinking, TTL30s, один draft_id,
-ReplyParameters/allow_sending_without_reply. Установленная aiogram3.31.0 совместима.
-План: нативный статус/привязка → TG-P1–TG-P5 offline → CI → guarded Telegram-only
-поставка → проверка прокрутки на iPhone владельцем. MAX и старые dirty-правки сохранять.
-Код1ad57ad опубликован, CI41046953735 success (651pass/3skip/Ruff).
-Прямое и proxy SSH не прошли до авторизации; серверные изменения не выполнялись.
+CR-TG-PROCESSING-002 completed/deployed30.10: код1ad57ad, CI41046953735 success
+(651passed/3skipped, Ruff). Нативный статус/привязка поставлены на VPS;4модуля,
+28таблиц/старые строки сохранены, Jev/env/unit прежние. Installed smoke passed,
+Telegram PID1249 ready/health200/NRestarts0, public HTTPS200; MAX health200.
+Перед кодовой поставкой выполнен штатный reboot хоста для устранения SSH/502;
+после него установка перезапустила только Telegram. Причина прежнего сбоя не
+установлена: журнал прошлого boot доступен, OOM-событий0. Свободно~2,8GB RAM,
+~52GB диска после восстановления. Context7 Bot API /websites/core_telegram_bots_api
+и /aiogram/aiogram/v3.31.0 проверили tg-thinking/draft/reply; SDK не обновлялся.
+Осталась клиентская приёмка эффекта на iPhone. [Отчёт](telegram-processing-20261030.md).
 
 CR-GUIDE-NAV-002 completed/deployed26.10: d4cbbd5, CI40236958015 success, оба installed smoke и public asset checks passed. [Отчёт](navigation-and-help-20261026.md). Проверка клиента iPhone остаётся владельцу. История плана: Telegram persistent MAIN и help→картинки; MAX3карточки/навигация/отмена; студийное motion-вступление first/7days, cache update. GUIDE1–GUIDE6 → focused/CI → sequential VPS/frontend install → phone acceptance.
 

@@ -1,24 +1,27 @@
 # Проверки и границы результата
 
-## CR-TG-PROCESSING-002 — 30.10.2026, offline verified; VPS pending
+## CR-TG-PROCESSING-002 — 30.10.2026, implemented / verified / deployed
 
-Коммит1ad57ad, [CI41046953735](https://github.com/vichepaev22/photo-editortest-bot/actions/runs/41046953735) success:
-651passed/3skipped, Ruff PASS; обязательный workflow завершён.
-
+Коммит1ad57ad, [CI41046953735](https://github.com/vichepaev22/photo-editortest-bot/actions/runs/41046953735)
+success:651passed/3skipped, Ruff PASS; обязательный workflow завершён.
 Нативный tg-thinking для разбора фото/пожелания и существующих Image-этапов;
-один draft_id, затем одно постоянное сообщение/файл, привязка к своему запросу.
-Проверки: основной набор34pass/1fail; найден поздний typing после ранней ошибки,
-исправлено закрытием контекста до отправки ошибки. Затем проблемный сценарий и
-bot_flow:28passed; изолированный чистый выпуск processing/live/dialog:16passed;
-streaming/result_delivery вошли в исходные34passed. Ruff всего clean src/tests PASS.
+один draft_id, одно постоянное сообщение/файл, привязка к своему запросу.
+Исходные34pass/1fail выявили поздний typing после ранней ошибки; исправлено.
+Проблемный сценарий/bot_flow затем28passed; clean processing/live/dialog16passed.
 Без реальных Telegram-сообщений, платных API и изменений пользовательских остатков.
 
-SSH-проверка: TCP22 открыт, server identification не приходит; Paramiko дважды
-SSHException, стандартное OpenSSH-приветствие также без server banner.
-TCP80/443 доступны. Авторизация/остановка/запись VPS не выполнялись.
-До подтверждённой установки это не следует называть изменением работающего бота.
+SSH восстановлен штатным reboot VM после проверки панели/консоли и HTTPS502.
+Обновлены только4Telegram-файла с сохранением действующего Jev-overlay.
+Backup/receipt/verified: /root/tg-native-status-20261030. В установленном коде
+прошёл один smoke от сервисного UID, с fake Telegram/временной БД/MockProvider.
+Все28прежних таблиц/строк и схема сохранены во время установки; env/systemd и
+4защищённых модуля Jev/config/streaming без изменений. Telegram PID1249 ready,
+NRestarts0; public HTTPS200 подтверждён с VPS и компьютера. MAX health200.
+Соседи после reboot active: MAX805, Bagizov868, Rovno829; при кодовой установке
+их PID не менялись. OOM прошлого boot0; первопричина сбоя не установлена.
+Четыре установленных хеша совпали с manifest; свежих traceback0.
+Вид и прокрутка на iPhone требуют приёмки владельца.
 Подробности: [telegram-processing-20261030.md](telegram-processing-20261030.md).
-
 
 ## CR-GUIDE-NAV-002 — 26.10.2026, implemented / verified / deployed
 
