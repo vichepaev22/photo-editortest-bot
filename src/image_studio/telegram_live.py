@@ -6,6 +6,7 @@ from dataclasses import dataclass
 
 from .catalog import PRESETS
 from .streaming_answer import StreamingAnswer, clean_text
+from .telegram_processing import ProcessingStatus
 
 log = logging.getLogger(__name__)
 STAGES = {
@@ -41,6 +42,9 @@ class LiveReply:
     stage: str = "queued"
     task: asyncio.Task | None = None
     answer: StreamingAnswer | None = None
+    processing: ProcessingStatus | None = None
+    reply_parameters: object = None
+    ui_muted: bool = False
 
 
 class TelegramLive:
@@ -48,15 +52,27 @@ class TelegramLive:
         self.store = store
         self.replies = {}
 
-    def attach(self, bot, user, job, message_id, preset, description):
+    def attach(self, bot, user, job, message_id, preset, description, *, reply_parameters=None):
         record = self.store.job(job)
         if record["status"] in {"queued", "running"} and not record["telegram_silent"]:
-            self.replies[job] = LiveReply(bot, user, message_id, preset, description)
+            self.replies[job] = LiveReply(bot, user, message_id, preset, description,
+                                          reply_parameters=reply_parameters)
 
     def stage(self, user, job, stage):
         reply = self.replies.get(job)
         if reply and reply.user == user and stage in STAGES:
             reply.stage = stage
+            if reply.processing:
+                reply.processing.step(STAGES[stage])
+
+    async def interrupt(self, user):
+        # Новый запрос прекращает только старый UI, платная Image-задача продолжается.
+        for reply in list(self.replies.values()):
+            if reply.user == user:
+                reply.ui_muted = True
+                if reply.task:
+                    reply.task.cancel()
+                    await asyncio.gather(reply.task, return_exceptions=True)
 
     async def detach(self, job, *, text=None):
         reply = self.replies.pop(job, None)
@@ -65,24 +81,29 @@ class TelegramLive:
             await asyncio.gather(reply.task, return_exceptions=True)
         if reply and text:
             try:
-                answer = reply.answer or StreamingAnswer(reply.bot, reply.user, reply.message_id)
-                await answer.edit(text)
+                # Новое постоянное сообщение завершает временный native draft.
+                await reply.bot.send_message(reply.user, text, parse_mode=None,
+                                             reply_parameters=reply.reply_parameters)
             except Exception as exc:
                 log.warning("live_final_failed type=%s", type(exc).__name__)
+        return reply
 
     async def _run(self, job, reply):
         answer = StreamingAnswer(reply.bot, reply.user, reply.message_id)
         reply.answer = answer
         try:
-            async with answer.typing():
-                frame = 0
+            def valid():
+                record = self.store.job(job)
+                return (not reply.ui_muted and not record["telegram_silent"]
+                        and record["status"] in {"queued", "running"})
+
+            async with ProcessingStatus(reply.bot, reply.user, STAGES[reply.stage],
+                                        valid=valid, fallback=answer, grace=0) as processing:
+                reply.processing = processing
                 while True:
-                    record = self.store.job(job)
-                    if record["telegram_silent"] or record["status"] not in {"queued", "running"}:
+                    if not valid():
                         return
-                    await answer.edit(progress_text(reply.preset, reply.description, reply.stage, frame))
-                    frame += 1
-                    await asyncio.sleep(3)
+                    await asyncio.sleep(0.5)
         except asyncio.CancelledError:
             raise
         except Exception as exc:
@@ -93,7 +114,7 @@ class TelegramLive:
         try:
             while True:
                 for job, reply in list(self.replies.items()):
-                    if reply.task is None:
+                    if reply.task is None and not reply.ui_muted:
                         reply.task = asyncio.create_task(self._run(job, reply))
                 await asyncio.sleep(0.2)
         finally:

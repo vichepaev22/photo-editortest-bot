@@ -1,5 +1,22 @@
 # Проверки и границы результата
 
+## CR-TG-PROCESSING-002 — 30.10.2026, offline verified; VPS pending
+
+Нативный tg-thinking для разбора фото/пожелания и существующих Image-этапов;
+один draft_id, затем одно постоянное сообщение/файл, привязка к своему запросу.
+Проверки: основной набор34pass/1fail; найден поздний typing после ранней ошибки,
+исправлено закрытием контекста до отправки ошибки. Затем проблемный сценарий и
+bot_flow:28passed; изолированный чистый выпуск processing/live/dialog:16passed;
+streaming/result_delivery вошли в исходные34passed. Ruff всего clean src/tests PASS.
+Без реальных Telegram-сообщений, платных API и изменений пользовательских остатков.
+
+SSH-проверка: TCP22 открыт, server identification не приходит; Paramiko дважды
+SSHException, стандартное OpenSSH-приветствие также без server banner.
+TCP80/443 доступны. Авторизация/остановка/запись VPS не выполнялись.
+До подтверждённой установки это не следует называть изменением работающего бота.
+Подробности: [telegram-processing-20261030.md](telegram-processing-20261030.md).
+
+
 ## CR-GUIDE-NAV-002 — 26.10.2026, implemented / verified / deployed
 
 d4cbbd5: постоянная MAIN в Telegram, help→3PNG в обоих ботах, MAX-инструкция/навигация/отмена, motion-вступление first/7days и HTTP welcome assets в Telegram. 23целевых Telegram+1HTTP,10MAX,4Node passed; TypeScript/Ruff PASS. CI40236958015 success:646passed/3skipped и4Node. Оба installed-code smoke с временной БД/MockProvider прошли: три пары, без sendVideo и списаний. Установлено15runtime-файлов; Telegram351267/MAX351292 active/health200, welcome.js/css200; оба HTTP bundle и GitHub Pages совпали по хешу. Старые28/27таблиц и все строки, схема/env/systemd неизменны; сосед106528 не перезапускался. Backup/receipt/verified: /root/navigation-guide-20261026. Платных вызовов/сообщений/начислений агента0. Пиксельный вид/ручное скрытие клавиатуры и mobile WebView — пользовательский POC. [Отчёт](navigation-and-help-20261026.md).

@@ -73,15 +73,19 @@ async def test_live_dialogue_one_message_real_stages_and_shutdown(tmp_path):
     assert reply.stage == "generating"
     task = asyncio.create_task(live.worker())
     for _ in range(15):
-        if bot.edit_message_text.called and bot.send_chat_action.called:
+        if bot.send_rich_message_draft.called and bot.send_chat_action.called:
             break
         await asyncio.sleep(0.01)
     assert bot.send_chat_action.call_args.args == (1, "typing")
-    assert "Создаём изображение" in bot.edit_message_text.call_args.kwargs["text"]
-    assert bot.edit_message_text.call_args.kwargs["message_id"] == reply.message_id
-    assert bot.edit_message_text.call_args.kwargs["parse_mode"] is None
-    assert bot.edit_message_text.call_args.kwargs["reply_markup"] is None
-    assert "Стоп" not in bot.edit_message_text.call_args.kwargs["text"]
+    payload = bot.send_rich_message_draft.call_args.kwargs
+    assert "Создаём изображение" in payload["rich_message"].html
+    assert payload["rich_message"].html.startswith("<tg-thinking>")
+    assert payload["draft_id"] == reply.processing.draft_id
+    assert payload["can_stop"] is False and payload["keep_on_stop"] is False
+    bot.edit_message_text.assert_not_called()
+    await live.interrupt(1)
+    assert reply.task.done() and reply.processing.closed
+    assert ui[2].job(job)["status"] == "queued" and ui[4].wallet(1) == (1, 1)
     task.cancel()
     with pytest.raises(asyncio.CancelledError):
         await task

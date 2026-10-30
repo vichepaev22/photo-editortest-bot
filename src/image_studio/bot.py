@@ -59,6 +59,7 @@ from .telegram_dialog import TelegramDialog
 from .telegram_free import telegram_free_delivery
 from .telegram_instructions import PANEL_TEXT, InstructionGuide, is_menu_request
 from .telegram_live import TelegramLive, progress_text
+from .telegram_processing import request_reply
 
 
 def buttons(rows):
@@ -271,7 +272,8 @@ class StepMessages:
             scope.cleaning = False
 
 
-async def deliver_result(bot, store, steps, user, job, path, *, demo=False, unlimited=False):
+async def deliver_result(bot, store, steps, user, job, path, *, demo=False, unlimited=False,
+                         reply_parameters=None):
     if user == 0:  # Local browser demo has no Telegram destination.
         return
     filename, caption = result_presentation(store.result(user, job))
@@ -280,6 +282,7 @@ async def deliver_result(bot, store, steps, user, job, path, *, demo=False, unli
     await send_result_document(
         bot, store, user, job, path, filename=filename,
         caption=caption,
+        reply_parameters=reply_parameters,
         reply_markup=buttons([[("📸 Новая правка", "nav:edit"), ("🖼 Мои результаты", "nav:results")]]),
     )
     store.delivered(job)
@@ -354,6 +357,7 @@ def build_dispatcher(settings, store, media, service, *, step_messages=None, pur
         if (actor and isinstance(message, Message) and message.chat.type == "private"
                 and message.chat.id == actor.id):
             await guide.stop(actor.id)
+            await live.interrupt(actor.id)
             if dialog:
                 await dialog.attention.stop(actor.id)
         return await handler(event, data)
@@ -364,7 +368,8 @@ def build_dispatcher(settings, store, media, service, *, step_messages=None, pur
     dp["purchase_demo"] = purchases
 
     async def step_answer(message, user, draft, text, *, reply_markup=BACK):
-        sent = await message.answer(text, reply_markup=reply_markup, parse_mode=None)
+        sent = await message.answer(text, reply_markup=reply_markup, parse_mode=None,
+                                    reply_parameters=request_reply(message, user))
         await steps.sent(message.bot, user, draft.steps_token, sent)
         return sent
 
@@ -549,7 +554,8 @@ def build_dispatcher(settings, store, media, service, *, step_messages=None, pur
             progress_text(draft.preset, draft.description),
             reply_markup=MAIN,
         )
-        live.attach(message.bot, user, job, sent.message_id, draft.preset, draft.description)
+        live.attach(message.bot, user, job, sent.message_id, draft.preset, draft.description,
+                    reply_parameters=request_reply(message, user))
 
     async def send_result(message, user, job):
         record = store.result(user, job)
@@ -1253,11 +1259,12 @@ async def run(settings):
             )
 
             async def deliver(user, job, path):
-                await live.detach(job)
+                reply = await live.detach(job)
                 if store.job(job)["telegram_silent"]:
                     return False
                 await deliver_result(bot, store, steps, user, job, path,
-                                     demo=settings.image_provider == "mock", unlimited=service.is_unlimited(user))
+                                     demo=settings.image_provider == "mock", unlimited=service.is_unlimited(user),
+                                     reply_parameters=reply.reply_parameters if reply else None)
                 try:
                     await bonus.after_job(bot, user, job)
                 except Exception:

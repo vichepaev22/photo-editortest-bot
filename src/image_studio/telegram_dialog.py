@@ -14,6 +14,7 @@ from .photo_dialog import BACK, GROUPS, LABELS, PhotoDialog
 from .store import DomainError
 from .telegram_attention import EntryAttention
 from .telegram_instructions import PANEL_TEXT
+from .telegram_processing import ProcessingStatus, request_reply
 
 ERRORS = {
     "consent_required": "Сначала подтвердите условия и согласие в /start.",
@@ -119,7 +120,8 @@ class TelegramDialog:
                     return await message.bot.edit_message_text(
                         chat_id=user, message_id=message.message_id, rich_message=self.rich(card)
                     )
-                sent = await message.bot.send_rich_message(user, rich_message=self.rich(card))
+                sent = await message.bot.send_rich_message(
+                    user, rich_message=self.rich(card), reply_parameters=request_reply(message, user))
                 return self.sent(sent, card, rich=True, edit=edit)
             except TelegramBadRequest as exc:
                 # Definite rejection only; a network timeout must never duplicate a send.
@@ -143,7 +145,7 @@ class TelegramDialog:
                     raise
         sent = await message.bot.send_message(
             user, self.entry_text(card) if card.kind == "entry" else card.text,
-            reply_markup=self.keyboard(card), parse_mode=None
+            reply_markup=self.keyboard(card), parse_mode=None, reply_parameters=request_reply(message, user)
         )
         return self.sent(sent, card, rich=False, edit=edit)
 
@@ -157,15 +159,22 @@ class TelegramDialog:
         )
 
     async def receive(self, message):
+        source = message if message.photo or message.document else message.reply_to_message
+        phase = "Получаю фотографию" if source and (source.photo or source.document) else "Разбираю пожелание"
+        async with ProcessingStatus(message.bot, message.from_user.id, phase,
+                                    valid=lambda: self.store.has_consent(message.from_user.id)) as progress:
+            return await self._receive(message, progress)
+
+    async def _receive(self, message, progress):
         user = message.from_user.id
         if not self.store.has_consent(user):
-            return await self.error(message, user, ValueError("consent_required"))
+            raise ValueError("consent_required")
         if self.core.seen(user, str(message.message_id)):
             return
         images = []
         source = message if message.photo or message.document else message.reply_to_message
         if message.external_reply:
-            return await self.error(message, user, ValueError("invalid_inputs"))
+            raise ValueError("invalid_inputs")
         if source and (source.photo or source.document):
             if (
                 source.chat.id != user
@@ -173,23 +182,27 @@ class TelegramDialog:
                 or source.from_user.id != user
                 or source.from_user.is_bot
             ):
-                return await self.error(message, user, ValueError("invalid_inputs"))
+                raise ValueError("invalid_inputs")
             attachment = source.photo[-1] if source.photo else source.document
             if attachment.file_size and attachment.file_size > MAX_BYTES:
-                return await self.error(message, user, ValueError("invalid_inputs"))
+                raise ValueError("invalid_inputs")
             buffer = io.BytesIO()
+            progress.step("Получаю фотографию")
             await message.bot.download(attachment, destination=buffer)
+            progress.step("Подготавливаю фотографию")
             async with self.decode_lock:
                 clean = await asyncio.to_thread(normalize, buffer.getvalue())
             if not self.store.has_consent(user):
                 raise ValueError("consent_required")
             images = [self.media.save(user, clean)]
+        progress.step("Разбираю пожелание")
         card = await self.core.message(user, message.text or message.caption or "", images=images)
         session = self.core.current(user)
         if images and session:
             originals = session.photos[:1] if session.preset == "reference" else session.photos
             if originals:
                 self.service.remember_inputs(user, originals)
+        await progress.reveal(card.text)
         return await self.show(message, user, card)
 
     def register(self, router, drafts, admin, bonus, navigation):
@@ -226,7 +239,8 @@ class TelegramDialog:
                     sent = await self.show(callback.message, user, card)
                     await self.steps.sent(callback.bot, user, token, sent)
                     self.live.attach(
-                        callback.bot, user, card.job, sent.message_id, record["preset"], card.request
+                        callback.bot, user, card.job, sent.message_id, record["preset"], card.request,
+                        reply_parameters=request_reply(callback.message, user)
                     )
                     return
                 await self.show(callback.message, user, card, edit=True)
