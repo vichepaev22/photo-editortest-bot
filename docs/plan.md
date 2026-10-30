@@ -1,5 +1,12 @@
 # План реализации и размещения
 
+CR-MAX-PROCESSING-001 completed/deployed30.10:6MAX-модулей,19целевых+2webhook/reply
+проверки/Ruff и installed smoke passed. MAX5192 health200/NRestarts0;27таблиц/строки,
+env/unit/остальные исходники сохранены; TG1249/Bagizov868/Rovno829 прежние.
+[Отчёт и границы проверки](max-processing-20261030.md). Прокрутка/цитата на
+телефоне — владелец; четыре старых financial baseline-теста отмечены в отчёте.
+
+
 CR-TG-PROCESSING-002 completed/deployed30.10: код1ad57ad, CI41046953735 success
 (651passed/3skipped, Ruff). Нативный статус/привязка поставлены на VPS;4модуля,
 28таблиц/старые строки сохранены, Jev/env/unit прежние. Installed smoke passed,

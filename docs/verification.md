@@ -1,5 +1,20 @@
 # Проверки и границы результата
 
+## CR-MAX-PROCESSING-001 —30.10.2026, implemented / verified / deployed
+
+Поставка30.10.2026 завершена:6MAX-модулей, backup/manifest/receipt/verified —
+/root/max-processing-20261030. Все27старых таблиц и строки, схема/env/systemd
+сохранены при установке. Установленный код прошёл один smoke от max-obraz UID
+с временной БД/fake API/MockProvider, без реальных сообщений/платных вызовов.
+MAX PID5192 active/health200/NRestarts0;6хешей совпали, текущих traceback0.
+Telegram PID1249/Bagizov868/Rovno829 не менялись, TG health200. Локальные MAX
+исходники синхронизированы с контролем исходных SHA256. 19целевых проверок и
+2дополнительные webhook/scoped-reply прошли, Ruff PASS. Четыре финансовых
+baseline-теста с прежним Express5 вместо20 сохранены как известное ограничение;
+это не новая регрессия (повторено на before). Клиентский вид/цитата — проверка
+владельца на телефоне. [Отчёт](max-processing-20261030.md).
+
+
 ## CR-TG-PROCESSING-002 — 30.10.2026, implemented / verified / deployed
 
 Коммит1ad57ad, [CI41046953735](https://github.com/vichepaev22/photo-editortest-bot/actions/runs/41046953735)
