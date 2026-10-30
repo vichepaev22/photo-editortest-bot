@@ -2,6 +2,9 @@
 
 ## CR-TG-PROCESSING-002 — 30.10.2026, offline verified; VPS pending
 
+Коммит1ad57ad, [CI41046953735](https://github.com/vichepaev22/photo-editortest-bot/actions/runs/41046953735) success:
+651passed/3skipped, Ruff PASS; обязательный workflow завершён.
+
 Нативный tg-thinking для разбора фото/пожелания и существующих Image-этапов;
 один draft_id, затем одно постоянное сообщение/файл, привязка к своему запросу.
 Проверки: основной набор34pass/1fail; найден поздний typing после ранней ошибки,

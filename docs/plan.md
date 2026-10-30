@@ -6,6 +6,8 @@ TelegramLive. Context7: Bot API /websites/core_telegram_bots_api и aiogram3.31.
 ReplyParameters/allow_sending_without_reply. Установленная aiogram3.31.0 совместима.
 План: нативный статус/привязка → TG-P1–TG-P5 offline → CI → guarded Telegram-only
 поставка → проверка прокрутки на iPhone владельцем. MAX и старые dirty-правки сохранять.
+Код1ad57ad опубликован, CI41046953735 success (651pass/3skip/Ruff).
+Прямое и proxy SSH не прошли до авторизации; серверные изменения не выполнялись.
 
 CR-GUIDE-NAV-002 completed/deployed26.10: d4cbbd5, CI40236958015 success, оба installed smoke и public asset checks passed. [Отчёт](navigation-and-help-20261026.md). Проверка клиента iPhone остаётся владельцу. История плана: Telegram persistent MAIN и help→картинки; MAX3карточки/навигация/отмена; студийное motion-вступление first/7days, cache update. GUIDE1–GUIDE6 → focused/CI → sequential VPS/frontend install → phone acceptance.
 
