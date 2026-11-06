@@ -1,5 +1,7 @@
 from dataclasses import dataclass
 
+from .hairstyle import HAIR_RULES
+
 
 @dataclass(frozen=True)
 class Preset:
@@ -55,6 +57,7 @@ def prompt_for(preset: str, description: str) -> str:
         "skin tone, age, body proportions and expression. Preserve everything except the requested changes. "
         "Create a photorealistic, fully clothed, non-deceptive result. "
         + PRESETS[preset].instruction
+        + ("\n" + HAIR_RULES if preset in {"hair", "look"} else "")
         + "\nUser's requested change: "
         + description.strip()
     )

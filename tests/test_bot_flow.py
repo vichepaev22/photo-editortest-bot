@@ -400,7 +400,7 @@ async def test_result_cleanup_failures_do_not_regenerate_or_change_quota(flow, f
 
 
 @pytest.mark.parametrize("preset,example", [
-    ("hair", "Каре до плеч"), ("clothes", "Бежевый тренч"),
+    ("hair", "Текстурная стрижка"), ("clothes", "Бежевый тренч"),
     ("glasses", "Тонкая чёрная оправа"), ("background", "Парк"),
     ("enhance", "без ретуши лица"), ("merge", "Мы вместе"),
 ])

@@ -8,6 +8,7 @@ import uuid
 from dataclasses import dataclass, field
 
 from .catalog import PRESETS
+from .hairstyle import HAIR_STYLES, hair_request, mentions_hair_style, requested_hair_style
 from .media import MAX_BYTES
 
 MODEL = "gpt-4.1-mini-2025-04-14"
@@ -29,7 +30,7 @@ GROUPS = [
 QUICK = [[("👓 Очки", "dlg:pick:glasses"), ("💇 Причёска", "dlg:pick:hair"), ("✨ Ещё", "dlg:more")]]
 BACK = [[("‹ К началу", "dlg:entry"), ("☰ Основное меню", "nav:home")]]
 ASK = {
-    "hair": "Какую стрижку, длину и цвет волос хочешь увидеть?",
+    "hair": "Какую стрижку, длину и цвет волос хочешь увидеть? 💇 Например: короткая текстурная стрижка или каре до плеч.",
     "glasses": "Какую оправу примерим? Например, круглую металлическую или прозрачную.",
     "clothes": "Опиши одежду и стиль. Например, светлый пиджак и однотонная рубашка.",
     "background": "Какой фон сделаем? Например, кофейню, парк или нейтральную студию.",
@@ -69,6 +70,7 @@ class Session:
     count: int | None = None
     sources: list = field(default_factory=list)
     source_label: str = "загруженное фото"
+    hair_style: str | None = None
 
 
 class PhotoDialog:
@@ -281,7 +283,14 @@ class PhotoDialog:
                 r"(1|3|6|9|12|один|три|шесть|девять|двенадцать)(?:\s*вариант[а-я]*)?",
                 lower.strip(" .!"),
             )
-            if session.preset in {"hair", "glasses"} and count_match:
+            style = requested_hair_style(text)
+            style_only = re.fullmatch(
+                r"(?:мужские|женские|универсальные|унисекс|мужскую|женскую|универсальную)[!. ]*", lower
+            )
+            if session.preset == "hair" and style_only and style:
+                session.hair_style = style
+                session.token = uuid.uuid4().hex[:20]
+            elif session.preset in {"hair", "glasses"} and count_match:
                 value = count_match[1]
                 session.count = count_words[value] if value in count_words else int(value)
                 session.token = uuid.uuid4().hex[:20]
@@ -308,6 +317,7 @@ class PhotoDialog:
                 if preset:
                     if preset != session.preset:
                         session.count = None
+                        session.hair_style = None
                         if preset not in {"merge", "reference"}:
                             session.photos = session.photos[:1]
                     session.preset = preset
@@ -318,6 +328,8 @@ class PhotoDialog:
                         r"(?:примерить\s+)?(?:очки|прич[её]ску|одежду|фон|улучшить фото)[!. ]*", lower
                     )
                     session.description = "" if generic else text
+                    if session.preset == "hair" and mentions_hair_style(text):
+                        session.hair_style = style
                     session.token = uuid.uuid4().hex[:20]
         return self.render(user, session)
 
@@ -371,6 +383,12 @@ class PhotoDialog:
                     *BACK,
                 ],
             )
+        if preset == "hair" and not session.hair_style:
+            return Card(
+                "💇 Какие причёски примерим?\n\nВыбери стиль — он будет одинаковым для всех вариантов коллажа. "
+                "Длину и цвет можно выбрать любые.",
+                [[(label, f"dlg:hair:{session.token}:{key}") for key, label in HAIR_STYLES.items()], *BACK],
+            )
         if not session.description:
             return Card(ASK.get(preset, "Опиши желаемый результат."), BACK)
         if preset in {"hair", "glasses"} and session.count is None:
@@ -393,6 +411,7 @@ class PhotoDialog:
         return Card(
             f"✨ Подготовим: {PRESETS[preset].label}\n\n{session.description}\n\n"
             f"📸 Используем: {session.source_label}."
+            + (f"\n💇 Причёски: {HAIR_STYLES[session.hair_style].lower()}." if preset == "hair" else "")
             + (f"\nВариантов на одном изображении: {session.count}." if session.count else "")
             + "\n\n"
             + cost,
@@ -420,6 +439,7 @@ class PhotoDialog:
             session.preset = parts[2]
             session.description = ""
             session.count = None
+            session.hair_style = None
             session.photos = session.photos[: PRESETS[session.preset].inputs]
             session.token = uuid.uuid4().hex[:20]
             return self.render(user, session)
@@ -448,6 +468,13 @@ class PhotoDialog:
             session.photos = list(photos)
             session.source_label = label.lower()
         elif (
+            action == "hair"
+            and len(parts) == 4
+            and parts[3] in HAIR_STYLES
+            and session.preset == "hair"
+        ):
+            session.hair_style = parts[3]
+        elif (
             action == "count"
             and len(parts) == 4
             and parts[3] in {"1", "3", "6", "9", "12"}
@@ -468,6 +495,8 @@ class PhotoDialog:
             if not any(data == "dlg:confirm:" + session.token for row in expected.rows for _, data in row):
                 raise ValueError("stale_dialog")
             description = session.description
+            if session.preset == "hair":
+                description = hair_request(description, session.hair_style)
             if session.count:
                 description += (
                     f"\nРовно {session.count} вариантов на одном изображении. Один и тот же человек; менять только "

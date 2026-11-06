@@ -122,7 +122,7 @@ def main():
     live.add_argument("--images", nargs="+", required=True)
     live.add_argument("--preset", choices=PRESETS, required=True)
     live.add_argument("--description", required=True)
-    live.add_argument("--model", choices=sorted(MODELS), default="gpt-image-2.5-flare-2026-09-08")
+    live.add_argument("--model", choices=sorted(MODELS), default="gpt-image-2.6-sunburst")
     live.add_argument("--quality", choices=["low", "medium", "high", "xhigh", "max"], default="medium")
     live.add_argument("--fx", type=float, default=90)
     live.add_argument("--output-dir", default="data/live-poc")

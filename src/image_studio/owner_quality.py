@@ -41,7 +41,7 @@ def register_owner_quality(router, service):
         selected = service.owner_quality.current(user) or "medium"
         text = ("🧪 Тест качества · только для владельца\n\n"
                 f"Выбрано: {QUALITIES[selected]} · 1024×1024\n"
-                "Модель: GPT Image 2.5 Sunburst\n\n"
+                f"Модель: {getattr(service.provider, 'model', 'тестовый режим')}\n\n"
                 "Режим применяется к вашим следующим заданиям. Уже созданные задания сохраняют свой режим. "
                 "У пользователей остаётся Medium. Ваш безлимит сохраняется; запросы оплачиваются из API-баланса.")
         rows = [[InlineKeyboardButton(text=("✓ " if key == selected else "") + title,
