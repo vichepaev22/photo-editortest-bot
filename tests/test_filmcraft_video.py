@@ -230,6 +230,36 @@ async def test_worker_failure_prevents_spend_and_render_retry_does_not_reanalyze
     assert c.current()["state"] == "done" and client.responses.create.await_count == 1
 
 
+async def test_render_progress_is_distinct_from_upload_and_light_uses_saved_plan(ui):
+    _, bot, _, controller, client, _ = ui
+    entered, release = asyncio.Event(), asyncio.Event()
+    render = controller.worker.run
+    profiles = []
+
+    async def slow_render(directory, operation, **data):
+        if operation == "render":
+            profiles.append(data["profile"])
+            entered.set()
+            await release.wait()
+            if data["profile"] == "standard":
+                raise FilmcraftError("render_timeout")
+        return await render(directory, operation, **data)
+
+    controller.worker.run = slow_render
+    await send(ui, file="first", caption="Собери с субтитрами")
+    await asyncio.wait_for(entered.wait(), 3)
+    assert controller.current()["state"] == "rendering"
+    assert not any(m.__api_method__ == "sendChatAction" for m in bot.sent)
+    release.set()
+    await drain(controller)
+    assert controller.current()["state"] == "render_failed"
+    await send(ui, callback=action(controller.current(), "render_light"))
+    await drain(controller)
+    assert profiles == ["standard", "light"]
+    assert controller.current()["data"]["telegram_message_id"]
+    assert controller.current()["state"] == "done" and client.responses.create.await_count == 1
+
+
 async def test_shutdown_records_unknown_and_never_retries_paid_call(ui):
     *_, c, client, _ = ui
     await ready(ui)

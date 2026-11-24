@@ -183,7 +183,7 @@ class FilmcraftEngine:
         except (ValueError, TypeError):
             raise FilmcraftError("filmcraft_command_failed") from None
 
-    async def render(self, directory, files, segments, plan, music):
+    async def render(self, directory, files, segments, plan, music, profile="standard"):
         infos = await self.sources(directory, files)
         chosen = plan.get("clips") if isinstance(plan, dict) else None
         if (not isinstance(chosen, list) or not 1 <= len(chosen) <= 8
@@ -213,7 +213,13 @@ class FilmcraftEngine:
         if imported.get("errors") or len(items) != len(files):
             raise FilmcraftError("filmcraft_import_failed")
         items = [item["id"] if isinstance(item, dict) else item for item in items]
-        width, height = {"portrait": (720, 1280), "landscape": (1280, 720), "square": (720, 720)}[plan["format"]]
+        sizes = {
+            "standard": {"portrait": (720, 1280), "landscape": (1280, 720), "square": (720, 720)},
+            "light": {"portrait": (540, 960), "landscape": (960, 540), "square": (540, 540)},
+        }
+        if profile not in sizes:
+            raise FilmcraftError("invalid_profile")
+        width, height = sizes[profile][plan["format"]]
         commands = [{"id": "file.newSequence", "params": {"name": "Образ", "width": width, "height": height,
                      "fps": 30, "video": 2, "audio": 2, "sampleRate": 48000}}]
         cursor = 0
@@ -350,10 +356,12 @@ async def worker(spool, executable):
             working = request.with_suffix(".working")
             request.replace(working)
             began = time.monotonic()
+            operation = None
             try:
                 if working.stat().st_size > 1_000_000:
                     raise FilmcraftError("invalid_request")
                 value = json.loads(working.read_text())
+                operation = value["operation"]
                 if abs(time.time() - value["created"]) > 90:
                     raise FilmcraftError("worker_interrupted")
                 if not resources_available(spool):
@@ -364,7 +372,8 @@ async def worker(spool, executable):
                     elif value["operation"] == "prepare":
                         result = await engine.prepare(working.parent, value["files"], value["speech"])
                     elif value["operation"] == "render":
-                        result = await engine.render(working.parent, value["files"], value["segments"], value["plan"], value["music"])
+                        result = await engine.render(working.parent, value["files"], value["segments"], value["plan"],
+                                                     value["music"], value.get("profile", "standard"))
                     else:
                         raise FilmcraftError("invalid_request")
                     return result
@@ -383,7 +392,9 @@ async def worker(spool, executable):
                     working.with_suffix(".cancel").unlink(missing_ok=True)
                 response = {"ok": True, "result": result, "seconds": round(time.monotonic() - began, 3)}
             except Exception as error:
-                response = {"ok": False, "error": str(error) if isinstance(error, FilmcraftError) else "worker_failed"}
+                code = ("render_timeout" if isinstance(error, TimeoutError) and operation == "render"
+                        else str(error) if isinstance(error, FilmcraftError) else "worker_failed")
+                response = {"ok": False, "error": code}
             atomic_json(working.with_suffix(".result"), response)
             working.unlink(missing_ok=True)
         await asyncio.sleep(.5)

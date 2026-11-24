@@ -294,7 +294,7 @@ class FilmcraftVideo:
             plan, segments = data["plan"], data["segments"]
             lines += ["", data.get("offer") or "📋 План · " + plan["title"],
                       {"portrait": "9:16", "landscape": "16:9", "square": "1:1"}[plan["format"]] +
-                      " · 720p · " + {"original": "исходный звук", "mute": "без звука", "mix": "с вашей музыкой"}[plan["sound"]],
+                      " · " + {"original": "исходный звук", "mute": "без звука", "mix": "с вашей музыкой"}[plan["sound"]],
                       "Склейки: " + ("затемнение краёв" if plan["transition"] == "fade" else "прямые") +
                       " · Субтитры: " + ("да" if plan["subtitles"] else "нет")]
             for i in plan["clips"]:
@@ -302,8 +302,13 @@ class FilmcraftVideo:
                 lines.append(f"• Ролик {s['source'] + 1}: {s['start']:.1f}–{s['end']:.1f} с")
             label = "↻ Собрать ещё раз" if state == "done" else "Сделай так" if data.get("offer") else "🎬 Собрать MP4"
             rows.append([(label, action(job, "render"))])
+            if state == "render_failed" and not data.get("offer"):
+                rows.append([("⚡ Быстрее · 540p", action(job, "render_light"))])
             if state == "done":
                 rows.append([("📥 Скачать MP4", action(job, "download"))])
+                result = data.get("result") or {}
+                if result.get("width") and result.get("height"):
+                    lines.append(f"Готовый файл: {result['width']}×{result['height']}.")
             if data.get("offer") and state == "planned":
                 lines.append("Напишите «сделай так», чтобы собрать этот вариант без нового анализа.")
         elif state == "clarify":
@@ -334,6 +339,10 @@ class FilmcraftVideo:
             "provider_rejected": "OpenAI отклонил анализ. Проверьте доступ к модели и баланс. Отчёт сохранён, автоповтора нет.",
             "download_failed": "Не удалось скачать видео из Telegram. Попробуйте отправить его ещё раз как обычное видео.",
             "engine_failed": "Filmcraft не смог обработать файл. Попробуйте отправить MP4 или MOV в 1080p с уменьшением размера в Telegram.",
+            "render_timeout": "Filmcraft не уложился во время сборки. План сохранён. "
+                              "Кнопка «Быстрее · 540p» соберёт более лёгкий вариант без нового анализа.",
+            "delivery_pending": "MP4 уже готов. Telegram не подтвердил отправку. "
+                                "Если видео не появилось, нажмите «Скачать MP4».",
             "busy": "⏳ Предыдущий монтаж ещё идёт. Напишите «статус» или дождитесь результата.",
             "expired": "Срок хранения файлов истёк. Начните новую работу.",
         }
@@ -520,7 +529,7 @@ class FilmcraftVideo:
                     return
                 await self.enter(message, new=callback.data in {"fc:new", "video:new"})
                 return
-            match = re.fullmatch(r"fc:(analyze|render|report|download|speech|leave):([a-f0-9]{32}):([0-9]{1,9})", callback.data or "")
+            match = re.fullmatch(r"fc:(analyze|render|render_light|report|download|speech|leave):([a-f0-9]{32}):([0-9]{1,9})", callback.data or "")
             if not match:
                 raise FilmcraftError("stale")
             operation, identifier, revision = match.groups()
@@ -576,12 +585,7 @@ class FilmcraftVideo:
         identifier, data, planner = job["id"], job["data"], None
         directory = self.repo.directory(identifier)
         status = None
-        async def activity():
-            while True:
-                with suppress(Exception):
-                    await message.bot.send_chat_action(OWNER, "upload_video")
-                await asyncio.sleep(4)
-        animation = asyncio.create_task(activity())
+
         async def progress(text):
             nonlocal status
             with suppress(AiogramError, OSError, TimeoutError):
@@ -591,7 +595,8 @@ class FilmcraftVideo:
                     status = await message.answer(text, parse_mode=None)
 
         try:
-            await progress("✅ Задание принято. Подготавливаю видео к анализу…" if operation == "analyze" else "🎬 Filmcraft собирает MP4…")
+            if operation == "analyze":
+                await progress("✅ Задание принято. Подготавливаю видео к анализу…")
             async with asyncio.timeout(900):
                 if operation == "analyze":
                     prepared = await self.worker.run(directory, "prepare", files=data["files"], speech=data.get("speech", True))
@@ -620,12 +625,30 @@ class FilmcraftVideo:
                     if not self.repo.claim(OWNER, identifier, "planned", "rendering"):
                         raise FilmcraftError("stale")
                     data = self.repo.get(OWNER, identifier)["data"]
-                    await progress("🎬 План готов. Filmcraft собирает MP4. Это может занять несколько минут…")
-                result = await self.worker.run(directory, "render", files=data["files"], segments=data["segments"],
-                                               plan=data["plan"], music=data.get("music", False))
+                light = operation == "render_light"
+                render_label = "🎬 Filmcraft собирает MP4 (" + ("540p" if light else "720p") + ")."
+                await progress(render_label + " Это может занять несколько минут.")
+                began = time.monotonic()
+
+                async def render_progress():
+                    while True:
+                        await asyncio.sleep(20)
+                        elapsed = int(time.monotonic() - began)
+                        await progress(f"{render_label} Прошло {elapsed // 60} мин {elapsed % 60} с.")
+
+                ticker = asyncio.create_task(render_progress())
+                try:
+                    result = await self.worker.run(directory, "render", files=data["files"], segments=data["segments"],
+                                                   plan=data["plan"], music=data.get("music", False),
+                                                   profile="light" if light else "standard")
+                finally:
+                    ticker.cancel()
+                    await asyncio.gather(ticker, return_exceptions=True)
                 if result.get("output") != "result.mp4" or result.get("verified") is not True:
                     raise FilmcraftError("invalid_output")
-                self.repo.save(OWNER, identifier, state="done", result=result, error="")
+                self.repo.save(OWNER, identifier, state="done", result=result, error="", telegram_file_id=None,
+                               telegram_message_id=None)
+                await progress("⬆️ MP4 готов. Отправляю файл в Telegram…")
                 await self.deliver(message, self.repo.get(OWNER, identifier))
                 await self.panel(message, self.repo.get(OWNER, identifier))
         except asyncio.CancelledError:
@@ -642,8 +665,6 @@ class FilmcraftVideo:
                 await self.error(message, str(error))
                 await self.panel(message, self.repo.get(OWNER, identifier))
         finally:
-            animation.cancel()
-            await asyncio.gather(animation, return_exceptions=True)
             if planner:
                 with suppress(Exception):
                     await planner.close()
@@ -655,8 +676,31 @@ class FilmcraftVideo:
         output = self.repo.directory(job["id"]) / "result.mp4"
         if job["state"] != "done" or output.is_symlink() or not output.is_file():
             raise FilmcraftError("expired")
-        await message.answer_video(FSInputFile(output, filename="obraz-filmcraft.mp4"), supports_streaming=True,
-                                   caption="🎬 Готово · Filmcraft · 720p\nФайл и отчёт доступны 24 часа.", parse_mode=None)
+        result = job["data"].get("result") or {}
+        size = f" · {result['width']}×{result['height']}" if result.get("width") and result.get("height") else ""
+        saved_file = job["data"].get("telegram_file_id")
+
+        async def activity():
+            while True:
+                with suppress(AiogramError, OSError, TimeoutError):
+                    await message.bot.send_chat_action(OWNER, "upload_video")
+                await asyncio.sleep(4)
+
+        animation = asyncio.create_task(activity()) if not saved_file else None
+        try:
+            sent = await message.bot.send_video(
+                OWNER, saved_file or FSInputFile(output, filename="obraz-filmcraft.mp4"),
+                supports_streaming=True, caption=f"🎬 Готово · Filmcraft{size}\nФайл и отчёт доступны 24 часа.",
+                parse_mode=None, request_timeout=120,
+            )
+        except (AiogramError, OSError, TimeoutError):
+            raise FilmcraftError("delivery_pending") from None
+        finally:
+            if animation:
+                animation.cancel()
+                await asyncio.gather(animation, return_exceptions=True)
+        self.repo.save(OWNER, job["id"], telegram_message_id=sent.message_id,
+                       telegram_file_id=sent.video.file_id if sent.video else saved_file)
 
     async def start(self, **kwargs):
         if not self.settings.filmcraft_enabled:
