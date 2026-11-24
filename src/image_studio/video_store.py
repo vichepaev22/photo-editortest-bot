@@ -50,10 +50,13 @@ class VideoRepository:
             raise ValueError("invalid_video_path")
         return path
 
+    def create_directory(self, path):
+        path.mkdir(mode=0o700)
+
     def create(self, owner):
         identifier = uuid.uuid4().hex
         path = self.directory(identifier)
-        path.mkdir(mode=0o700)
+        self.create_directory(path)
         with self.connect() as db:
             db.execute("INSERT INTO video_jobs(id,owner,created,state,data) VALUES(?,?,?,'upload','{}')",
                        (identifier, owner, time.time()))

@@ -17,7 +17,7 @@ from aiogram.exceptions import AiogramError
 from aiogram.types import BufferedInputFile, FSInputFile, InlineKeyboardButton, InlineKeyboardMarkup, Message
 
 from .admin_video import usage_text
-from .filmcraft_engine import FilmcraftError, atomic_json, media_path
+from .filmcraft_engine import FilmcraftError, atomic_json, media_path, share_with_job_group
 from .video_montage import MODEL, PLAN_SCHEMA, OpenAIPlanner, VideoError, checked_plan
 from .video_store import VideoRepository
 
@@ -74,7 +74,11 @@ class LimitedDownload(io.BufferedWriter):
     def __init__(self, path, limit):
         self.limit = limit
         super().__init__(io.FileIO(path, "x"))
-        Path(path).chmod(0o660)
+        try:
+            share_with_job_group(Path(path), 0o660)
+        except OSError:
+            self.close()
+            raise
 
     def write(self, data):
         if self.tell() + len(data) > self.limit:
@@ -85,7 +89,7 @@ class LimitedDownload(io.BufferedWriter):
 class FilmcraftRepository(VideoRepository):
     def __init__(self, root, spool):
         self.spool = Path(spool).resolve()
-        self.spool.mkdir(parents=True, mode=0o2770, exist_ok=True)
+        self.spool.mkdir(parents=True, mode=0o770, exist_ok=True)
         super().__init__(root)
 
     def directory(self, identifier):
@@ -96,10 +100,18 @@ class FilmcraftRepository(VideoRepository):
             raise ValueError("invalid_video_path")
         return path
 
-    def create(self, owner):
-        record = super().create(owner)
-        self.directory(record["id"]).chmod(0o2770)
-        return record
+    def create_directory(self, path):
+        path.mkdir(mode=0o700)
+        try:
+            share_with_job_group(path, 0o770)
+        except OSError:
+            path.rmdir()
+            raise
+
+    def shared_directory(self, identifier):
+        path = self.directory(identifier)
+        share_with_job_group(path, 0o770)
+        return path
 
     def recover(self):
         with self.connect() as db:
@@ -252,6 +264,8 @@ class FilmcraftVideo:
                 job = self.repo.create(OWNER)
                 self.focus = job["id"]
                 self.repo.save(OWNER, self.focus, files=[], prompt="", speech=True, revision=0, seen=[])
+            else:
+                self.repo.shared_directory(self.focus)
             self.repo.save(OWNER, self.focus, dialog_closed=False)
             return self.current()
         except OSError as error:
@@ -442,7 +456,7 @@ class FilmcraftVideo:
         self.album_task = asyncio.create_task(finish())
 
     async def upload(self, message, job, file):
-        data, directory = job["data"], self.repo.directory(job["id"])
+        data, directory = job["data"], self.repo.shared_directory(job["id"])
         files, seen = data.get("files", []), data.get("seen", [])
         key = str(file.file_unique_id)
         if key in seen:

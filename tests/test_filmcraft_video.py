@@ -128,6 +128,32 @@ async def test_open_button_explains_storage_error_before_any_analysis(ui, monkey
     client.responses.create.assert_not_called()
 
 
+async def test_open_repairs_existing_job_without_setting_special_mode_bits(ui, monkeypatch):
+    import os
+    from pathlib import Path
+
+    *_, controller, client, _ = ui
+    chmod = Path.chmod
+
+    def restricted(path, mode, **kwargs):
+        if mode & 0o6000:
+            raise OSError(errno.EPERM, "special mode bits forbidden")
+        return chmod(path, mode, **kwargs)
+
+    monkeypatch.setattr(Path, "chmod", restricted)
+    opened = await send(ui, callback="fc:home")
+    assert "Пришлите видео с подписью" in opened[-1].text
+    job = controller.current()
+    directory = controller.repo.directory(job["id"])
+    if os.name == "posix":
+        directory.chmod(0o700)
+    await send(ui, callback="fc:home")
+    assert controller.current()["id"] == job["id"]
+    if os.name == "posix":
+        assert directory.stat().st_mode & 0o7777 == 0o770
+    client.responses.create.assert_not_called()
+
+
 async def test_multiple_upload_caption_dedup_limits_and_stale_confirmation(ui):
     _, _, _, c, client, _ = ui
     # Album updates are received independently. The caption starts one job after the album settles.

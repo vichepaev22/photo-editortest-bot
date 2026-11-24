@@ -8,6 +8,7 @@ import os
 import re
 import shutil
 import signal
+import stat
 import time
 from pathlib import Path
 
@@ -29,13 +30,27 @@ def media_path(directory, name):
     return path
 
 
+def share_with_job_group(path, mode):
+    info = path.stat()
+    if os.name == "posix":
+        gid = path.parent.stat().st_gid
+        if info.st_gid != gid:
+            os.chown(path, -1, gid)
+    # RestrictSUIDSGID forbids chmod with special bits, even if inherited on mkdir.
+    if stat.S_IMODE(info.st_mode) != mode:
+        path.chmod(mode)
+
+
 def atomic_json(path, value):
     path = Path(path)
     temporary = path.with_suffix(".tmp")
     with temporary.open("x", encoding="utf-8") as stream:
         json.dump(value, stream, ensure_ascii=False, allow_nan=False)
-    temporary.chmod(0o660)
-    temporary.replace(path)
+    try:
+        share_with_job_group(temporary, 0o660)
+        temporary.replace(path)
+    finally:
+        temporary.unlink(missing_ok=True)
 
 
 class FilmcraftEngine:
@@ -318,7 +333,7 @@ async def worker(spool, executable):
     spool = Path(spool).resolve()
     engine = FilmcraftEngine(executable)
     os.umask(0o007)
-    spool.mkdir(mode=0o2770, parents=True, exist_ok=True)
+    spool.mkdir(mode=0o770, parents=True, exist_ok=True)
     # Рестарт локального процесса не повторяет ни команду, ни тем более платный API.
     for running in spool.glob("*/request-*.working"):
         atomic_json(running.with_suffix(".result"), {"ok": False, "error": "worker_interrupted"})
