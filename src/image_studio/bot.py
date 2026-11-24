@@ -35,6 +35,7 @@ from .admin_delivery import AdminDelivery
 from .admin_video import register_admin_video
 from .bonus_shop import BonusShop
 from .catalog import PRESETS
+from .filmcraft_video import register_filmcraft
 from .media import MAX_BYTES, Media, normalize
 from .onboarding import send_onboarding
 from .owner_quality import register_owner_quality
@@ -322,14 +323,21 @@ def build_dispatcher(settings, store, media, service, *, step_messages=None, pur
     router.message.filter(F.chat.type == "private")
     router.callback_query.filter(F.message.chat.type == "private")
     register_owner_quality(router, service)
+    filmcraft = register_filmcraft(router, settings, store, navigation=set(NAV.values()))
     video = register_admin_video(router, settings, store, navigation=set(NAV.values()))
+    filmcraft.legacy = video
+    video.peer = filmcraft
     admin = register_admin(
         router, store, settings.admin_user_id, media=media, trial_access=trial,
         unlimited_user_id=settings.admin_user_id if settings.owner_unlimited_testing else 0,
         video_enabled=settings.admin_video_enabled,
+        filmcraft_enabled=settings.filmcraft_enabled,
     )
     dp = Dispatcher(events_isolation=SimpleEventIsolation())
     dp["admin_video"] = video
+    dp["filmcraft_video"] = filmcraft
+    dp.startup.register(filmcraft.start)
+    dp.shutdown.register(filmcraft.close)
     dp.startup.register(video.start)
     dp.shutdown.register(video.close)
     drafts = {}

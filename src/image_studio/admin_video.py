@@ -250,7 +250,7 @@ class AdminVideo:
             await self.error(message, str(error) if isinstance(error, VideoError) else "media_processing_failed")
 
     async def launch(self, message, job, action):
-        if self.tasks:
+        if self.tasks or (getattr(self, "peer", None) and self.peer.tasks):
             return await self.error(message, "busy")
         expected = "ready" if action == "analyze" else job["state"]
         if action == "render" and (expected not in {"planned", "done", "render_failed", "review"} or not job["data"].get("plan")):
