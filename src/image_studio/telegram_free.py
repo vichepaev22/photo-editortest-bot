@@ -3,10 +3,10 @@ from aiogram.exceptions import TelegramBadRequest, TelegramForbiddenError, Teleg
 from .recurring_free import FreeDelivery, FreeDeliveryError
 
 
-def telegram_free_delivery(bot, store, keyboard):
+def telegram_free_delivery(bot, store, keyboard_for):
     async def send(user, text):
         try:
-            message = await bot.send_message(user, text, reply_markup=keyboard)
+            message = await bot.send_message(user, text, reply_markup=keyboard_for(user))
         except TelegramRetryAfter as error:
             raise FreeDeliveryError('queued', error.retry_after) from None
         except TelegramForbiddenError:

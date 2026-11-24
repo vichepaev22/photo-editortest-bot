@@ -540,7 +540,8 @@ class AdminController:
         await self._show(message, text, _keyboard(*rows, [("События", "admin:events:0")], _home_row()), edit=edit)
 
 
-def register_admin(router: Router, store: Store, admin_user_id: int, *, media=None, trial_access=False, unlimited_user_id=0, video_enabled=False, filmcraft_enabled=False):
+def register_admin(router: Router, store: Store, admin_user_id: int, *, media=None, trial_access=False,
+                   unlimited_user_id=0, video_enabled=False, filmcraft_enabled=False, entry_label=None, navigation=()):
     visits = PrivateVisitMiddleware(store)
     router.message.outer_middleware(visits)
     router.callback_query.outer_middleware(visits)
@@ -556,8 +557,12 @@ def register_admin(router: Router, store: Store, admin_user_id: int, *, media=No
         store.admin_session_clear(admin_user_id)
         await controller.home(message)
 
+    if entry_label:
+        router.message.register(admin, F.text == entry_label)
+
     async def active_text(message):
-        return bool(message.text and (not message.text.startswith("/") or message.text == "/cancel") and controller.active(message))
+        return bool(message.text and message.text not in navigation
+                    and (not message.text.startswith("/") or message.text == "/cancel") and controller.active(message))
 
     @router.message(active_text)
     async def admin_text(message: Message):

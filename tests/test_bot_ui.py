@@ -120,8 +120,7 @@ async def test_bottom_navigation_after_start_and_consent(ui):
     assert keyboard.is_persistent is True and keyboard.one_time_keyboard is False
     assert len(keyboard.keyboard) == 4
     assert {b.text for row in keyboard.keyboard for b in row} == {
-        "📸 Изменить фото",
-        "🧩 Объединить фото",
+        "📸 Работа с фото",
         "💎 Мои попытки",
         "🖼 Мои результаты",
         "❓ Как пользоваться",
@@ -137,6 +136,33 @@ async def test_bottom_navigation_after_start_and_consent(ui):
                 assert "style" not in button
     sent = await send(ui, callback="consent", user_id=2)
     assert any(isinstance(getattr(m, "reply_markup", None), ReplyKeyboardMarkup) for m in sent)
+
+
+async def test_owner_admin_button_and_grouped_photo_menu(ui):
+    _, bot, store, media, service, provider = ui
+    owner = 3975497
+    store.consent(owner)
+    dp = build_dispatcher(Settings(admin_user_id=owner), store, media, service)
+    state = dp, bot, store, media, service, provider
+
+    owner_menu = await send(state, "Открой основное меню", user_id=owner)
+    public_menu = await send(state, callback="nav:home")
+    assert [b.text for b in owner_menu[-1].reply_markup.keyboard[0]] == ["📸 Работа с фото", "⚙️ Админ-панель"]
+    assert public_menu[-1].reply_markup == MAIN
+    sent = await send(state, "⚙️ Админ-панель", user_id=owner)
+    assert any("Статистика бота" in getattr(method, "text", "") for method in sent)
+    sent = await send(state, "/admin", user_id=owner)
+    assert any("Статистика бота" in getattr(method, "text", "") for method in sent)
+    for text in ("⚙️ Админ-панель", "/admin"):
+        sent = await send(state, text)
+        assert sent[-1].text == "Доступ запрещён."
+
+    sent = await send(state, "📸 Работа с фото", user_id=owner)
+    buttons = {b.callback_data: b.text for row in sent[-1].reply_markup.inline_keyboard for b in row}
+    assert buttons["nav:edit"] == "📸 Изменить фото" and buttons["nav:merge"] == "🧩 Объединить фото"
+    assert {"preset:hair", "preset:glasses", "preset:document", "nav:home"} <= buttons.keys()
+    sent = await send(state, callback="nav:merge", user_id=owner)
+    assert any("Загрузите 2 фото" in (getattr(method, "text", None) or "") for method in sent)
 
 
 async def test_navigation_does_not_become_description_and_home_expires_confirmation(ui):

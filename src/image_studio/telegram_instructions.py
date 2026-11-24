@@ -58,11 +58,12 @@ def is_menu_request(text):
 
 
 class InstructionGuide:
-    def __init__(self, keyboard, *, pause=asyncio.sleep):
-        self.keyboard, self.pause = keyboard, pause
+    def __init__(self, keyboard_for, *, pause=asyncio.sleep):
+        self.keyboard_for, self.pause = keyboard_for, pause
         self.tasks = {}
 
     async def show(self, message):
+        keyboard = self.keyboard_for(message.chat.id)
         for index, (filename, text) in enumerate(SLIDES):
             last = index == len(SLIDES) - 1
             await animated_welcome(message, text, None, pause=self.pause)
@@ -73,7 +74,7 @@ class InstructionGuide:
                         chat_id=message.chat.id,
                         photo=FSInputFile(ASSETS / filename),
                         caption=PANEL_TEXT if last else None,
-                        reply_markup=self.keyboard if last else None,
+                        reply_markup=keyboard if last else None,
                         disable_notification=True,
                         parse_mode=None,
                     )
@@ -88,7 +89,7 @@ class InstructionGuide:
                     log.warning("instruction_photo_unavailable type=%s", type(exc).__name__)
                     break
             if last and not sent:
-                await message.answer(PANEL_TEXT, reply_markup=self.keyboard, parse_mode=None)
+                await message.answer(PANEL_TEXT, reply_markup=keyboard, parse_mode=None)
             if not last:
                 await self.pause(2)
 

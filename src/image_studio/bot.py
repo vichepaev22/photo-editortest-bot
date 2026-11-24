@@ -129,6 +129,8 @@ _choices = [(ICONS[key] + " " + p.label, "preset:" + key)
             for key, p in PRESETS.items() if key not in {"document_original", "look"}]
 MENU = buttons([_choices[i : i + 2] for i in range(0, len(_choices), 2)])
 NAV = {
+    "photo": "📸 Работа с фото",
+    "admin": "⚙️ Админ-панель",
     "edit": "📸 Изменить фото",
     "merge": "🧩 Объединить фото",
     "balance": "💎 Мои попытки",
@@ -137,16 +139,34 @@ NAV = {
     "support": "💬 Поддержка",
     "buy": "🛍 Купить / продлить доступ",
 }
-MAIN = ReplyKeyboardMarkup(
-    keyboard=[
-        [KeyboardButton(text=NAV[key], **({"style": "success"} if key == "support" else {})) for key in row]
-        for row in [("edit", "merge"), ("balance", "results"), ("help", "support"), ("buy",)]
-    ],
-    resize_keyboard=True,
-    is_persistent=True,
-    one_time_keyboard=False,
-    input_field_placeholder="Выберите действие ниже",
-)
+def build_main_keyboard(*, owner=False):
+    rows = [("photo", "admin") if owner else ("photo",), ("balance", "results"), ("help", "support"), ("buy",)]
+    return ReplyKeyboardMarkup(
+        keyboard=[
+            [KeyboardButton(text=NAV[key], style="success" if key == "support" else None) for key in row]
+            for row in rows
+        ],
+        resize_keyboard=True,
+        is_persistent=True,
+        one_time_keyboard=False,
+        input_field_placeholder="Выберите действие ниже",
+    )
+
+
+MAIN = build_main_keyboard()
+OWNER_MAIN = build_main_keyboard(owner=True)
+
+
+def main_keyboard(user, admin_user_id):
+    return OWNER_MAIN if admin_user_id > 0 and user == admin_user_id else MAIN
+
+
+_photo_shortcuts = [choice for choice in _choices if choice[1] != "preset:merge"]
+PHOTO_WORK = buttons([
+    [(NAV["edit"], "nav:edit"), (NAV["merge"], "nav:merge")],
+    *[_photo_shortcuts[i : i + 2] for i in range(0, len(_photo_shortcuts), 2)],
+    [("🏠 Главное меню", "nav:home")],
+])
 BACK = buttons([[("🏠 Главное меню", "nav:home")]])
 CONSENT = buttons([[("Для совершеннолетних · принимаю условия", "consent", "success")]])
 COMMANDS = [
@@ -322,9 +342,23 @@ def build_dispatcher(settings, store, media, service, *, step_messages=None, pur
     router = Router()
     router.message.filter(F.chat.type == "private")
     router.callback_query.filter(F.message.chat.type == "private")
+
+    @router.message(F.text.func(is_menu_request))
+    async def spoken_menu(message: Message):
+        if filmcraft.owner(message, message.from_user):
+            filmcraft.leave()
+        if video.owner(message, message.from_user):
+            video.focus = None
+        await navigate(message, message.from_user.id, "home")
+
     register_owner_quality(router, service)
-    filmcraft = register_filmcraft(router, settings, store, navigation=set(NAV.values()))
-    video = register_admin_video(router, settings, store, navigation=set(NAV.values()))
+    navigation_labels = set(NAV.values())
+
+    def keyboard_for(user):
+        return main_keyboard(user, settings.admin_user_id)
+
+    filmcraft = register_filmcraft(router, settings, store, navigation=navigation_labels)
+    video = register_admin_video(router, settings, store, navigation=navigation_labels)
     filmcraft.legacy = video
     video.peer = filmcraft
     admin = register_admin(
@@ -332,6 +366,7 @@ def build_dispatcher(settings, store, media, service, *, step_messages=None, pur
         unlimited_user_id=settings.admin_user_id if settings.owner_unlimited_testing else 0,
         video_enabled=settings.admin_video_enabled,
         filmcraft_enabled=settings.filmcraft_enabled,
+        entry_label=NAV["admin"], navigation=navigation_labels,
     )
     dp = Dispatcher(events_isolation=SimpleEventIsolation())
     dp["admin_video"] = video
@@ -342,7 +377,7 @@ def build_dispatcher(settings, store, media, service, *, step_messages=None, pur
     dp.shutdown.register(video.close)
     drafts = {}
     bonus = BonusShop(settings, store, media, service)
-    bonus.navigation = set(NAV.values())
+    bonus.navigation = navigation_labels
     bonus.register(router, drafts)
     dp["bonus_shop"] = bonus
     steps = step_messages if step_messages is not None else StepMessages(store)
@@ -352,7 +387,7 @@ def build_dispatcher(settings, store, media, service, *, step_messages=None, pur
     service.progress = live.stage
     dialog = TelegramDialog(settings, store, media, service, live, steps) if settings.dialog_enabled else None
     dp["photo_dialog"] = dialog
-    guide = InstructionGuide(MAIN)
+    guide = InstructionGuide(keyboard_for)
     dp["instruction_guide"] = guide
     dp.shutdown.register(guide.close)
     if dialog:
@@ -400,14 +435,14 @@ def build_dispatcher(settings, store, media, service, *, step_messages=None, pur
             await answer("♾ Безлимитное тестирование\n\nКоличество генераций для вашего аккаунта не ограничено.\n"
                          "🧪 Выбор качества для ваших тестов: /quality"
                          + (bonus.balance_content(user) if bonus.allowed(user) else ""),
-                         reply_markup=bonus.balance_keyboard() if bonus.allowed(user) else BACK if edit else MAIN)
+                         reply_markup=bonus.balance_keyboard() if bonus.allowed(user) else BACK if edit else keyboard_for(user))
             return
         total, reserved = service.wallet(user)
         if service.recurring_free:
             await answer(balance_text(store.free_info(user)) + f"\nВ обработке: {reserved}."
                          + ("\n\n" + status if status else subscription_hint(store, service, user)),
                          reply_markup=(SUBSCRIPTION_KEYBOARD if trial and subscription_eligible(store, service, user)
-                                       else BACK if edit else MAIN))
+                                       else BACK if edit else keyboard_for(user)))
             return
         await answer(
             ("🎁 Генерации с бонусом за подписку\n" if store.has_channel_bonus(user) else
@@ -417,7 +452,7 @@ def build_dispatcher(settings, store, media, service, *, step_messages=None, pur
             "Каждый новый вариант использует 1 генерацию. Повторная выдача не предусмотрена."
             + ("\n\n" + status if status else subscription_hint(store, service, user)),
             reply_markup=(SUBSCRIPTION_KEYBOARD if trial and subscription_eligible(store, service, user)
-                          else BACK if edit else MAIN),
+                          else BACK if edit else keyboard_for(user)),
         )
 
     register_subscriptions(router, store, service, trial_balance, enabled=trial)
@@ -561,7 +596,7 @@ def build_dispatcher(settings, store, media, service, *, step_messages=None, pur
         sent = await step_answer(
             message, user, draft,
             progress_text(draft.preset, draft.description),
-            reply_markup=MAIN,
+            reply_markup=keyboard_for(user),
         )
         live.attach(message.bot, user, job, sent.message_id, draft.preset, draft.description,
                     reply_parameters=request_reply(message, user))
@@ -590,16 +625,20 @@ def build_dispatcher(settings, store, media, service, *, step_messages=None, pur
             await offer_channel_bonus(message.bot, store, user, job)
 
     async def navigate(message, user, action):
-        if dialog and action in {"home", "edit", "merge"}:
+        if user == settings.admin_user_id and message.chat.id == user:
+            store.admin_session_clear(user)
+        if dialog and action in {"home", "photo", "edit", "merge"}:
             dialog.core.clear(user)
         bonus.leave(user)
-        if action in {"home", "edit"}:
+        if action in {"home", "photo", "edit"}:
             drafts.pop(user, None)
             if not store.has_consent(user):
                 await message.answer("Подтвердите условия и согласие на фотографии.", reply_markup=CONSENT)
                 return
             if action == "home":
-                await message.answer(PANEL_TEXT, reply_markup=MAIN)
+                await message.answer(PANEL_TEXT, reply_markup=keyboard_for(user))
+            elif action == "photo":
+                await message.answer("📸 Работа с фото\n\nВыберите, что хотите сделать.", reply_markup=PHOTO_WORK)
             else:
                 await message.answer(
                     "Что хотите изменить? " + pricing(user), reply_markup=MENU
@@ -635,7 +674,7 @@ def build_dispatcher(settings, store, media, service, *, step_messages=None, pur
             await message.answer(
                 "🖼 Ваши последние результаты. Скачать ещё раз можно без расхода попыток.\nХранение — 24 часа."
                 if rows
-                else "Здесь появятся ваши результаты. Начните с кнопки «Изменить фото».\n"
+                else "Здесь появятся ваши результаты. Начните с «Работа с фото».\n"
                 "Готовые файлы хранятся локально 24 часа.",
                 reply_markup=buttons(rows) if rows else BACK,
             )
@@ -652,7 +691,7 @@ def build_dispatcher(settings, store, media, service, *, step_messages=None, pur
                     "Отправьте своё фото." if len(draft.photos) < PRESETS[draft.preset].inputs
                     else "Напишите желаемое изменение. Загруженное фото сохранено."
                 )
-            await message.answer(text, reply_markup=MAIN)
+            await message.answer(text, reply_markup=keyboard_for(user))
         elif action == "support":
             await message.answer(
                 "Нужна помощь? Напишите в поддержку и опишите, что произошло.",
@@ -676,12 +715,8 @@ def build_dispatcher(settings, store, media, service, *, step_messages=None, pur
             await purchases.open_callback(callback)
             return
         await callback.answer()
-        if action in {*NAV, "home", "continue_help"}:
+        if action != "admin" and action in {*NAV, "home", "continue_help"}:
             await navigate(callback.message, callback.from_user.id, action)
-
-    @router.message(F.text.func(is_menu_request))
-    async def spoken_menu(message: Message):
-        await navigate(message, message.from_user.id, "home")
 
     @router.callback_query(F.data == "guide:open")
     async def instructions(callback: CallbackQuery):
@@ -710,7 +745,7 @@ def build_dispatcher(settings, store, media, service, *, step_messages=None, pur
         )
         if service.recurring_free and not service.is_unlimited(message.from_user.id):
             mode = f"\nДоступно генераций: {total - reserved}.\n" + RULE_TEXT
-        await send_onboarding(message, MAIN, notice=(
+        await send_onboarding(message, keyboard_for(message.from_user.id), notice=(
             "Сервис для совершеннолетних. Используйте собственные фото или фото людей, давших согласие. "
             "В рабочем режиме изображения передаются OpenAI; лицо может измениться.\n" + mode
         ))
@@ -748,7 +783,7 @@ def build_dispatcher(settings, store, media, service, *, step_messages=None, pur
                 if settings.image_provider == "mock"
                 else "Для пилотного доступа сообщите владельцу свой /id."
             ),
-            reply_markup=MAIN,
+            reply_markup=keyboard_for(callback.from_user.id),
         )
 
     @router.message(Command("id"))
@@ -887,13 +922,14 @@ def build_dispatcher(settings, store, media, service, *, step_messages=None, pur
         if dialog:
             dialog.core.clear(message.from_user.id)
         drafts.pop(message.from_user.id, None)
-        await message.answer("Новая заявка сброшена. Уже начатая обработка продолжается.", reply_markup=MAIN)
+        await message.answer("Новая заявка сброшена. Уже начатая обработка продолжается.",
+                             reply_markup=keyboard_for(message.from_user.id))
 
     @router.message(Command("stop"))
     async def stop(message: Message):
         # Совместимость со старым меню Telegram, без отмены и изменения задачи.
         await message.answer("Фото придёт автоматически после обработки. Готовые файлы — в «Мои результаты».",
-                             reply_markup=MAIN)
+                             reply_markup=keyboard_for(message.from_user.id))
 
     @router.callback_query(F.data.startswith("live:stop:"))
     async def stop_callback(callback: CallbackQuery):
@@ -1038,7 +1074,7 @@ def build_dispatcher(settings, store, media, service, *, step_messages=None, pur
         await step_two(message, draft)
 
     if dialog:
-        dialog.register(router, drafts, admin, bonus, set(NAV.values()))
+        dialog.register(router, drafts, admin, bonus, navigation_labels)
 
     @router.message(F.photo | F.document)
     async def photo(message: Message):
@@ -1077,7 +1113,7 @@ def build_dispatcher(settings, store, media, service, *, step_messages=None, pur
         if trial and any(job["request_key"] == request_key for job in store.jobs(user)):
             await message.answer(
                 "Это сообщение уже обработано. Готовый образ можно скачать в «Мои результаты».",
-                reply_markup=MAIN,
+                reply_markup=keyboard_for(user),
             )
             return
         if not draft or not store.has_consent(user):
@@ -1369,7 +1405,9 @@ async def run(settings):
                     await asyncio.sleep(0.05)
             tasks.extend([
                 asyncio.create_task(service.worker()),
-                asyncio.create_task(telegram_free_delivery(bot, store, MAIN).worker()),
+                asyncio.create_task(telegram_free_delivery(
+                    bot, store, lambda user: main_keyboard(user, settings.admin_user_id),
+                ).worker()),
                 asyncio.create_task(processing_activity(bot, store, live=live)),
                 asyncio.create_task(live.worker()),
                 asyncio.create_task(watch_stop()),

@@ -25,7 +25,7 @@ async def test_entry_has_instruction_and_photo_invitation_in_both_renderers(tmp_
 
 async def test_instruction_pairs_correct_assets_keyboard_only_at_end():
     bot = TrackedBot()
-    guide = InstructionGuide(MAIN, pause=AsyncMock())
+    guide = InstructionGuide(lambda user: MAIN, pause=AsyncMock())
     await guide.show(own_photo().as_(bot))
     permanent = [m for m in bot.sent if m.__api_method__ in {"sendMessage", "sendPhoto"}]
     assert [m.__api_method__ for m in permanent] == ["sendMessage", "sendPhoto"] * 3
