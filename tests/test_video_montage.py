@@ -73,7 +73,7 @@ async def test_usage_persisted_even_if_plan_is_invalid_and_no_automatic_retry(tm
     assert client.responses.create.await_count == 1
     assert repo.calls(7, job["id"])[0]["usage"]["input_tokens"] == 321
     request = client.responses.create.call_args.kwargs
-    assert request["model"] == "gpt-6.1-sol" and request["store"] is False
+    assert request["model"] == "gpt-6.2-sol" and request["store"] is False
     assert request["text"]["format"]["strict"] is True and "tools" not in request
 
 
