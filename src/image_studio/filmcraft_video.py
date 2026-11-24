@@ -5,6 +5,7 @@ import base64
 import hashlib
 import io
 import json
+import logging
 import re
 import time
 import uuid
@@ -21,6 +22,7 @@ from .video_montage import MODEL, PLAN_SCHEMA, OpenAIPlanner, VideoError, checke
 from .video_store import VideoRepository
 
 OWNER = 3975497
+log = logging.getLogger(__name__)
 INTENT = re.compile(r"(?:видео|ролик|рилс|reels|монтаж|смонтир|клип|нарезк|filmcraft|слайдшоу)", re.I)
 STATUS = re.compile(r"(?:задача понятна|[вв]с[её] понятно|понятно|как дела|как успехи|статус|что с видео|что с роликом|"
                     r"как (?:там|ид[её]т)(?: монтаж| видео| ролик)?|видео (?:уже )?готово|"
@@ -239,18 +241,22 @@ class FilmcraftVideo:
         self.store.admin_session_clear(OWNER)
         if self.legacy:
             self.legacy.focus = None
-        self.repo.cleanup()
-        job = None if new else self.current()
-        if not job and not new:
-            job = next((j for j in self.repo.recent(OWNER) if j["state"] not in {"expired", "canceled"}), None)
-            if job:
+        try:
+            self.repo.cleanup()
+            job = None if new else self.current()
+            if not job and not new:
+                job = next((j for j in self.repo.recent(OWNER) if j["state"] not in {"expired", "canceled"}), None)
+                if job:
+                    self.focus = job["id"]
+            if not job or job["state"] in {"expired", "canceled"}:
+                job = self.repo.create(OWNER)
                 self.focus = job["id"]
-        if not job or job["state"] in {"expired", "canceled"}:
-            job = self.repo.create(OWNER)
-            self.focus = job["id"]
-            self.repo.save(OWNER, self.focus, files=[], prompt="", speech=True, revision=0, seen=[])
-        self.repo.save(OWNER, self.focus, dialog_closed=False)
-        return self.current()
+                self.repo.save(OWNER, self.focus, files=[], prompt="", speech=True, revision=0, seen=[])
+            self.repo.save(OWNER, self.focus, dialog_closed=False)
+            return self.current()
+        except OSError as error:
+            log.error("filmcraft_open_storage_failed errno=%s", error.errno)
+            raise FilmcraftError("open_storage_failed") from None
 
     async def enter(self, message, *, new=False):
         if new:
@@ -307,6 +313,8 @@ class FilmcraftVideo:
             "file_too_large": "Файл больше лимита: видео до 19 MB, музыка до 5 MB.",
             "video_limits": "Нужно 1–6 видео до 4K, суммарно до 90 секунд. Проверьте формат и длительность.",
             "worker_unavailable": "Монтажный процесс сейчас недоступен. Платный анализ не запущен; попробуйте позже.",
+            "open_storage_failed": "Не удалось открыть рабочую папку монтажа. Этот запрос не запускал анализ OpenAI. "
+                                   "Попробуйте снова чуть позже.",
             "server_busy": "Серверу сейчас не хватает свободной памяти или места. Попробуйте позже; подготовка остановлена до вызова модели.",
             "stale": "Этот шаг уже изменился. Напишите «статус», чтобы посмотреть текущую работу.",
             "provider_rejected": "OpenAI отклонил анализ. Проверьте доступ к модели и баланс. Отчёт сохранён, автоповтора нет.",

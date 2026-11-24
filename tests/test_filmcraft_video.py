@@ -1,4 +1,5 @@
 import asyncio
+import errno
 import json
 from datetime import datetime, timezone
 from types import SimpleNamespace
@@ -112,6 +113,19 @@ async def test_owner_only_flag_group_and_admin_entry(ui, tmp_path):
     assert controller._repo is None and client.responses.create.await_count == 0 and provider.calls == 0
     with pytest.raises(ValueError, match="filmcraft_owner"):
         Settings(admin_user_id=42, filmcraft_enabled=True).validate()
+
+
+async def test_open_button_explains_storage_error_before_any_analysis(ui, monkeypatch):
+    *_, controller, client, _ = ui
+
+    def unavailable(owner):
+        raise OSError(errno.EROFS, "storage unavailable")
+
+    monkeypatch.setattr(controller.repo, "create", unavailable)
+    sent = await send(ui, callback="fc:home")
+    assert "не запускал анализ OpenAI" in sent[-1].text
+    assert controller.focus is None and not controller.worker.calls
+    client.responses.create.assert_not_called()
 
 
 async def test_multiple_upload_caption_dedup_limits_and_stale_confirmation(ui):
