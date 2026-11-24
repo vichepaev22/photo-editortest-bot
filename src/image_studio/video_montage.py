@@ -11,7 +11,7 @@ from pathlib import Path
 
 from openai import APIStatusError, AsyncOpenAI
 
-MODEL = "gpt-6.1-sol"
+MODEL = "gpt-6.2-sol"
 TRANSCRIBE_MODEL = "gpt-transcribe"
 MAX_BYTES = 19_000_000
 MAX_DURATION = 90

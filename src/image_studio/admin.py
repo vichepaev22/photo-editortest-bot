@@ -148,7 +148,7 @@ def _render(stats, *, listing=False, query="", filter="all", unread=0, video_ena
         [_button("🔎 Найти пользователя", "admin:search")],
         [_button(f"🔔 Уведомления · {unread}", "admin:inbox:0")],
     ])
-    if video_enabled and not listing:
+    if video_enabled and not listing and not filmcraft_enabled:
         keyboard.append([_button("🎬 Видеомонтаж · тест", "video:home")])
     if filmcraft_enabled and not listing:
         keyboard.append([_button("🎞 Сделать видео · Filmcraft", "fc:home")])

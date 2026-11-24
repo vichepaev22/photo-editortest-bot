@@ -55,7 +55,7 @@ def ui(tmp_path):
     value = dict(title="Образ", format="portrait", transition="cut", sound="original", subtitles=True, clips=[0])
     client = SimpleNamespace(
         responses=SimpleNamespace(create=AsyncMock(return_value=SimpleNamespace(
-            status="completed", output_text=json.dumps(value), _request_id="plan-request",
+            status="completed", output_text=json.dumps(dict(decision="render", note="", plan=value)), _request_id="plan-request",
             usage=SimpleNamespace(model_dump=lambda: {"input_tokens": 100, "output_tokens": 40})))),
         audio=SimpleNamespace(transcriptions=SimpleNamespace(create=AsyncMock(return_value=SimpleNamespace(
             text="Реальная речь", usage=None, _request_id="audio-request")))), close=AsyncMock())
@@ -68,7 +68,7 @@ def ui(tmp_path):
     return dp, bot, store, controller, client, provider
 
 
-async def send(ui, text=None, callback=None, *, user=OWNER, file=None, size=100, group=False, caption=None):
+async def send(ui, text=None, callback=None, *, user=OWNER, file=None, size=100, group=False, caption=None, album=None):
     dp, bot, *_ = ui
     bot.sequence += 1
     who = User(id=user, is_bot=False, first_name="Tester")
@@ -76,7 +76,8 @@ async def send(ui, text=None, callback=None, *, user=OWNER, file=None, size=100,
     if file:
         fields["video"] = Video(file_id=file, file_unique_id=file, file_size=size, width=640, height=480, duration=2)
     message = Message(message_id=bot.sequence, date=datetime.now(timezone.utc), from_user=who,
-                      chat=Chat(id=user, type="group" if group else "private"), text=text, caption=caption, **fields)
+                      chat=Chat(id=user, type="group" if group else "private"), text=text, caption=caption,
+                      media_group_id=album, **fields)
     update = Update(update_id=bot.sequence, **({"callback_query": CallbackQuery(id=str(bot.sequence),
         from_user=who, chat_instance="test", message=message, data=callback)} if callback else {"message": message}))
     bot.sent.clear()
@@ -91,8 +92,7 @@ async def drain(controller):
 
 async def ready(ui):
     await send(ui, "Хочу сделать видео")
-    await send(ui, file="first", caption="Собери короткий вертикальный ролик")
-    await send(ui, "готово")
+    await send(ui, file="first")
     return ui[3].current()
 
 
@@ -103,8 +103,9 @@ async def test_owner_only_flag_group_and_admin_entry(ui, tmp_path):
     await send(ui, "Хочу сделать видео", group=True)
     assert controller._repo is None and not controller.worker.calls
     sent = await send(ui, "/admin")
-    assert any(b.callback_data == "fc:home" for m in sent for row in
-               getattr(getattr(m, "reply_markup", None), "inline_keyboard", []) for b in row)
+    buttons = {b.callback_data for m in sent for row in
+               getattr(getattr(m, "reply_markup", None), "inline_keyboard", []) for b in row}
+    assert "fc:home" in buttons and "video:home" not in buttons
     controller.settings.filmcraft_enabled = False
     await send(ui, "/filmcraft")
     await send(ui, callback="fc:new")
@@ -115,35 +116,43 @@ async def test_owner_only_flag_group_and_admin_entry(ui, tmp_path):
 
 async def test_multiple_upload_caption_dedup_limits_and_stale_confirmation(ui):
     _, _, _, c, client, _ = ui
-    job = await ready(ui)
+    # Album updates are received independently. The caption starts one job after the album settles.
+    await send(ui, callback="video:home")
+    assert c.legacy.focus is None and c.focus
+    await send(ui, file="first", caption="Собери короткий вертикальный ролик", album="test-album")
+    job = c.current()
     old = action(job, "analyze")
-    await send(ui, file="first")
-    await send(ui, file="second")
+    await send(ui, file="first", album="test-album")
+    await send(ui, file="second", album="test-album")
     assert len(c.current()["data"]["files"]) == 2
     await send(ui, callback=old)
     assert client.responses.create.await_count == 0
+    await c.album_task
+    await drain(c)
     await send(ui, file="large", size=20_000_000)
-    assert len(c.current()["data"]["files"]) == 2
-    await send(ui, "Сделай два эпизода без субтитров")
-    assert c.current()["data"]["prompt"].startswith("Сделай два")
+    assert c.repo.get(OWNER, job["id"])["state"] == "done" and client.responses.create.await_count == 1
+    payload = client.responses.create.call_args.kwargs
+    assert '"source_video": 2' in payload["input"][0]["content"][0]["text"]
 
 
 async def test_plan_paid_once_render_repeat_report_and_photo_balance(ui):
     _, bot, store, c, client, provider = ui
     wallet = store.wallet(OWNER)
-    job = await ready(ui)
-    callback = action(job, "analyze")
-    await send(ui, callback=callback)
-    await send(ui, callback=callback)
+    # The file itself activates Filmcraft even when no menu was opened.
+    sent = await send(ui, file="first", caption="Учти пожелания человека в кадре и добавь субтитры")
+    assert any("Загружаю" in getattr(m, "text", "") for m in sent)
     await drain(c)
-    assert c.current()["state"] == "planned"
+    sent = await send(ui, "задача понятна?")
+    assert any("План" in getattr(m, "text", "") for m in sent)
+    assert c.current()["state"] == "done" and c.worker.calls.count("render") == 1
     assert client.responses.create.await_count == client.audio.transcriptions.create.await_count == 1
     payload = client.responses.create.call_args.kwargs
-    assert "source_video" in payload["input"][0]["content"][0]["text"] and payload["store"] is False
+    assert payload["model"] == "gpt-6.2-sol"
+    assert "Реальная речь" in payload["input"][0]["content"][0]["text"] and payload["store"] is False
     for _ in range(2):
         await send(ui, callback=action(c.current(), "render"))
         await drain(c)
-    assert c.current()["state"] == "done" and c.worker.calls.count("render") == 2
+    assert c.current()["state"] == "done" and c.worker.calls.count("render") == 3
     assert any(m.__api_method__ == "sendVideo" for m, _ in bot.history)
     await send(ui, callback=action(c.current(), "download"))
     sent = await send(ui, callback=action(c.current(), "report"))
@@ -160,17 +169,22 @@ async def test_worker_failure_prevents_spend_and_render_retry_does_not_reanalyze
     *_, c, client, _ = ui
     await ready(ui)
     c.worker.fail = "server_busy"
-    await send(ui, callback=action(c.current(), "analyze"))
+    await send(ui, "Смонтируй вертикальный ролик с субтитрами")
     await drain(c)
     assert c.current()["state"] == "failed" and client.responses.create.await_count == 0
     c.worker.fail = None
+    run = c.worker.run
+
+    async def failed_render(directory, operation, **data):
+        if operation == "render":
+            raise FilmcraftError("engine_failed")
+        return await run(directory, operation, **data)
+
+    c.worker.run = failed_render
     await send(ui, callback=action(c.current(), "analyze"))
     await drain(c)
-    c.worker.fail = "engine_failed"
-    await send(ui, callback=action(c.current(), "render"))
-    await drain(c)
     assert c.current()["state"] == "render_failed"
-    c.worker.fail = None
+    c.worker.run = run
     await send(ui, callback=action(c.current(), "render"))
     await drain(c)
     assert c.current()["state"] == "done" and client.responses.create.await_count == 1
@@ -185,13 +199,30 @@ async def test_shutdown_records_unknown_and_never_retries_paid_call(ui):
         entered.set()
         await asyncio.Event().wait()
     client.audio.transcriptions.create.side_effect = stall
-    await send(ui, callback=action(c.current(), "analyze"))
+    await send(ui, "Собери с субтитрами")
     await entered.wait()
     await c.close()
     assert c.current()["state"] == "review" and c.repo.calls(OWNER, c.focus)[0]["status"] == "unknown"
     await c.start()
     assert c.current()["state"] == "review" and client.audio.transcriptions.create.await_count == 1
     await c.close()
+
+
+async def test_unsupported_effect_offers_alternative_and_waits_without_losing_context(ui):
+    *_, c, client, _ = ui
+    value = client.responses.create.return_value
+    result = json.loads(value.output_text)
+    result.update(decision="offer", note="3D-взрыв недоступен. Могу добавить затемнение и субтитры.")
+    value.output_text = json.dumps(result)
+    await ready(ui)
+    await send(ui, "Задача понятна?")
+    assert not c.current()["data"].get("prompt") and not client.responses.create.await_count
+    await send(ui, "Добавь 3D-взрыв и субтитры")
+    await drain(c)
+    assert c.current()["state"] == "planned" and "render" not in c.worker.calls
+    await send(ui, "сделай так")
+    await drain(c)
+    assert c.current()["state"] == "done" and client.responses.create.await_count == 1
 
 
 async def test_navigation_does_not_capture_admin_wizard_and_media_expire(ui):
