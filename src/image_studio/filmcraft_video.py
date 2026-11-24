@@ -678,6 +678,7 @@ class FilmcraftVideo:
             raise FilmcraftError("expired")
         result = job["data"].get("result") or {}
         size = f" · {result['width']}×{result['height']}" if result.get("width") and result.get("height") else ""
+        renderer = "FFmpeg" if result.get("renderer") == "FFmpeg" else "Filmcraft"
         saved_file = job["data"].get("telegram_file_id")
 
         async def activity():
@@ -690,7 +691,7 @@ class FilmcraftVideo:
         try:
             sent = await message.bot.send_video(
                 OWNER, saved_file or FSInputFile(output, filename="obraz-filmcraft.mp4"),
-                supports_streaming=True, caption=f"🎬 Готово · Filmcraft{size}\nФайл и отчёт доступны 24 часа.",
+                supports_streaming=True, caption=f"🎬 Готово · {renderer}{size}\nФайл и отчёт доступны 24 часа.",
                 parse_mode=None, request_timeout=120,
             )
         except (AiogramError, OSError, TimeoutError):
